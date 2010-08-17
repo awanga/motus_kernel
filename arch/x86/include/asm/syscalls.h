@@ -58,10 +58,11 @@ int sys_vm86(unsigned long, unsigned long, struct pt_regs *);
 
 /* X86_64 only */
 /* kernel/process_64.c */
+asmlinkage long sys_execve(const char __user *,
+		const char __user *const __user *,
+		const char __user *const __user *, struct pt_regs *);
 asmlinkage long sys_clone(unsigned long, unsigned long, void __user *,
 	       void __user *, struct pt_regs *);
-asmlinkage long sys_execve(const char __user *, char __user * __user *,
-		char __user * __user *, struct pt_regs *);
 
 long sys_arch_prctl(int, unsigned long);
 

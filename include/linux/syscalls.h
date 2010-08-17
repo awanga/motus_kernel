@@ -814,11 +814,7 @@ asmlinkage long sys_ppoll(struct pollfd __user *, unsigned int,
 			  struct timespec __user *, const sigset_t __user *,
 			  size_t);
 
-#ifdef CONFIG_LTT_LITE
-asmlinkage long sys_lttlite(unsigned int cmd, unsigned long arg);
-#endif
-
-int kernel_execve(const char *filename, char *const argv[], char *const envp[]);
+int kernel_execve(const char *filename, const char *const argv[], const char *const envp[]);
 
 
 asmlinkage long sys_perf_event_open(

@@ -73,6 +73,11 @@ DEFINE_PER_CPU(struct hrtimer_cpu_base, hrtimer_bases) =
 			.get_time = &ktime_get,
 			.resolution = KTIME_LOW_RES,
 		},
+		{
+			.index = CLOCK_BOOTTIME,
+			.get_time = &ktime_get_boottime,
+			.resolution = KTIME_LOW_RES,
+		},
 	}
 };
 
@@ -90,8 +95,8 @@ static inline int hrtimer_clockid_to_base(clockid_t clock_id)
  */
 static void hrtimer_get_softirq_time(struct hrtimer_cpu_base *base)
 {
-	ktime_t xtim, tomono;
-	struct timespec xts, tom;
+	ktime_t xtim, mono, boot;
+	struct timespec xts, tom, slp;
 	unsigned long seq;
 
 	do {
@@ -101,10 +106,11 @@ static void hrtimer_get_softirq_time(struct hrtimer_cpu_base *base)
 	} while (read_seqretry(&xtime_lock, seq));
 
 	xtim = timespec_to_ktime(xts);
-	tomono = timespec_to_ktime(tom);
+	mono = ktime_add(xtim, timespec_to_ktime(tom));
+	boot = ktime_add(mono, timespec_to_ktime(slp));
 	base->clock_base[HRTIMER_BASE_REALTIME].softirq_time = xtim;
-	base->clock_base[HRTIMER_BASE_MONOTONIC].softirq_time =
-		ktime_add(xtim, tomono);
+	base->clock_base[HRTIMER_BASE_MONOTONIC].softirq_time = mono;
+	base->clock_base[HRTIMER_BASE_BOOTTIME].softirq_time = boot;
 }
 
 /*
@@ -743,6 +749,7 @@ static int hrtimer_switch_to_hres(void)
 	base->hres_active = 1;
 	base->clock_base[HRTIMER_BASE_REALTIME].resolution = KTIME_HIGH_RES;
 	base->clock_base[HRTIMER_BASE_MONOTONIC].resolution = KTIME_HIGH_RES;
+	base->clock_base[HRTIMER_BASE_BOOTTIME].resolution = KTIME_HIGH_RES;
 
 	tick_setup_sched_timer();
 
@@ -1768,6 +1775,7 @@ void __init hrtimers_init(void)
 {
 	hrtimer_clock_to_base_table[CLOCK_REALTIME] = HRTIMER_BASE_REALTIME;
 	hrtimer_clock_to_base_table[CLOCK_MONOTONIC] = HRTIMER_BASE_MONOTONIC;
+	hrtimer_clock_to_base_table[CLOCK_BOOTTIME] = HRTIMER_BASE_BOOTTIME;
 
 	hrtimer_cpu_notify(&hrtimers_nb, (unsigned long)CPU_UP_PREPARE,
 			  (void *)(long)smp_processor_id());

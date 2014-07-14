@@ -4,6 +4,9 @@
 # 15 Sep 2000, Christoph Hellwig <hch@infradead.org>
 # Rewritten to use lists instead of if-statements.
 #
+ifdef CONFIG_MUDFLAP
+subdir-ccflags-y += -fmudflap -fmudflapir
+endif
 
 obj-y				+= gpio/
 obj-$(CONFIG_PCI)		+= pci/
@@ -36,6 +39,12 @@ obj-$(CONFIG_CONNECTOR)		+= connector/
 # i810fb and intelfb depend on char/agp/
 obj-$(CONFIG_FB_I810)           += video/i810/
 obj-$(CONFIG_FB_INTEL)          += video/intelfb/
+
+ifdef CONFIG_MACH_MAPPHONE
+# we also need input/serio early so serio bus is initialized by the time
+# serial drivers start registering their serio ports
+obj-$(CONFIG_SERIO)		+= input/serio/
+endif
 
 obj-y				+= serial/
 obj-$(CONFIG_PARPORT)		+= parport/
@@ -115,3 +124,9 @@ obj-$(CONFIG_VLYNQ)		+= vlynq/
 obj-$(CONFIG_STAGING)		+= staging/
 obj-y				+= platform/
 obj-y				+= ieee802154/
+
+obj-$(CONFIG_SIM)               += sim/
+obj-$(CONFIG_MACH_CALGARY)      += mot/
+obj-$(CONFIG_MACH_MOT)		+= mot/
+onj-$(CONFIG_MACH_MOT)		+= forcepanic/
+obj-$(CONFIG_MACH_MOT)		+= motversion/

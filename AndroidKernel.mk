@@ -37,6 +37,15 @@ $(KERNEL_OUT):
 
 $(KERNEL_CONFIG): $(KERNEL_OUT)
 	$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=arm CROSS_COMPILE=arm-eabi- $(KERNEL_DEFCONFIG)
+ifeq ($(MOT_MAKEFILE_CHANGES), TRUE)
+	@if [ "1" -lt "$$(diff --side-by-side --suppress-common-lines $(KERNEL_CONFIG) kernel/arch/*/configs/$(KERNEL_DEFCONFIG) | wc -l)" ] ; \
+	then \
+	    echo "ERROR: The output config file differs from the default config file. If you need to modify the config, use the \"kernelconfig\" target." ; \
+	    echo "       Copying output config to $(KERNEL_CONFIG).bak." ; \
+	    cp $(KERNEL_CONFIG) $(KERNEL_CONFIG).bak ; \
+	    exit 1 ; \
+	fi
+endif #ifeq ($(MOT_MAKEFILE_CHANGES), TRUE)
 
 $(KERNEL_OUT)/piggy : $(TARGET_PREBUILT_INT_KERNEL)
 	$(hide) gunzip -c $(KERNEL_OUT)/arch/arm/boot/compressed/piggy.gzip > $(KERNEL_OUT)/piggy

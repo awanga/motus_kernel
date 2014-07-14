@@ -55,6 +55,10 @@ static void warn_setuid_and_fcaps_mixed(char *fname)
 	}
 }
 
+#ifdef CONFIG_ANDROID_PARANOID_NETWORK
+#include <linux/android_aid.h>
+#endif
+
 int cap_netlink_send(struct sock *sk, struct sk_buff *skb)
 {
 	NETLINK_CB(skb).eff_cap = current_cap();

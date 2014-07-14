@@ -240,6 +240,38 @@ static const struct {
 };
 #endif
 
+#ifdef CONFIG_DEBUG_FS
+/* Used to create debugfs entries */
+static const struct {
+	const char *name;
+	mode_t mode;
+	int offset;
+} debugfs_spi_regs[] = {
+	{"config",                S_IRUGO | S_IWUSR, SPI_CONFIG},
+	{"io_control",            S_IRUGO | S_IWUSR, SPI_IO_CONTROL},
+	{"io_modes",              S_IRUGO | S_IWUSR, SPI_IO_MODES},
+	{"sw_reset",                        S_IWUSR, SPI_SW_RESET},
+	{"time_out",              S_IRUGO | S_IWUSR, SPI_TIME_OUT},
+	{"time_out_current",      S_IRUGO,           SPI_TIME_OUT_CURRENT},
+	{"mx_output_count",       S_IRUGO | S_IWUSR, SPI_MX_OUTPUT_COUNT},
+	{"mx_output_cnt_current", S_IRUGO,           SPI_MX_OUTPUT_CNT_CURRENT},
+	{"mx_input_count",        S_IRUGO | S_IWUSR, SPI_MX_INPUT_COUNT},
+	{"mx_input_cnt_current",  S_IRUGO,           SPI_MX_INPUT_CNT_CURRENT},
+	{"mx_read_count",         S_IRUGO | S_IWUSR, SPI_MX_READ_COUNT},
+	{"mx_read_cnt_current",   S_IRUGO,           SPI_MX_READ_CNT_CURRENT},
+	{"operational",           S_IRUGO | S_IWUSR, SPI_OPERATIONAL},
+	{"error_flags",           S_IRUGO | S_IWUSR, SPI_ERROR_FLAGS},
+	{"error_flags_en",        S_IRUGO | S_IWUSR, SPI_ERROR_FLAGS_EN},
+	{"deassert_wait",         S_IRUGO | S_IWUSR, SPI_DEASSERT_WAIT},
+	{"output_debug",          S_IRUGO,           SPI_OUTPUT_DEBUG},
+	{"input_debug",           S_IRUGO,           SPI_INPUT_DEBUG},
+	{"fifo_word_cnt",         S_IRUGO,           SPI_FIFO_WORD_CNT},
+	{"test_ctrl",             S_IRUGO | S_IWUSR, SPI_TEST_CTRL},
+	{"output_fifo",                     S_IWUSR, SPI_OUTPUT_FIFO},
+	{"input_fifo" ,           S_IRUSR,           SPI_INPUT_FIFO},
+};
+#endif
+
 struct msm_spi {
 	u8                      *read_buf;
 	const u8                *write_buf;
@@ -1248,6 +1280,21 @@ static void msm_spi_process_transfer(struct msm_spi *dd)
 			bpw = 8;
 	dd->bytes_per_word = (bpw + 7) / 8;
 
+#if defined(CONFIG_MACH_MOT)
+	spi_config = readl(dd->base + SPI_CONFIG);
+	if ((bpw - 1) != (spi_config & SPI_CFG_N))
+		spi_config = (spi_config & ~SPI_CFG_N) | (bpw - 1);
+	if (dd->cur_msg->spi->mode & SPI_CPHA)
+		spi_config &= ~SPI_CFG_INPUT_FIRST;
+	else
+		spi_config |= SPI_CFG_INPUT_FIRST;
+	if (dd->cur_msg->spi->mode & SPI_LOOP)
+		spi_config |= SPI_CFG_LOOPBACK;
+	else
+		spi_config &= ~SPI_CFG_LOOPBACK;
+	writel(spi_config, dd->base + SPI_CONFIG);
+#endif
+
 	if (dd->cur_transfer->speed_hz)
 		max_speed = dd->cur_transfer->speed_hz;
 	else
@@ -2220,7 +2267,6 @@ err_probe_dma:
 err_probe_pclk_enable:
 	if (clk_enabled)
 		clk_disable(dd->clk);
-err_probe_clk_enable:
 	clk_put(dd->pclk);
 err_probe_pclk_get:
 	clk_put(dd->clk);
@@ -2271,6 +2317,11 @@ static int msm_spi_suspend(struct platform_device *pdev, pm_message_t state)
 	/* Wait for transactions to end, or time out */
 	wait_event_interruptible(dd->continue_suspend, !dd->transfer_pending);
 
+	disable_irq(dd->irq_in);
+	disable_irq(dd->irq_out);
+	disable_irq(dd->irq_err);
+	clk_disable(dd->clk);
+
 suspend_exit:
 	return 0;
 }
@@ -2279,6 +2330,7 @@ static int msm_spi_resume(struct platform_device *pdev)
 {
 	struct spi_master *master = platform_get_drvdata(pdev);
 	struct msm_spi    *dd;
+	int rc;
 
 	if (!master)
 		goto resume_exit;
@@ -2286,6 +2338,16 @@ static int msm_spi_resume(struct platform_device *pdev)
 	if (!dd)
 		goto resume_exit;
 
+	rc = clk_enable(dd->clk);
+	if (rc) {
+		dev_err(dd->dev, "%s: unable to enable spi_clk\n",
+			__func__);
+		goto resume_exit;
+	}
+
+	enable_irq(dd->irq_in);
+	enable_irq(dd->irq_out);
+	enable_irq(dd->irq_err);
 	dd->suspended = 0;
 resume_exit:
 	return 0;

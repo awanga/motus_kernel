@@ -342,6 +342,7 @@ static int msm_fb_probe(struct platform_device *pdev)
 	if (err < 0)
 		printk(KERN_ERR "pm_runtime: fail to set active.\n");
 	pm_runtime_enable(mfd->fbi->dev);
+#if !defined(CONFIG_MACH_MOT)
 #ifdef CONFIG_FB_BACKLIGHT
 	msm_fb_config_backlight(mfd);
 #else
@@ -353,7 +354,7 @@ static int msm_fb_probe(struct platform_device *pdev)
 			lcd_backlight_registered = 1;
 	}
 #endif
-
+#endif
 	pdev_list[pdev_list_cnt++] = pdev;
 	msm_fb_create_sysfs(pdev);
 	return 0;
@@ -1382,6 +1383,7 @@ static int msm_fb_pan_display(struct fb_var_screeninfo *var,
 		info->var.yoffset =
 		    (var->yoffset / info->fix.ypanstep) * info->fix.ypanstep;
 
+#if defined(CONFIG_MACH_MOT)
 	/* "UPDT" */
 	if (var->reserved[0] == 0x54445055) {
 		dirty.xoffset = var->reserved[1] & 0xffff;
@@ -1414,6 +1416,7 @@ static int msm_fb_pan_display(struct fb_var_screeninfo *var,
 
 		dirtyPtr = &dirty;
 	}
+#endif
 	complete(&mfd->msmfb_update_notify);
 	mutex_lock(&msm_fb_notify_update_sem);
 	if (mfd->msmfb_no_update_notify_timer.function)
@@ -2959,6 +2962,54 @@ static int msm_fb_register_driver(void)
 {
 	return platform_driver_register(&msm_fb_driver);
 }
+
+#if defined(CONFIG_MACH_MOT)
+void msm_fb_up(struct platform_device *pdev)
+{
+   static struct platform_device *cache_pdev = NULL;
+   static struct msm_fb_data_type *mfd = NULL;
+
+   if (!pdev)
+   {
+      return;
+   }
+
+   if (cache_pdev != pdev)
+   {
+      mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
+      if (!mfd)
+      {
+         printk("!!Bad sem pointer!!\n"); return;
+         return;
+      }
+      cache_pdev = pdev;
+   }
+   up(&mfd->dma->mutex);
+}
+
+void msm_fb_down(struct platform_device *pdev)
+{
+   static struct platform_device *cache_pdev = NULL;
+   static struct msm_fb_data_type *mfd = NULL;
+
+   if (!pdev)
+   {
+      return;
+   }
+
+   if (cache_pdev != pdev)
+   {
+      mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
+      if (!mfd)
+      {
+         printk("!!Bad sem pointer!!\n"); return;
+         return;
+      }
+      cache_pdev = pdev;
+   }
+   down(&mfd->dma->mutex);
+}
+#endif /* defined(CONFIG_MACH_MOT) */
 
 struct platform_device *msm_fb_add_device(struct platform_device *pdev)
 {

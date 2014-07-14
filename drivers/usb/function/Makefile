@@ -9,5 +9,12 @@ obj-$(CONFIG_USB_FUNCTION_UMS)		+= ums.o
 obj-$(CONFIG_USB_FUNCTION_MASS_STORAGE)	+= mass_storage.o
 obj-$(CONFIG_USB_FUNCTION_DIAG)		+= diag.o
 obj-$(CONFIG_USB_FUNCTION_SERIAL)       += serial.o
+obj-$(CONFIG_USB_FUNCTION_RNDIS)        += rndis.o
+
+#ifeq (y, $(CONFIG_MACH_MOT))
 obj-$(CONFIG_USB_FUNCTION_ETHER)	+= ether_cdc_ecm.o
+#else
+obj-$(CONFIG_USB_FUNCTION_ETHER)	+= ether.o
+#endif
+
 obj-$(CONFIG_USB_FUNCTION_RMNET)	+= rmnet.o

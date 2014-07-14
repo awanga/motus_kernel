@@ -167,6 +167,29 @@ static void PRINT_PKT(u_char *buf, int length)
 	SMC_SET_INT_EN((lp), __mask);			\
 } while (0)
 
+static void smc911x_phy_powerup(struct net_device *dev, int phy)
+{
+	struct smc911x_local *lp = netdev_priv(dev);
+	unsigned int bmcr, bmsr;
+	int timeout;
+
+	SMC_GET_PHY_BMCR(lp, phy, bmcr);
+	bmcr &= ~BMCR_PDOWN;
+	SMC_SET_PHY_BMCR(lp, phy, bmcr);
+	if (bmcr & BMCR_ANENABLE) {
+		timeout = 1000;
+		while (--timeout) {
+			SMC_GET_PHY_BMSR(lp, phy, bmsr);
+			if (bmsr & BMSR_ANEGCOMPLETE)
+				break;
+			udelay(10);
+		}
+		/* If timeout hits, it proceeds to software reset and
+		times out there since the phy params are not set due to
+		failure of auto negotiation */
+	}
+}
+
 /*
  * this does a soft reset on the device
  */
@@ -192,6 +215,9 @@ static void smc911x_reset(struct net_device *dev)
 			return;
 		}
 	}
+
+	/* Powerup the phy before the actual reset */
+	smc911x_phy_powerup(dev, lp->mii.phy_id);
 
 	/* Disable all interrupts */
 	spin_lock_irqsave(&lp->lock, flags);
@@ -2059,7 +2085,7 @@ static int __devinit smc911x_drv_probe(struct platform_device *pdev)
 		ret = -ENODEV;
 		goto out;
 	}
-
+#ifndef SMC_MEM_RESERVED
 	/*
 	 * Request the regions.
 	 */
@@ -2067,7 +2093,7 @@ static int __devinit smc911x_drv_probe(struct platform_device *pdev)
 		 ret = -EBUSY;
 		 goto out;
 	}
-
+#endif
 	ndev = alloc_etherdev(sizeof(struct smc911x_local));
 	if (!ndev) {
 		printk("%s: could not allocate device.\n", CARDNAME);

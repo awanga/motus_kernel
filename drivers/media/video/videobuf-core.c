@@ -686,6 +686,7 @@ int videobuf_dqbuf(struct videobuf_queue *q,
 		dprintk(1, "dqbuf: state is error\n");
 		break;
 	case VIDEOBUF_DONE:
+	case VIDEOBUF_IDLE:
 		dprintk(1, "dqbuf: state is done\n");
 		break;
 	default:

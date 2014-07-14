@@ -245,9 +245,11 @@ struct audio {
 static int auddec_dsp_config(struct audio *audio, int enable);
 static void audpp_cmd_cfg_adec_params(struct audio *audio);
 static void audpp_cmd_cfg_routing_mode(struct audio *audio);
+#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
 static void audplay_send_data(struct audio *audio, unsigned needed);
-static void audplay_config_hostpcm(struct audio *audio);
 static void audplay_buffer_refresh(struct audio *audio);
+#endif
+static void audplay_config_hostpcm(struct audio *audio);
 static void audio_dsp_event(void *private, unsigned id, uint16_t *msg);
 static void audmp3_post_event(struct audio *audio, int type,
 	union msm_audio_event_payload payload);
@@ -372,6 +374,7 @@ static int audio_disable(struct audio *audio)
 	return rc;
 }
 
+#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
 /* ------------------- dsp --------------------- */
 static void audmp3_async_pcm_buf_update(struct audio *audio, uint32_t *payload)
 {
@@ -446,6 +449,7 @@ static void audio_update_pcm_buf_entry(struct audio *audio, uint32_t *payload)
 	spin_unlock_irqrestore(&audio->dsp_lock, flags);
 
 }
+#endif
 
 static void audplay_dsp_event(void *data, unsigned id, size_t len,
 			      void (*getevent) (void *ptr, size_t len))
@@ -628,6 +632,7 @@ static void audpp_cmd_cfg_routing_mode(struct audio *audio)
 	audpp_send_queue1(&cmd, sizeof(cmd));
 }
 
+#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
 static int audplay_dsp_send_data_avail(struct audio *audio,
 					unsigned idx, unsigned len)
 {
@@ -693,6 +698,7 @@ static void audplay_buffer_refresh(struct audio *audio)
 			refresh_cmd.buf0_length);
 	(void)audplay_send_queue0(audio, &refresh_cmd, sizeof(refresh_cmd));
 }
+#endif
 
 static void audplay_config_hostpcm(struct audio *audio)
 {
@@ -709,6 +715,7 @@ static void audplay_config_hostpcm(struct audio *audio)
 
 }
 
+#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
 static void audmp3_async_send_data(struct audio *audio, unsigned needed)
 {
 	unsigned long flags;
@@ -884,6 +891,7 @@ static void audio_flush_pcm_buf(struct audio *audio)
 	audio->read_next = 0;
 	audio->fill_next = 0;
 }
+#endif
 
 static void audio_ioport_reset(struct audio *audio)
 {
@@ -2105,9 +2113,12 @@ static int audio_open(struct inode *inode, struct file *file)
 {
 
 	struct audio *audio = NULL;
-	int rc, i, dec_attrb, decid;
+	int rc, i;
 	struct audmp3_event *e_node = NULL;
+#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
+	int dec_attrb, decid;
 	unsigned pmem_sz = DMASZ_MAX;
+#endif
 #ifdef CONFIG_DEBUG_FS
 	/* 4 bytes represents decoder number, 1 byte for terminate string */
 	char name[sizeof "msm_mp3_" + 5];
@@ -2122,6 +2133,7 @@ static int audio_open(struct inode *inode, struct file *file)
 	}
 	MM_INFO("audio instance 0x%08x created\n", (int)audio);
 
+#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
 	/* Allocate the decoder */
 	dec_attrb = AUDDEC_DEC_MP3;
 	if ((file->f_mode & FMODE_WRITE) &&
@@ -2240,6 +2252,19 @@ static int audio_open(struct inode *inode, struct file *file)
 		audio->out[1].addr = audio->phys + audio->out[0].size;
 		audio->out[1].size = audio->out[0].size;
 	}
+#else /* defined(CONFIG_MACH_MOT) || defined(CONFIG_MACH_PITTSBURGH) */
+	rc = audmgr_open(&audio->audmgr);
+	if (rc)
+		goto err;
+
+	rc = msm_adsp_get("AUDPLAY0TASK", &audio->audplay, &audplay_adsp_ops,
+			  audio);
+	if (rc) {
+		pr_err("audio: failed to get audplay0 dsp module\n");
+		audmgr_close(&audio->audmgr);
+		goto err;
+	}
+#endif
 
 	/* Initialize all locks of audio instance */
 	mutex_init(&audio->lock);
@@ -2320,6 +2345,7 @@ struct miscdevice audio_mp3_misc = {
 
 static int __init audio_init(void)
 {
+
 	return misc_register(&audio_mp3_misc);
 }
 

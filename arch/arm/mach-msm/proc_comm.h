@@ -168,6 +168,40 @@ enum {
 	PCOM_CMD_FAIL_PROC_COMM_NOT_INIT,
 };
 
+#if defined(CONFIG_MACH_MOT)
+
+/*  Enumeration for meta-proc function */
+enum {
+	PROCCOMM_MODEM_FORCEPANIC = 1,
+	PROCCOMM_MODEM_WDOGSTATUS,
+	PROCCOMM_MODEM_SET_PANIC_REASON,
+	PROCCOMM_MODEM_SET_HARD_RESET_REASON,
+	PROCCOMM_NV_READ,
+	PROCCOMM_NV_WRITE,
+	PROCCOMM_MODEM_SET_AP_FLASH_REASON,
+	PROCCOMM_MODEM_STAY_IN_AP_FLASH,
+	PROCCOMM_MODEM_SET_SYSTEM_REBOOT_REASON,
+	PROCCOMM_MODEM_SET_FTI,
+	PROCCOMM_FACTORY_BYTE,
+	PROCCOMM_GET_PANIC,
+	PROCCOMM_CLEAR_PANIC,
+	PROCCOMM_NUM_METAFUNCS
+};
+
+/* meta_proc - Executes the metaproc command that was sent.
+ * @cmd  Which processor sent the command.
+ * @data A pointer to an integer for general purpose use.
+ *
+ * Command will be executed by modem.  Data passed to modem in
+ * data pointer may be modified by the modem.
+ * The modem code that handles this command is in:
+ * AMSS/products/7600/services/mproc/smem/mot_smem_metaproc.c
+ */
+
+int meta_proc(unsigned cmd, unsigned *data);
+
+#endif
+
 #ifdef CONFIG_MSM_PROC_COMM
 void msm_proc_comm_reset_modem_now(void);
 int msm_proc_comm(unsigned cmd, unsigned *data1, unsigned *data2);

@@ -226,7 +226,7 @@ static inline void pmic_buf_reset(struct pmic_buf *bp)
 	bp->len = 0;
 }
 
-static int modem_to_linux_err(uint err)
+/*static*/ int modem_to_linux_err(uint err)
 {
 	if (err == 0)
 		return 0;

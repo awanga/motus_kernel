@@ -6,6 +6,7 @@
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
+ *
  */
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -19,6 +20,10 @@
 #include <asm/ucontext.h>
 #include <asm/unistd.h>
 #include <asm/vfp.h>
+
+#ifdef CONFIG_VFP
+#include <asm/vfp.h>
+#endif
 
 #include "ptrace.h"
 #include "signal.h"
@@ -80,7 +85,7 @@ asmlinkage int sys_sigsuspend(int restart, unsigned long oldmask, old_sigset_t m
 	return -ERESTARTNOHAND;
 }
 
-asmlinkage int 
+asmlinkage int
 sys_sigaction(int sig, const struct old_sigaction __user *act,
 	      struct old_sigaction __user *oact)
 {
@@ -275,7 +280,7 @@ struct rt_sigframe {
 
 static int restore_sigframe(struct pt_regs *regs, struct sigframe __user *sf)
 {
-	struct aux_sigframe __user *aux;
+	struct aux_sigframe __user *aux __maybe_unused;
 	sigset_t set;
 	int err;
 

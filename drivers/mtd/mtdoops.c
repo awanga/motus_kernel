@@ -399,6 +399,87 @@ static void mtdoops_notify_remove(struct mtd_info *mtd)
 	flush_scheduled_work();
 }
 
+static void mtdoops_console_sync(void)
+{
+	struct mtdoops_context *cxt = &oops_cxt;
+	struct mtd_info *mtd = cxt->mtd;
+	unsigned long flags;
+
+	if (!cxt->ready || !mtd || cxt->writecount == 0)
+		return;
+
+	/* 
+	 *  Once ready is 0 and we've held the lock no further writes to the 
+	 *  buffer will happen
+	 */
+	spin_lock_irqsave(&cxt->writecount_lock, flags);
+	if (!cxt->ready) {
+		spin_unlock_irqrestore(&cxt->writecount_lock, flags);
+		return;
+	}
+	cxt->ready = 0;
+	spin_unlock_irqrestore(&cxt->writecount_lock, flags);
+
+	if (mtd->panic_write && in_interrupt())
+		/* Interrupt context, we're going to panic so try and log */
+		mtdoops_write(cxt, 1);
+	else
+		mtdoops_write(cxt, 0);
+}
+
+static void
+mtdoops_console_write(struct console *co, const char *s, unsigned int count)
+{
+	struct mtdoops_context *cxt = co->data;
+	struct mtd_info *mtd = cxt->mtd;
+	unsigned long flags;
+
+	if (!oops_in_progress) {
+		mtdoops_console_sync();
+		return;
+	}
+
+	if (!cxt->ready || !mtd)
+		return;
+
+	/* Locking on writecount ensures sequential writes to the buffer */
+	spin_lock_irqsave(&cxt->writecount_lock, flags);
+
+	/* Check ready status didn't change whilst waiting for the lock */
+	if (!cxt->ready)
+		return;
+
+	if (cxt->writecount == 0) {
+		u32 *stamp = cxt->oops_buf;
+		*stamp++ = cxt->nextcount;
+		*stamp = MTDOOPS_KERNMSG_MAGIC;
+		cxt->writecount = 8;
+	}
+
+	if ((count + cxt->writecount) > OOPS_PAGE_SIZE)
+		count = OOPS_PAGE_SIZE - cxt->writecount;
+
+	memcpy(cxt->oops_buf + cxt->writecount, s, count);
+	cxt->writecount += count;
+
+	spin_unlock_irqrestore(&cxt->writecount_lock, flags);
+
+	if ((cxt->writecount == OOPS_PAGE_SIZE) && !in_interrupt())
+		mtdoops_console_sync();
+}
+
+static int __init mtdoops_console_setup(struct console *co, char *options)
+{
+	struct mtdoops_context *cxt = co->data;
+
+	if (cxt->mtd_index != -1)
+		return -EBUSY;
+	if (co->index == -1)
+		return -EINVAL;
+
+	cxt->mtd_index = co->index;
+	return 0;
+}
 
 static struct mtd_notifier mtdoops_notifier = {
 	.add	= mtdoops_notify_add,

@@ -221,6 +221,10 @@ SECTIONS
 		*(.toc)
 	}
 #endif
+	/* We need constructor data for the gcov patch. */
+	.data.gcov : {
+		CONSTRUCTORS
+	}
 
 	/* The initial task and kernel stack */
 	INIT_TASK_DATA_SECTION(THREAD_SIZE)

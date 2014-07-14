@@ -2505,6 +2505,15 @@ int nand_erase_nand(struct mtd_info *mtd, struct erase_info *instr,
 				__func__, (unsigned long long)instr->addr,
 				(unsigned long long)instr->len);
 
+	/* if attempt to erase nand flash physical block# 0,
+	 * dump stack and panic the phone ...
+	*/
+	if (!(instr->addr)) {
+		dump_stack();
+		panic("%s: nand flash physical block: 0x%12llx\n", __func__,
+		  (unsigned long long)instr->addr);
+	}
+
 	if (check_offs_len(mtd, instr->addr, instr->len))
 		return -EINVAL;
 

@@ -57,6 +57,9 @@ struct rpc_pmapp_ids {
 
 static struct rpc_pmapp_ids rpc_ids;
 static struct msm_rpc_client *client;
+#ifdef CONFIG_MACH_MOT
+static struct vreg *boost_vreg, *usb_vreg;
+#endif
 
 /* Add newer versions at the top of array */
 static const unsigned int rpc_vers[] = {
@@ -128,6 +131,53 @@ int pmic_vote_3p3_pwr_sel_switch(int boost)
 	return ret;
 }
 EXPORT_SYMBOL(pmic_vote_3p3_pwr_sel_switch);
+
+#ifdef CONFIG_MACH_MOT
+static int ldo_on;
+
+int msm_pm_app_enable_usb_ldo(int enable)
+{
+	int ret;
+
+	if (ldo_on == enable)
+		return 0;
+	ldo_on = enable;
+
+	if (enable) {
+		/* vote to turn ON Boost Vreg_5V */
+		ret = vreg_enable(boost_vreg);
+		if (ret < 0)
+			return ret;
+		/* vote to switch it to VREG_5V source */
+		ret = msm_pm_app_vote_usb_pwr_sel_switch(1);
+		if (ret < 0) {
+			vreg_disable(boost_vreg);
+			return ret;
+		}
+		ret = vreg_enable(usb_vreg);
+		if (ret < 0) {
+			msm_pm_app_vote_usb_pwr_sel_switch(0);
+			vreg_disable(boost_vreg);
+			return ret;
+		}
+
+	} else {
+		ret = vreg_disable(usb_vreg);
+		if (ret < 0)
+			return ret;
+		ret = vreg_disable(boost_vreg);
+		if (ret < 0)
+			return ret;
+		/* vote to switch it to VBUS source */
+		ret = msm_pm_app_vote_usb_pwr_sel_switch(0);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(msm_pm_app_enable_usb_ldo);
+#endif
 
 struct vbus_sn_notification_args {
 	uint32_t cb_id;
@@ -234,13 +284,17 @@ done:
 				&cb_id, NULL, NULL, -1);
 	return rc;
 }
-EXPORT_SYMBOL(msm_pm_app_rpc_init);
 
 void msm_pm_app_rpc_deinit(void(*callback)(int online))
 {
 	if (client) {
 		msm_rpc_remove_cb_func(client, (void *)callback);
 		msm_rpc_unregister_client(client);
+#ifdef CONFIG_MACH_MOT
+		msm_pm_app_enable_usb_ldo(0);
+		vreg_put(boost_vreg);
+		vreg_put(usb_vreg);
+#endif
 	}
 }
 EXPORT_SYMBOL(msm_pm_app_rpc_deinit);

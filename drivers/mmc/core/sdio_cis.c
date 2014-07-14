@@ -177,7 +177,7 @@ static int cistpl_funce_func(struct mmc_card *card, struct sdio_func *func,
 	 * version.
 	 */
 	vsn = func->card->cccr.sdio_vsn;
-	min_size = (vsn == SDIO_SDIO_REV_1_00) ? 28 : 42;
+	min_size = (vsn == SDIO_SDIO_REV_1_00) ? 28 : 34;
 
 	if (size < min_size)
 		return -EINVAL;

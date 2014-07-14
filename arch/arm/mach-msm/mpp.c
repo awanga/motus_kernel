@@ -27,6 +27,62 @@
 
 #include "proc_comm.h"
 
+#if defined(CONFIG_MACH_MOT)
+struct mpp_list {
+	const char name[5];
+	unsigned mpp;
+};
+
+static const struct mpp_list mpps[] = {
+	{ "mpp1",  0 },
+	{ "mpp2",  1 },
+	{ "mpp3",  2 },
+	{ "mpp4",  3 },
+	{ "mpp5",  4 },
+	{ "mpp6",  5 },
+	{ "mpp7",  6 },
+	{ "mpp8",  7 },
+	{ "mpp9",  8 },
+	{ "mpp10", 9 },
+	{ "mpp11", 10 },
+	{ "mpp12", 11 },
+	{ "mpp13", 12 },
+	{ "mpp14", 13 },
+	{ "mpp15", 14 },
+	{ "mpp16", 15 },
+	{ "mpp17", 16 },
+	{ "mpp18", 17 },
+	{ "mpp19", 18 },
+	{ "mpp20", 19 },
+	{ "mpp21", 20 },
+	{ "mpp22", 21 },
+};
+
+unsigned mpp_get(struct device *dev, const char *id)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mpps); i++) {
+		if (!strcmp(id, mpps[i].name))
+			return mpps[i].mpp;
+	}
+
+	return -1;
+}
+EXPORT_SYMBOL(mpp_get);
+#endif
+
+int mpp_config_analog_sink(unsigned mpp, unsigned config)
+{
+	int err;
+	err = msm_proc_comm(PCOM_PM_MPP_CONFIG_I_SINK, &mpp, &config);
+	if (err)
+		pr_err("%s: msm_proc_comm(PCOM_PM_CONFIG_I_SINK) failed\n",
+		       __func__);
+	return err;
+}
+EXPORT_SYMBOL(mpp_config_analog_sink);
+
 int mpp_config_digital_out(unsigned mpp, unsigned config)
 {
 	int err;

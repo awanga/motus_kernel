@@ -51,6 +51,9 @@
 #include <linux/cn_proc.h>
 #include <linux/audit.h>
 #include <linux/tracehook.h>
+#ifdef CONFIG_LTT_LITE
+#include <linux/lttlite-events.h>
+#endif
 #include <linux/kmod.h>
 #include <linux/fsnotify.h>
 #include <linux/fs_struct.h>
@@ -1431,6 +1434,11 @@ int do_execve(char * filename,
 	retval = search_binary_handler(bprm,regs);
 	if (retval < 0)
 		goto out;
+
+#ifdef CONFIG_LTT_LITE
+	/* Trace only if exec has been successful */
+	ltt_lite_ev_process(LTT_LITE_EV_PROCESS_EXEC, current);
+#endif
 
 	/* execve succeeded */
 	current->fs->in_exec = 0;

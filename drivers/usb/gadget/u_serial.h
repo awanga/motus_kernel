@@ -48,6 +48,9 @@ struct gserial {
 	unsigned int (*get_rts)(struct gserial *p);
 
 	/* notification callbacks */
+#ifdef CONFIG_USB_MOT_ANDROID
+	int (*tiocmset)(struct gserial *p, int set, int clear);
+#endif
 	void (*connect)(struct gserial *p);
 	void (*disconnect)(struct gserial *p);
 	int (*send_break)(struct gserial *p, int duration);

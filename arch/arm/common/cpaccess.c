@@ -154,7 +154,7 @@ static unsigned long do_cpregister_rw(int write)
 static ssize_t cp_register_write_sysfs(struct sys_device *dev,
  struct sysdev_attribute *attr, const char *buf, size_t cnt)
 {
-	unsigned long op1, op2, crn, crm, cp = 15, write_value, ret;
+	unsigned long op1, op2, crn, crm, cp = 15, write_value, ret __maybe_unused;
 	char rw;
 	if (down_timeout(&cp_sem, 6000))
 		return -ERESTARTSYS;

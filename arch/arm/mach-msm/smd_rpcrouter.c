@@ -1407,7 +1407,7 @@ static int msm_rpc_write_pkt(
 		if (pacmark >> 30 & 0x1)
 			xid = ntohl(rq->xid);
 		if ((pacmark >> 31 & 0x1) || (pacmark >> 30 & 0x1))
-			RAW_PMW_NOMASK("xid:0x%03x first=%i,last=%i,mid=%3i,"
+			RAW_PMW_NOMASK("xid:0x%03x first=%i,last=%i,mid=%2i,"
 				       "len=%3i,src_cid=%x\n",
 				       xid,
 				       pacmark >> 30 & 0x1,
@@ -1623,7 +1623,7 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 				count = rc;
 				goto write_release_lock;
 			}
-			IO("Wrote %d bytes First %d, Last 0 mid %d\n",
+			IO("Wrote %d bytes First %d Last 0 mid %d\n",
 			   rc, first_pkt, mid);
 			tx_cnt -= max_tx;
 			tx_buf += max_tx;

@@ -560,6 +560,7 @@ static void audpp_cmd_cfg_routing_mode(struct audio *audio)
 static int audplay_dsp_send_data_avail(struct audio *audio,
 				       unsigned idx, unsigned len)
 {
+#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
 	struct audplay_cmd_bitstream_data_avail_nt2 cmd;
 
 	cmd.cmd_id = AUDPLAY_CMD_BITSTREAM_DATA_AVAIL_NT2;
@@ -568,6 +569,11 @@ static int audplay_dsp_send_data_avail(struct audio *audio,
 			(audio->out[idx].mfield_sz >> 1);
 	else
 	    cmd.decoder_id = audio->dec_id;
+#else
+	audplay_cmd_bitstream_data_avail cmd;
+	cmd.cmd_id = AUDPLAY_CMD_BITSTREAM_DATA_AVAIL;
+	cmd.decoder_id = audio->dec_id;
+#endif
 	cmd.buf_ptr = audio->out[idx].addr;
 	cmd.buf_size = len / 2;
 	cmd.partition_number = 0;

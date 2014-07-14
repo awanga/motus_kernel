@@ -1076,7 +1076,26 @@ fail:
 	spin_unlock_irq(&port->port_lock);
 	return result;
 }
+#ifdef CONFIG_USB_MOT_ANDROID
+/* Add TIOCMSET which is used by ATCMD */
+static int gs_tiocmset(struct tty_struct *tty, struct file *file,
+	unsigned int set, unsigned int clear)
+{
+	struct gs_port  *port = tty->driver_data;
+	int		status = 0;
+	struct gserial	*gser;
 
+	pr_vdebug("gs_tiocmset: ttyGS%d, set = (%d), clear = (%d) \n",
+			port->port_num, set, clear);
+	spin_lock_irq(&port->port_lock);
+	gser = port->port_usb;
+	if (gser && gser->tiocmset)
+		status = gser->tiocmset(gser, set, clear);
+	spin_unlock_irq(&port->port_lock);
+
+	return status;
+}
+#else
 static int gs_tiocmset(struct tty_struct *tty, struct file *file,
 	unsigned int set, unsigned int clear)
 {
@@ -1119,10 +1138,16 @@ fail:
 	spin_unlock_irq(&port->port_lock);
 	return status;
 }
+#endif
+
 static const struct tty_operations gs_tty_ops = {
 	.open =			gs_open,
 	.close =		gs_close,
 	.write =		gs_write,
+
+#ifdef CONFIG_USB_MOT_ANDROID
+	.tiocmset =             gs_tiocmset,
+#endif
 	.put_char =		gs_put_char,
 	.flush_chars =		gs_flush_chars,
 	.write_room =		gs_write_room,
@@ -1137,7 +1162,11 @@ static const struct tty_operations gs_tty_ops = {
 
 static struct tty_driver *gs_tty_driver;
 
+#ifdef CONFIG_USB_MOT_ANDROID
+static int __init
+#else
 static int
+#endif
 gs_port_alloc(unsigned port_num, struct usb_cdc_line_coding *coding)
 {
 	struct gs_port	*port;
@@ -1183,7 +1212,11 @@ gs_port_alloc(unsigned port_num, struct usb_cdc_line_coding *coding)
  *
  * Returns negative errno or zero.
  */
+#ifdef CONFIG_USB_MOT_ANDROID
 int gserial_setup(struct usb_gadget *g, unsigned count)
+#else
+int __init gserial_setup(struct usb_gadget *g, unsigned count)
+#endif
 {
 	unsigned			i;
 	struct usb_cdc_line_coding	coding;

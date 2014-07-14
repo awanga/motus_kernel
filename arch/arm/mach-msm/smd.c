@@ -57,7 +57,11 @@
 #define SMEM_VERSION 0x000B
 #define SMD_VERSION 0x00020000
 
+#if defined(CONFIG_MSM_N_WAY_SMSM)
 uint32_t SMSM_NUM_ENTRIES = 8;
+#else
+uint32_t SMSM_NUM_ENTRIES = _SMSM_NUM_ENTRIES;
+#endif
 uint32_t SMSM_NUM_HOSTS = 3;
 
 enum {
@@ -128,6 +132,7 @@ static unsigned last_heap_free = 0xffffffff;
 static inline unsigned int smd_readl(const void __iomem *addr);
 static inline void smd_writel(unsigned int val,
 				const void __iomem *addr);
+
 
 #if defined(CONFIG_ARCH_MSM7X30)
 #define MSM_TRIG_A2M_SMD_INT     (smd_writel(1 << 0, MSM_GCC_BASE + 0x8))
@@ -231,19 +236,17 @@ static inline void notify_wcnss_smd(void)
 void smd_diag(void)
 {
 	char *x;
-	int size;
 
 	x = smem_find(ID_DIAG_ERR_MSG, SZ_DIAG_ERR_MSG);
-	if (x != 0) {
+
+	if (x != 0) 
+	{
+		oops_enter();
 		x[SZ_DIAG_ERR_MSG - 1] = 0;
 		SMD_INFO("smem: DIAG '%s'\n", x);
 	}
-
-	x = smem_get_entry(SMEM_ERR_CRASH_LOG, &size);
-	if (x != 0) {
-		x[size - 1] = 0;
-		pr_err("smem: CRASH LOG\n'%s'\n", x);
-	}
+	panic("BP panic");
+	oops_exit();
 }
 
 

@@ -202,6 +202,28 @@ struct platform_device msm_device_i2c = {
 	.resource	= resources_i2c,
 };
 
+#if defined(CONFIG_MACH_MOT)
+#include <linux/i2c-gpio.h>
+
+static struct i2c_gpio_platform_data msm_i2c_gpio_resources[] = {
+    {
+	.sda_pin = 61,
+	.scl_pin = 60,
+	.udelay = 0,
+	.timeout = 0,
+	.sda_is_open_drain = 0,
+	.scl_is_open_drain = 0,
+	.scl_is_output_only = 1,
+    },
+};
+
+struct platform_device msm_device_i2c_gpio = {
+    .name           = "i2c-gpio",
+    .id             = 1,
+    .dev.platform_data = msm_i2c_gpio_resources,
+};
+#endif
+
 #define MSM_HSUSB_PHYS        0xA0800000
 static struct resource resources_hsusb_otg[] = {
 	{

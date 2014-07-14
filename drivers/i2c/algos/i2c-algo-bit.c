@@ -32,7 +32,9 @@
 
 
 /* ----- global defines ----------------------------------------------- */
-
+#if defined(CONFIG_MACH_CALGARY) || defined(CONFIG_MACH_MOT)
+#define DEBUG
+#endif
 #ifdef DEBUG
 #define bit_dbg(level, dev, format, args...) \
 	do { \
@@ -578,6 +580,7 @@ bailout:
 
 	if (adap->post_xfer)
 		adap->post_xfer(i2c_adap);
+
 	return ret;
 }
 
@@ -632,7 +635,9 @@ EXPORT_SYMBOL(i2c_bit_add_bus);
 int i2c_bit_add_numbered_bus(struct i2c_adapter *adap)
 {
 	int err;
-
+#ifdef CONFIG_MACH_MOT
+	printk(KERN_ERR "i2c_bit_add_numbered_bus\n");
+#endif
 	err = i2c_bit_prepare_bus(adap);
 	if (err)
 		return err;

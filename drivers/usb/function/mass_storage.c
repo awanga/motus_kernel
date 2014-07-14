@@ -71,10 +71,13 @@
 #include <linux/usb_usual.h>
 #include <linux/platform_device.h>
 #include <linux/wakelock.h>
-
 #include "usb_function.h"
 
 /*-------------------------------------------------------------------------*/
+#if defined(CONFIG_MACH_MOT)
+
+#define MS_INTERFACE_NAME "Motorola MSD Interface"
+#endif
 
 #define DRIVER_NAME		"usb_mass_storage"
 #define MAX_LUNS		8
@@ -123,6 +126,12 @@
 
 
 /*-------------------------------------------------------------------------*/
+
+#ifdef CONFIG_KERNEL_MOTOROLA
+/* Default mount path for CDROM partition */
+static const char cdrom_file[] = "/dev/block/mtdblock3";
+static int  cdrom_enabled = 0 ;
+#endif
 
 /* Bulk-only data structures */
 
@@ -186,6 +195,14 @@ struct bulk_cs_wrap {
 #define SC_WRITE_6			0x0a
 #define SC_WRITE_10			0x2a
 #define SC_WRITE_12			0xaa
+#ifdef CONFIG_KERNEL_MOTOROLA
+#define SC_READ_TOC                     0x43
+#define SC_READ_HEADER                  0x44
+#endif
+
+#if defined(CONFIG_MACH_MOT)
+#define SC_SWITCH_MODE			0xd6
+#endif
 
 /* SCSI Sense Key/Additional Sense Code/ASC Qualifier values */
 #define SS_NO_SENSE				0
@@ -206,6 +223,27 @@ struct bulk_cs_wrap {
 #define SK(x)		((u8) ((x) >> 16))	/* Sense Key byte, etc. */
 #define ASC(x)		((u8) ((x) >> 8))
 #define ASCQ(x)		((u8) (x))
+
+#if defined(CONFIG_MACH_MOT)
+
+extern void usb_switch_composition(unsigned short);
+
+struct SCSI_MODE_SWITCH_CMD {
+	u8		op_code;
+	u8		lun;
+	u8		reserve1;
+	u8		reserve2;
+	u8		reserve3;
+	u8		reserve4;
+	u8		reserve5;
+	u8		reserve6;
+	u8		reserve7;
+	u8		reserve8;
+	u8		target_mode;
+	u8		control;
+};
+
+#endif
 
 
 /*-------------------------------------------------------------------------*/
@@ -289,7 +327,11 @@ enum data_direction {
 	DATA_DIR_TO_HOST,
 	DATA_DIR_NONE
 };
+#ifdef CONFIG_KERNEL_MOTOROLA
+int can_stall = 0;
+#else
 int can_stall = 1;
+#endif
 
 struct fsg_dev {
 	/* lock protects: state and all the req_busy's */
@@ -373,6 +415,10 @@ static void set_bulk_out_req_length(struct fsg_dev *fsg,
 
 static struct fsg_dev			*the_fsg;
 
+#ifdef CONFIG_KERNEL_MOTOROLA
+static int store_cdrom_file(struct fsg_dev *fsg, const char *buf, int count);
+static int open_backing_file(struct fsg_dev *fsg, struct lun *curlun, const char *filename);
+#endif
 static void	close_backing_file(struct fsg_dev *fsg, struct lun *curlun);
 static void	close_all_backing_files(struct fsg_dev *fsg);
 
@@ -1254,6 +1300,8 @@ static int do_verify(struct fsg_dev *fsg)
 
 /*-------------------------------------------------------------------------*/
 
+
+
 static int do_inquiry(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 {
 	u8	*buf = (u8 *) bh->buf;
@@ -1266,6 +1314,15 @@ static int do_inquiry(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 	}
 
 	memset(buf, 0, 8);	/* Non-removable, direct-access device */
+
+#ifdef CONFIG_KERNEL_MOTOROLA
+        if ((usb_get_composition()==MOT_PID8)) {
+            /*  Allow to enumerate as CD-ROM if current config is CDROM mode */
+           buf[0] = 0x05;              /* CDROM device-type */
+           /* Provide CDROM partition mount point */
+           store_cdrom_file(fsg, cdrom_file, strlen(cdrom_file));
+        } 
+#endif
 
 	buf[1] = 0x80;	/* set removable bit */
 	buf[2] = 2;		/* ANSI SCSI level 2 */
@@ -1331,6 +1388,109 @@ static int do_request_sense(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 	return 18;
 }
 
+
+#ifdef CONFIG_KERNEL_MOTOROLA
+static int store_cdrom_file(struct fsg_dev *fsg, const char *buf, int count)
+{
+        struct lun *curlun = fsg->curlun;
+	int		rc = 0;
+
+	DBG(fsg, "store_cdrom_file: \"%s\"\n", buf);
+
+	/* Remove a trailing newline */
+	if (count > 0 && buf[count-1] == '\n')
+		((char *) buf)[count-1] = 0;
+
+        /* CDROM is a 'readonly' medium. */
+        curlun->ro = 1; 
+	/* Eject current medium */
+
+	if (backing_file_is_open(curlun)) {
+		close_backing_file(fsg, curlun);
+		curlun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
+	}
+
+	/* Load new medium */
+	if (count > 0 && buf[0]) {
+		rc = open_backing_file(fsg, curlun, buf);
+		if (rc == 0){
+			curlun->unit_attention_data =
+					SS_NOT_READY_TO_READY_TRANSITION;
+                }
+	}
+	return (rc < 0 ? rc : count);
+}
+
+
+/* Ported from Sholes UMTS */
+static void store_cdrom_address(u8 *dest, int msf, u32 addr)
+{
+        if (msf) {
+                /* Convert to Minutes-Seconds-Frames */
+                addr >>= 2;     /* Convert to 2048-byte frames */
+                addr += 2 * 75; /* Lead-in occupies 2 seconds */
+                dest[3] = addr % 75;    /* Frames */
+                addr /= 75;
+                dest[2] = addr % 60;    /* Seconds */
+                addr /= 60;
+                dest[1] = addr; /* Minutes */
+                dest[0] = 0;    /* Reserved */
+        } else {
+                /* Absolute sector */
+                put_be32(dest, addr);
+        }
+}
+
+static int do_read_header(struct fsg_dev *fsg, struct fsg_buffhd *bh)
+{
+        struct lun *curlun = fsg->curlun;
+        int msf = fsg->cmnd[1] & 0x02;
+        u32 lba = get_be32(&fsg->cmnd[2]);
+        u8 *buf = (u8 *) bh->buf;
+
+        if ((fsg->cmnd[1] & ~0x02) != 0) {      /* Mask away MSF */
+                curlun->sense_data = SS_INVALID_FIELD_IN_CDB;
+                return -EINVAL;
+        }
+        if (lba >= curlun->num_sectors) {
+                curlun->sense_data = SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
+                return -EINVAL;
+        }
+
+        memset(buf, 0, 8);
+        buf[0] = 0x01;          /* 2048 bytes of user data, rest is EC */
+        store_cdrom_address(&buf[4], msf, lba);
+        return 8;
+}
+
+static int do_read_toc(struct fsg_dev *fsg, struct fsg_buffhd *bh)
+{
+	struct lun	*curlun = fsg->curlun;
+        int msf = fsg->cmnd[1] & 0x02;
+        int start_track = fsg->cmnd[6];
+        u8 *buf = (u8 *) bh->buf;
+
+        if ((fsg->cmnd[1] & ~0x02) != 0 ||      /* Mask away MSF */
+            start_track > 1) {
+                curlun->sense_data = SS_INVALID_FIELD_IN_CDB;
+                return -EINVAL;
+        }
+ 
+        memset(buf, 0, 20);
+        buf[1] = (20 - 2);      /* TOC data length */
+        buf[2] = 1;             /* First track number */
+        buf[3] = 1;             /* Last track number */
+        buf[5] = 0x16;          /* Data track, copying allowed */
+        buf[6] = 0x01;          /* Only track is number 1 */
+        store_cdrom_address(&buf[8], msf, 0);
+
+        buf[13] = 0x16;         /* Lead-out track is data */
+        buf[14] = 0xAA;         /* Lead-out track number */
+        store_cdrom_address(&buf[16], msf, curlun->num_sectors);
+        return 20;
+
+}
+#endif
 
 static int do_read_capacity(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 {
@@ -1498,6 +1658,52 @@ static int do_mode_select(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 	curlun->sense_data = SS_INVALID_COMMAND;
 	return -EINVAL;
 }
+
+#if defined(CONFIG_KERNEL_MOTOROLA) || defined(CONFIG_MACH_MOT)
+static int do_switch(struct fsg_dev *fsg)
+{
+	int mode;
+	unsigned short pid;
+
+	printk("%s: attempting to switch composition\n", __func__);
+
+	mode = fsg->cmnd[10];
+#if defined(CONFIG_MACH_MOT)
+	if ((mode != 40) && (mode != 41)) {
+		printk(KERN_ERR "%s: invalid mode %d\n", __func__, mode);
+		return -EINVAL;
+	}
+
+	if (mode == 40)
+		pid = 0x2d64;
+	else
+		pid = 0x2d65;
+#else
+	if ((mode != MOT_USB_CONFIG_34) && (mode != MOT_USB_CONFIG_35)) {
+		printk(KERN_ERR "%s: invalid mode %d\n", __func__, mode);
+		return -EINVAL;
+	}
+
+        /*  LAN+Modem+QC+MTP - 34
+            LAN+Modem+QC+MTP+ADB  - 35  */
+ 
+	if (mode == MOT_USB_CONFIG_34)
+		pid = MOT_PID1;
+	else
+		pid = MOT_PID;
+#endif
+
+	printk("%s: pid set to to %4x\n", __func__, pid);
+
+	/* we do not want to block the unbind, MS won't be activated
+ 	 * after the switch anyways */
+	complete(&fsg->thread_notifier);
+
+	usb_switch_composition(pid);
+	return 0;
+}
+
+#endif /* defined(CONFIG_KERNEL_MOTOROLA) */
 
 
 static int halt_bulk_in_endpoint(struct fsg_dev *fsg)
@@ -1800,6 +2006,10 @@ static int check_command(struct fsg_dev *fsg, int cmnd_size,
 		if ((fsg->cmnd[0] == SC_REQUEST_SENSE && fsg->cmnd_size == 12)
 		 || (fsg->cmnd[0] == SC_INQUIRY && fsg->cmnd_size == 12))
 			cmnd_size = fsg->cmnd_size;
+#if defined(CONFIG_KERNEL_MOTOROLA) || defined(CONFIG_MACH_MOT)
+		else if (fsg->cmnd[0] == SC_SWITCH_MODE && fsg->cmnd_size == (sizeof(struct SCSI_MODE_SWITCH_CMD)+1))
+			cmnd_size = fsg->cmnd_size;
+#endif
 		else {
 			fsg->phase_error = 1;
 			return -EINVAL;
@@ -1962,6 +2172,25 @@ static int do_scsi_command(struct fsg_dev *fsg)
 			reply = do_read(fsg);
 		break;
 
+#ifdef CONFIG_KERNEL_MOTOROLA
+        case SC_READ_HEADER:
+                fsg->data_size_from_cmnd = get_be16(&fsg->cmnd[7]);
+                reply = check_command(fsg, 10, DATA_DIR_TO_HOST,
+                                (3 << 7) | (0x1f << 1), 1,
+                                "READ HEADER");
+                if (reply == 0)
+                        reply = do_read_header(fsg, bh);
+                break;
+
+	case SC_READ_TOC:
+		fsg->data_size_from_cmnd = get_be16(&fsg->cmnd[7]); 
+		if ((reply = check_command(fsg, 10, DATA_DIR_TO_HOST,
+				(0xf << 6) | (1 << 1), 1,
+				"READ TOC")) == 0)
+			reply = do_read_toc(fsg,bh);
+		break;
+#endif 
+
 	case SC_READ_CAPACITY:
 		fsg->data_size_from_cmnd = 8;
 		if ((reply = check_command(fsg, 10, DATA_DIR_TO_HOST,
@@ -2043,6 +2272,16 @@ static int do_scsi_command(struct fsg_dev *fsg)
 				"WRITE(12)")) == 0)
 			reply = do_write(fsg);
 		break;
+
+#if defined(CONFIG_KERNEL_MOTOROLA) || defined(CONFIG_MACH_MOT)
+	case SC_SWITCH_MODE:
+		printk("%s: received SC_SWITCH_MODE cmnd\n", __func__);
+		fsg->data_size_from_cmnd = fsg->cmnd_size;
+		if ((reply = check_command(fsg, sizeof(struct SCSI_MODE_SWITCH_CMD),
+				DATA_DIR_FROM_HOST, (1<<10), 0, "SWITCH_MODE")) == 0)
+			reply = do_switch(fsg);
+		break;
+#endif /* defined(CONFIG_KERNEL_MOTOROLA) */
 
 	/* Some mandatory commands that we recognize but don't implement.
 	 * They don't mean much in this setting.  It's left as an exercise
@@ -2296,8 +2535,22 @@ static int do_set_config(struct fsg_dev *fsg, u8 new_config)
 			INFO(fsg, "config #%d\n", fsg->config);
 	}
 
+#ifdef CONFIG_KERNEL_MOTOROLA
+        if (usb_get_composition()==MOT_PID8) {
+            /*  Allow to enumerate as CD-ROM if current config is CDROM mode */
+           if (new_config){
+              cdrom_enabled = 1;           /* Enable CDROM */
+           }else{
+              cdrom_enabled = 0;
+           }
+        } else {
+#endif
 	switch_set_state(&fsg->sdev, new_config);
-	adjust_wake_lock(fsg);
+#ifdef CONFIG_KERNEL_MOTOROLA
+	}
+#endif
+
+        adjust_wake_lock(fsg);
 	return rc;
 }
 
@@ -2492,6 +2745,9 @@ static int open_backing_file(struct fsg_dev *fsg, struct lun *curlun, const char
 	struct inode			*inode = NULL;
 	loff_t				size;
 	loff_t				num_sectors;
+#ifdef CONFIG_KERNEL_MOTOROLA
+	loff_t				min_sectors;
+#endif
 
 	/* R/W if we can, R/O if we must */
 	ro = curlun->ro;
@@ -2536,7 +2792,22 @@ static int open_backing_file(struct fsg_dev *fsg, struct lun *curlun, const char
 		goto out;
 	}
 	num_sectors = size >> 9;	/* File size in 512-byte sectors */
+#ifdef CONFIG_KERNEL_MOTOROLA
+	min_sectors = 1;
+	if (cdrom_enabled) {
+		num_sectors &= ~3;	/* Reduce to a multiple of 2048 */
+		min_sectors = 300 * 4;	/* Smallest track is 300 frames */
+		if (num_sectors >= 256 * 60 * 75 * 4) {
+			num_sectors = (256 * 60 * 75 - 1) * 4;
+			LINFO(curlun, "file too big: %s\n", filename);
+			LINFO(curlun, "using only first %d blocks\n",
+			      (int) num_sectors);
+		}
+	}
+	if (num_sectors < min_sectors) {
+#else
 	if (num_sectors == 0) {
+#endif
 		LINFO(curlun, "file too small: %s\n", filename);
 		rc = -ETOOSMALL;
 		goto out;
@@ -2631,6 +2902,18 @@ static ssize_t store_file(struct device *dev, struct device_attribute *attr,
 		LDBG(curlun, "eject attempt prevented\n");
 		return -EBUSY;				/* "Door is locked" */
 	}
+#endif
+
+#ifdef CONFIG_KERNEL_MOTOROLA
+        /* When CDROM mode is enabled, this driver may receive spurious
+         * call to mount SD card as UMS device. This is not valid
+         * in this mode and is a bug that needs to be fixed in application
+         * code. So we use this hack below to bypass that setting temporarily
+         */
+        if (cdrom_enabled){
+            MINFO("UMS is in CDROM mode. (Cannot process SD Card mount)") ;
+            return (count);
+        }
 #endif
 
 	/* Remove a trailing newline */
@@ -2762,7 +3045,14 @@ static void fsg_bind(void *_ctxt)
 
 	for (i = 0; i < fsg->nluns; ++i) {
 		curlun = &fsg->luns[i];
+#ifdef CONFIG_KERNEL_MOTOROLA
+		if (cdrom_enabled)
+			curlun->ro = 1;
+		else
+			curlun->ro = 0;
+#else
 		curlun->ro = 0;
+#endif
 		curlun->dev.release = lun_release;
 		curlun->dev.parent = &fsg->pdev->dev;
 		dev_set_drvdata(&curlun->dev, fsg);
@@ -2786,6 +3076,11 @@ static void fsg_bind(void *_ctxt)
 	ret = usb_msm_get_next_ifc_number(usb_func);
 	intf_desc.bInterfaceNumber = ret;
 	pr_debug("%s: interface number = %d\n", __func__, ret);
+
+#if defined(CONFIG_KERNEL_MOTOROLA) || defined(CONFIG_MACH_MOT)
+	ret = usb_msm_get_next_strdesc_id(MS_INTERFACE_NAME);
+	intf_desc.iInterface = ret;
+#endif /* defined(CONFIG_KERNEL_MOTOROLA) */
 
 	ep = fsg->bulk_in = usb_alloc_endpoint(USB_DIR_IN);
 	hs_bulk_in_desc.bEndpointAddress = USB_DIR_IN | ep->num;
@@ -2898,9 +3193,11 @@ static struct usb_function		fsg_function = {
 	.unbind		= fsg_unbind,
 	.configure  = fsg_configure,
 	.setup		= fsg_setup,
-
+#if defined(CONFIG_KERNEL_MOTOROLA) || defined(CONFIG_MACH_MOT)
+	.name = DRIVER_NAME,
+#else /* defined(CONFIG_KERNEL_MOTOROLA) */
 	.name = "mass_storage",
-
+#endif /* defined(CONFIG_KERNEL_MOTOROLA) */
 };
 
 

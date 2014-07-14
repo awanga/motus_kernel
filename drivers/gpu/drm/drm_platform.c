@@ -87,6 +87,8 @@ int drm_get_platform_dev(struct platform_device *platdev,
 
 	list_add_tail(&dev->driver_item, &driver->device_list);
 
+	list_add_tail(&dev->driver_item, &driver->device_list);
+
 	DRM_INFO("Initialized %s %d.%d.%d %s on minor %d\n",
 		 driver->name, driver->major, driver->minor, driver->patchlevel,
 		 driver->date, dev->primary->index);

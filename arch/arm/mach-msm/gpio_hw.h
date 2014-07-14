@@ -39,7 +39,7 @@
 #define MSM_GPIO2_REG(off) (MSM_GPIO2_BASE + 0xC00 + (off))
 #endif
 
-#if defined(CONFIG_ARCH_MSM7X00A) || defined(CONFIG_ARCH_MSM7X25) ||\
+#if defined(CONFIG_ARCH_MSM7X01A) || defined(CONFIG_ARCH_MSM7X25) ||\
     defined(CONFIG_ARCH_MSM7X27)
 
 /* output value */

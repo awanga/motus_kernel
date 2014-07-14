@@ -172,10 +172,39 @@ config MSM_ADM3
 
 menu "MSM Board Selection"
 
+config EXPOSE_NMEA
+	depends on USB_FUNCTION_SERIAL
+	bool"Expose NMEA interface over USB"
+	help
+		Expose NMEA interface over USB serial link
+
+config CUST_SOCINFO
+	default n
+	bool"Expose custom SOC info fields via the sysfs"
+	help
+		Expose custom SOC info fields via the sysfs
+
+config MACH_MOT
+	depends on ARCH_MSM
+	depends on MSM_STACKED_MEMORY
+	default y
+	bool "Motorola Morrison"
+	help
+	  Support for Motorola Morrison MSM7201 platform
+
+config MACH_CALGARY
+	depends on ARCH_MSM
+	default n
+	bool "Calgary (MSM7627)"
+	
+config MACH_PITTSBURGH
+	depends on ARCH_MSM
+	default n
+	bool "Pittsburgh (MSM7627)"
+	
 config MACH_HALIBUT
 	depends on ARCH_MSM7X01A
 	depends on MSM_STACKED_MEMORY
-	default y
 	bool "Halibut Board (QCT SURF7201A)"
 	help
 	  Support for the Qualcomm SURF7201A eval board.
@@ -183,7 +212,6 @@ config MACH_HALIBUT
 config MACH_MSM7201A_SURF
 	depends on ARCH_MSM7X01A
 	depends on MSM_STACKED_MEMORY
-	default y
 	bool "MSM7201A SURF"
 	help
 	  Support for the Qualcomm MSM7201A SURF eval board.
@@ -191,7 +219,6 @@ config MACH_MSM7201A_SURF
 config MACH_MSM7201A_FFA
 	depends on ARCH_MSM7X01A
 	depends on MSM_STACKED_MEMORY
-	default y
 	bool "MSM7201A FFA"
 	help
 	  Support for the Qualcomm MSM7201A FFA eval board.
@@ -199,13 +226,20 @@ config MACH_MSM7201A_FFA
 config MACH_TROUT
 	depends on ARCH_MSM7X01A
 	depends on MSM_STACKED_MEMORY
-	default y
 	bool "Trout"
+	default n if MACH_CALGARY
+	help
+	 Select this to support HTC Dream, T-Mobile G1, Google ADP1.
+
+config MACH_SAPPHIRE
+	depends on ARCH_MSM7X01A
+	depends on MSM_STACKED_MEMORY
+	default y
+	bool "Sapphire"
 
 config MACH_MSM7X27_SURF
 	depends on ARCH_MSM7X27
 	depends on !MSM_STACKED_MEMORY
-	default y
 	bool "MSM7x27 SURF"
 	help
 	  Support for the Qualcomm MSM7x27 SURF eval board.
@@ -213,7 +247,6 @@ config MACH_MSM7X27_SURF
 config MACH_MSM7X27_FFA
 	depends on ARCH_MSM7X27
 	depends on !MSM_STACKED_MEMORY
-	default y
 	bool "MSM7x27 FFA"
 	help
 	  Support for the Qualcomm MSM7x27 FFA eval board.
@@ -245,7 +278,6 @@ config MACH_MSM7X27A_FFA
 config MACH_MSM7X30_SURF
        depends on ARCH_MSM7X30
        depends on !MSM_STACKED_MEMORY
-       default y
        bool "MSM7x30 SURF"
        help
          Support for the Qualcomm MSM7x30 SURF eval board.
@@ -253,7 +285,6 @@ config MACH_MSM7X30_SURF
 config MACH_MSM7X30_FFA
        depends on ARCH_MSM7X30
        depends on !MSM_STACKED_MEMORY
-       default y
        bool "MSM7x30 FFA"
        help
          Support for the Qualcomm MSM7x30 FFA eval board.
@@ -275,7 +306,6 @@ config MACH_QSD8X50_SURF
 	depends on ARCH_QSD8X50
 	depends on MSM_SOC_REV_NONE
 	depends on MSM_STACKED_MEMORY
-	default y
 	bool "QSD8x50 SURF"
 	help
 	  Support for the Qualcomm QSD8x50 SURF eval board.
@@ -284,7 +314,6 @@ config MACH_QSD8X50_FFA
 	depends on ARCH_QSD8X50
 	depends on MSM_SOC_REV_NONE
 	depends on MSM_STACKED_MEMORY
-	default y
 	bool "QSD8x50 FFA"
 	help
 	  Support for the Qualcomm QSD8x50 FFA eval board.
@@ -479,6 +508,12 @@ config MACH_MSM8X60_QT
 
 endmenu
 
+config MSM_ARM11_OC
+	bool "ARM11 Overclock"
+	default n
+	help
+	  Enable Overclocking capability for ARM11 CPUs.
+
 config MSM_STACKED_MEMORY
 	bool "Stacked Memory"
 	default y
@@ -561,6 +596,14 @@ choice
 	config MSM_DEBUG_UART3
 		bool "UART3"
 endchoice
+
+config CACHE_FLUSH_RANGE_LIMIT
+	hex "Cache flush range limit"
+	default 0x40000
+	help
+	  When flushing a cache range larger then this (hex) limit, flush the
+	  entire cache instead. Flushing a large range can be slower than
+	  flushing, then refilling, the entire cache.
 
 choice
 	prompt "Default Timer"
@@ -1274,6 +1317,13 @@ choice
 		bool "Memory in deep power down"
 endchoice
 
+config PUPD
+        depends on MSM_SMD
+        default y
+	tristate "Power up reason"
+        help
+          This is required to write powerup reason to /proc/powerup_info.
+
 choice
 	prompt "Power management timeout action"
 	default MSM_PM_TIMEOUT_HALT
@@ -1352,7 +1402,7 @@ config MSM_RPM_LOG
 	  via a debugfs node.
 
 config MSM_RPM_STATS_LOG
-	tristate "MSM Resource Power Manager Stat Driver
+	tristate "MSM Resource Power Manager Stat Driver"
 	depends on DEBUG_FS
 	depends on ARCH_MSM8X60
 	default n

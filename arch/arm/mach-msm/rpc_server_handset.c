@@ -28,6 +28,12 @@
 #include <mach/board.h>
 #include <mach/rpc_server_handset.h>
 
+#if defined(CONFIG_MACH_MOT)
+struct input_dev *msm_keypad_get_input_dev(void);
+static struct input_dev *kpdev;
+
+#endif
+
 #define DRIVER_NAME	"msm-handset"
 
 #define HS_SERVER_PROG 0x30000062
@@ -184,11 +190,15 @@ struct hs_cmd_data_type {
 };
 
 static const uint32_t hs_key_map[] = {
+#if defined(CONFIG_MACH_MOT)
+	KEY(HS_END_K, KEY_POWER),
+#else
 	KEY(HS_PWR_K, KEY_POWER),
 	KEY(HS_END_K, KEY_END),
 	KEY(HS_STEREO_HEADSET_K, SW_HEADPHONE_INSERT_W_MIC),
 	KEY(HS_HEADSET_HEADPHONE_K, SW_HEADPHONE_INSERT),
 	KEY(HS_HEADSET_MICROPHONE_K, SW_MICROPHONE_INSERT),
+#endif
 	KEY(HS_HEADSET_SWITCH_K, KEY_MEDIA),
 	KEY(HS_HEADSET_SWITCH_2_K, KEY_VOLUMEUP),
 	KEY(HS_HEADSET_SWITCH_3_K, KEY_VOLUMEDOWN),
@@ -307,6 +317,9 @@ static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 		input_report_switch(hs->ipdev, key, hs->mic_on);
 		update_state();
 		break;
+	default:
+		printk(KERN_ERR "%s: Unhandled handset key %d\n", __func__,
+				key);
 	case -1:
 		printk(KERN_ERR "%s: No mapping for remote handset event %d\n",
 				 __func__, temp_key_code);
@@ -323,6 +336,9 @@ static int handle_hs_rpc_call(struct msm_rpc_server *server,
 		uint32_t key_parm;
 	};
 
+#if defined(CONFIG_MACH_MOT)
+	kpdev = msm_keypad_get_input_dev();
+#endif
 	switch (req->procedure) {
 	case RPC_KEYPAD_NULL_PROC:
 		return 0;

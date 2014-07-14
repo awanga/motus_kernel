@@ -29,7 +29,11 @@
 #include <asm/dma.h>
 #include <asm/mach/flash.h>
 
+#if defined(CONFIG_MACH_MOT)
+#define MSM_NAND_BASE 0xA0A00000
+#endif
 #include <mach/dma.h>
+
 
 #include "msm_nand.h"
 
@@ -432,6 +436,27 @@ struct flash_identification {
 	uint32_t oobsize;
 	uint32_t ecc_correctability;
 } supported_flash;
+
+#if 0
+static struct flash_identification supported_flash[] =
+{
+	/* Flash ID   ID Mask Density(MB)  Wid Pgsz   Blksz   oobsz  ecc Manuf */
+	{0x00000000, 0xFFFFFFFF,         0, 0,    0,         0,  0,  0}, /*ONFI*/
+	{0x1500aaec, 0xFF00FFFF, (256<<20), 0, 2048, (2048<<6), 64,  0}, /*Sams*/
+	{0x5500baec, 0xFF00FFFF, (256<<20), 1, 2048, (2048<<6), 64,  0}, /*Sams*/
+	{0x6600bcec, 0xFF00FFFF, (512<<20), 1, 4096, (4096<<6), 128, 0}, /*Sams*/
+	{0x1500aa98, 0xFFFFFFFF, (256<<20), 0, 2048, (2048<<6), 64,  0}, /*Tosh*/
+	{0x5500ba98, 0xFFFFFFFF, (256<<20), 1, 2048, (2048<<6), 64,  0}, /*Tosh*/
+	{0xd580b12c, 0xFFFFFFFF, (128<<20), 1, 2048, (2048<<6), 64,  0}, /*Micr*/
+	{0x5580baad, 0xFFFFFFFF, (256<<20), 1, 2048, (2048<<6), 64,  0}, /*Hynx*/
+	{0x5510baad, 0xFFFFFFFF, (256<<20), 1, 2048, (2048<<6), 64,  0}, /*Hynx*/
+	{0x5510bcad, 0xFFFFFFFF, (512<<20), 1, 2048, (2048<<6), 64,  0}, /*Hynx*/
+	{0x5500bc98, 0x0000FFFF, (512<<20), 1, 2048, (2048<<6), 64,  0}, /*Tosh*/
+	{0x5510bcad, 0xFFFFFFFF, (512<<20), 1, 2048, (2048<<6), 64,  0}, /*Hynx*/
+	/* Note: Width flag is 0 for 8 bit Flash and 1 for 16 bit flash      */
+	/* Note: The First row will be filled at runtime during ONFI probe   */
+};
+#endif
 
 uint16_t flash_onfi_crc_check(uint8_t *buffer, uint16_t count)
 {

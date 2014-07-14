@@ -61,6 +61,30 @@ enum {
 	MPP_DLOGIC_IN_DBUS_3,
 };
 
+enum pm_mpp_i_sink_level_type {
+	PM_MPP__I_SINK__LEVEL_5mA,
+	PM_MPP__I_SINK__LEVEL_10mA,
+	PM_MPP__I_SINK__LEVEL_15mA,
+	PM_MPP__I_SINK__LEVEL_20mA,
+	PM_MPP__I_SINK__LEVEL_25mA,
+	PM_MPP__I_SINK__LEVEL_30mA,
+	PM_MPP__I_SINK__LEVEL_35mA,
+	PM_MPP__I_SINK__LEVEL_40mA,
+	PM_MPP__I_SINK__LEVEL_INVALID
+};
+
+enum pm_mpp_i_sink_switch_type {
+	PM_MPP__I_SINK__SWITCH_DIS,
+	PM_MPP__I_SINK__SWITCH_ENA,
+	PM_MPP__I_SINK__SWITCH_ENA_IF_MPP_HIGH,
+	PM_MPP__I_SINK__SWITCH_ENA_IF_MPP_LOW,
+	PM_MPP__I_SINK__SWITCH_INVALID
+};
+
+int mpp_config_analog_sink(unsigned mpp, unsigned config);
+
+unsigned mpp_get(struct device *dev, const char *id);
+
 #define MPP_CFG(level, control) ((((level) & 0x0FFFF) << 16) | \
 				 ((control) & 0x0FFFF))
 #define MPP_CFG_INPUT(level, dbus) ((((level) & 0x0FFFF) << 16) | \

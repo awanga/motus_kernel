@@ -215,6 +215,12 @@ int msm_dmov_exec_cmd(unsigned id, unsigned int cmdptr);
 
 #define DMOV_CE_HASH_CRCI     3
 
+#define DMOV_CE_IN_CHAN       5
+#define DMOV_CE_IN_CRCI       1
+
+#define DMOV_CE_OUT_CHAN      6
+#define DMOV_CE_OUT_CRCI      2
+
 #define DMOV_NAND_CHAN        7
 #define DMOV_NAND_CRCI_CMD    5
 #define DMOV_NAND_CRCI_DATA   4

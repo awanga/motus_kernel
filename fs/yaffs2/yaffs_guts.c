@@ -70,8 +70,10 @@ static int yaffs_UpdateObjectHeader(yaffs_Object *in, const YCHAR *name,
 				int force, int isShrink, int shadows);
 static void yaffs_RemoveObjectFromDirectory(yaffs_Object *obj);
 static int yaffs_CheckStructures(void);
+#if 0
 static int yaffs_DeleteWorker(yaffs_Object *in, yaffs_Tnode *tn, __u32 level,
 			int chunkOffset, int *limit);
+#endif
 static int yaffs_DoGenericObjectDeletion(yaffs_Object *in);
 
 static yaffs_BlockInfo *yaffs_GetBlockInfo(yaffs_Device *dev, int blockNo);
@@ -597,6 +599,7 @@ static void yaffs_VerifyObjectHeader(yaffs_Object *obj, yaffs_ObjectHeader *oh, 
 
 
 
+#if 0
 static int yaffs_VerifyTnodeWorker(yaffs_Object *obj, yaffs_Tnode *tn,
 					__u32 level, int chunkOffset)
 {
@@ -641,7 +644,7 @@ static int yaffs_VerifyTnodeWorker(yaffs_Object *obj, yaffs_Tnode *tn,
 	return ok;
 
 }
-
+#endif
 
 static void yaffs_VerifyFile(yaffs_Object *obj)
 {
@@ -1562,6 +1565,7 @@ static int yaffs_FindChunkInGroup(yaffs_Device *dev, int theChunk,
 }
 
 
+#if 0
 /* DeleteWorker scans backwards through the tnode tree and deletes all the
  * chunks and tnodes in the file
  * Returns 1 if the tree was deleted.
@@ -1654,6 +1658,7 @@ static int yaffs_DeleteWorker(yaffs_Object *in, yaffs_Tnode *tn, __u32 level,
 	return 1;
 
 }
+#endif
 
 static void yaffs_SoftDeleteChunk(yaffs_Device *dev, int chunk)
 {

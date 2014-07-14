@@ -15,6 +15,7 @@
  *
  */
 
+#include <mach/debug_adsp_mm.h>
 #include <linux/cdev.h>
 #include <linux/fs.h>
 #include <linux/list.h>
@@ -28,11 +29,6 @@
 #include <linux/msm_adsp.h>
 #include <linux/android_pmem.h>
 #include <mach/debug_mm.h>
-
-struct adsp_pmem_info {
-	int fd;
-	void *vaddr;
-};
 
 struct adsp_pmem_region {
 	struct hlist_node list;
@@ -458,7 +454,11 @@ static long adsp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return msm_adsp_disable(adev->module);
 
 	case ADSP_IOCTL_DISABLE_EVENT_RSP:
+#ifdef CONFIG_MACH_MOT
+		return 0;
+#else
 		return msm_adsp_disable_event_rsp(adev->module);
+#endif
 
 	case ADSP_IOCTL_DISABLE_ACK:
 		MM_ERR("ADSP_IOCTL_DISABLE_ACK is not implemented\n");

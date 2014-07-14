@@ -204,7 +204,7 @@ static void msm_gpio_free(struct gpio_chip *chip, unsigned offset)
 #endif
 
 struct msm_gpio_chip msm_gpio_chips[] = {
-#if defined(CONFIG_ARCH_MSM7X00A)
+#if defined(CONFIG_ARCH_MSM7X01A)
 	MSM_GPIO_BANK(0,   0,  15),
 	MSM_GPIO_BANK(1,  16,  42),
 	MSM_GPIO_BANK(2,  43,  67),

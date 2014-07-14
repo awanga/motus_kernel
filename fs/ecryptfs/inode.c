@@ -475,7 +475,10 @@ static int ecryptfs_unlink(struct inode *dir, struct dentry *dentry)
 
 	dget(lower_dentry);
 	lower_dir_dentry = lock_parent(lower_dentry);
+	dget(lower_dentry);
+	atomic_inc(&lower_dentry->d_inode->i_count);
 	rc = vfs_unlink(lower_dir_inode, lower_dentry);
+	dput(lower_dentry);
 	if (rc) {
 		printk(KERN_ERR "Error in vfs_unlink; rc = [%d]\n", rc);
 		goto out_unlock;
@@ -486,6 +489,7 @@ static int ecryptfs_unlink(struct inode *dir, struct dentry *dentry)
 	dentry->d_inode->i_ctime = dir->i_ctime;
 	d_drop(dentry);
 out_unlock:
+	iput(lower_dentry->d_inode);
 	unlock_dir(lower_dir_dentry);
 	dput(lower_dentry);
 	return rc;
@@ -572,8 +576,12 @@ static int ecryptfs_rmdir(struct inode *dir, struct dentry *dentry)
 	fsstack_copy_attr_times(dir, lower_dir_dentry->d_inode);
 	dir->i_nlink = lower_dir_dentry->d_inode->i_nlink;
 	unlock_dir(lower_dir_dentry);
-	if (!rc)
+	if (!rc) {
+		struct inode *inode = dentry->d_inode;
+		inode->i_nlink = ecryptfs_inode_to_lower(inode)->i_nlink;
+		inode->i_ctime = dir->i_ctime;
 		d_drop(dentry);
+	}
 	dput(dentry);
 	return rc;
 }

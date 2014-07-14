@@ -62,6 +62,8 @@ struct clock_state {
 	uint32_t			acpu_switch_time_us;
 	uint32_t			max_speed_delta_khz;
 	uint32_t			vdd_switch_time_us;
+	/*unsigned long			power_collapse_khz;*/
+	/*unsigned long			wait_for_irq_khz;*/
 	unsigned long			max_axi_khz;
 	struct clk			*ebi1_clk;
 };
@@ -146,14 +148,21 @@ static struct clkctl_acpu_speed pll0_196_pll1_768_pll2_1056[] = {
 /* 7x01/7x25 turbo with GSM capable modem */
 static struct clkctl_acpu_speed pll0_245_pll1_960_pll2_1056[] = {
 	{ 0, 19200, ACPU_PLL_TCXO, 0, 0, 19200, 0, 0, 30720 },
-	{ 0, 120000, ACPU_PLL_1, 1, 7,  60000, 1, 3,  61440 },
+//	{ 0, 120000, ACPU_PLL_1, 1, 7,  60000, 1, 3,  61440 },
 	{ 1, 122880, ACPU_PLL_0, 4, 1,  61440, 1, 3,  61440 },
+	{ 1, 128000, ACPU_PLL_1, 1, 5,  64000, 1, 3,  61440 },
 	{ 0, 176000, ACPU_PLL_2, 2, 5,  88000, 1, 3,  61440 },
 	{ 1, 245760, ACPU_PLL_0, 4, 0,  81920, 2, 4,  61440 },
-	{ 1, 320000, ACPU_PLL_1, 1, 2, 107000, 2, 5, 120000 },
-	{ 0, 352000, ACPU_PLL_2, 2, 2,  88000, 3, 5, 120000 },
-	{ 1, 480000, ACPU_PLL_1, 1, 1, 120000, 3, 6, 120000 },
-	{ 1, 528000, ACPU_PLL_2, 2, 1, 132000, 3, 7, 122880 },
+//	{ 1, 320000, ACPU_PLL_1, 1, 2, 107000, 2, 5, 120000 },
+	{ 0, 352000, ACPU_PLL_2, 2, 2,  88000, 3, 5, 128000 },
+	{ 1, 384000, ACPU_PLL_1, 1, 1, 128000, 2, 6, 128000 },
+//	{ 1, 480000, ACPU_PLL_1, 1, 1, 120000, 3, 6, 120000 },
+	{ 1, 528000, ACPU_PLL_2, 2, 1, 132000, 3, 7, 128000 },
+#ifdef CONFIG_MSM_ARM11_OC
+	{ 1, 614400, ACPU_PLL_2, 2, 0, 153600, 3, 7, 128000 },
+	{ 1, 691200, ACPU_PLL_2, 2, 0, 172800, 3, 7, 128000 },
+	{ 1, 768000, ACPU_PLL_2, 2, 0, 192000, 3, 7, 128000 },
+#endif
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, {0, 0, 0} }
 };
 
@@ -168,6 +177,11 @@ static struct clkctl_acpu_speed pll0_196_pll1_960_pll2_1056[] = {
 	{ 0, 352000, ACPU_PLL_2, 2, 2,  88000, 3, 5, 120000 },
 	{ 1, 480000, ACPU_PLL_1, 1, 1, 120000, 3, 6, 120000 },
 	{ 1, 528000, ACPU_PLL_2, 2, 1, 132000, 3, 7, 120000 },
+#ifdef CONFIG_MSM_ARM11_OC
+	{ 1, 614400, ACPU_PLL_2, 2, 0, 153600, 3, 7, 120000 },
+	{ 1, 691200, ACPU_PLL_2, 2, 0, 172800, 3, 7, 120000 },
+	{ 1, 768000, ACPU_PLL_2, 2, 0, 192000, 3, 7, 120000 },
+#endif
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, {0, 0, 0} }
 };
 
@@ -322,6 +336,12 @@ static void __init cpufreq_table_init(void)
 }
 #endif
 
+unsigned long clk_get_max_axi_khz(void)
+{
+	return drv_state.max_axi_khz;
+}
+EXPORT_SYMBOL(clk_get_max_axi_khz);
+
 static int pc_pll_request(unsigned id, unsigned on)
 {
 	int res = 0;
@@ -394,7 +414,7 @@ unsigned long acpuclk_wait_for_irq(void)
 
 static int acpuclk_set_vdd_level(int vdd)
 {
-	uint32_t current_vdd;
+	uint32_t current_vdd __maybe_unused;
 
 	current_vdd = readl(A11S_VDD_SVS_PLEVEL_ADDR) & 0x07;
 
@@ -414,6 +434,8 @@ static int acpuclk_set_vdd_level(int vdd)
 	return 0;
 }
 
+
+
 /* Set proper dividers for the given clock speed. */
 static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s)
 {
@@ -425,7 +447,16 @@ static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s)
 	clk_div = (reg_clksel >> 1) & 0x03;
 	/* CLK_SEL_SRC1NO */
 	src_sel = reg_clksel & 1;
-
+#ifdef CONFIG_MSM_ARM11_OC
+	/*
+	 * If the new freq is an OC one we must first lower pll2 freq,
+	 * then the div can be lowered
+	 */
+	if(hunt_s->a11clk_khz > 528000) {
+		writel(hunt_s->a11clk_khz / 19200, PLLn_L_VAL(2));
+		udelay(50);
+	}
+#endif
 	/*
 	 * If the new clock divider is higher than the previous, then
 	 * program the divider before switching the clock
@@ -456,6 +487,18 @@ static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s)
 		reg_clksel |= (hunt_s->ahbclk_div << 1);
 		writel(reg_clksel, A11S_CLK_SEL_ADDR);
 	}
+
+#ifdef CONFIG_MSM_ARM11_OC
+	/*
+	 * If the new freq isn't a OC one and uses PLL2 we must reset PLL2
+	 * to its original freq, but only after we have put the higher div
+	 */
+	if(hunt_s->pll == ACPU_PLL_2 && hunt_s->a11clk_khz <= 528000
+		&& readl(PLLn_L_VAL(2)) != 55) {
+		writel(55, PLLn_L_VAL(2));
+		udelay(50);
+	}
+#endif
 }
 
 int acpuclk_set_rate(int cpu, unsigned long rate, enum setrate_reason reason)
@@ -597,6 +640,15 @@ int acpuclk_set_rate(int cpu, unsigned long rate, enum setrate_reason reason)
 	if (reason == SETRATE_SWFI)
 		goto out;
 
+#ifndef TEMP_76XX_ANDROID
+       /* Nothing else to do for power collapse. */
+       if (reason == SETRATE_PC)
+		goto out;
+#endif
+
+#ifndef TEMP_76XX_ANDROID
+/*This is being compiled out by Motorola. When QCOM fixes the crash issue, 
+we can compile this again*/
 	/* Change the AXI bus frequency if we can. */
 	if (strt_s->axiclk_khz != tgt_s->axiclk_khz) {
 		res = clk_set_rate(drv_state.ebi1_clk,
@@ -604,10 +656,13 @@ int acpuclk_set_rate(int cpu, unsigned long rate, enum setrate_reason reason)
 		if (res < 0)
 			pr_warning("Setting AXI min rate failed (%d)\n", res);
 	}
+#endif /*TEMP_76XX_ANDROID*/
 
+#ifdef TEMP_76XX_ANDROID
 	/* Nothing else to do for power collapse if not 7x27. */
 	if (reason == SETRATE_PC && !cpu_is_msm7x27())
 		goto out;
+#endif
 
 	/* Disable PLLs we are not using anymore. */
 	if (tgt_s->pll != ACPU_PLL_TCXO)

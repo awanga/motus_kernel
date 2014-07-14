@@ -110,7 +110,7 @@ config LEDS_COBALT_QUBE
 
 config LEDS_COBALT_RAQ
 	bool "LED Support for the Cobalt Raq series"
-	depends on LEDS_CLASS=y && MIPS_COBALT
+	depends on LEDS_CLASS && MIPS_COBALT
 	select LEDS_TRIGGERS
 	help
 	  This option enables support for the Cobalt Raq series LEDs.
@@ -175,6 +175,16 @@ config LEDS_LP3944
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called leds-lp3944.
+
+config LEDS_LP5521
+	tristate "LED Support for the LP5521 LEDs"
+	depends on LEDS_CLASS && I2C
+	help
+	  If you say 'Y' here you get support for the National Semiconductor
+	  LP5521 LED driver used in n8x0 boards.
+
+	  This driver can be built as a module by choosing 'M'. The module
+	  will be called leds-lp5521.
 
 config LEDS_CPLD
 	tristate "LED Support for CPLD connected LEDs"
@@ -267,6 +277,12 @@ config LEDS_BD2802
 	  This option enables support for BD2802GU RGB LED driver chips
 	  accessed via the I2C bus.
 
+config LEDS_FLASH_RESET
+	tristate "LED Support for FLASH_RESET pin control"
+	depends on LEDS_CLASS && LEDS_BD7885
+	help
+	  This option enables support for LED's FLASH_RESET pin operation.
+
 config LEDS_MSM_PMIC
         tristate "LED Support for Qualcomm PMIC connected LEDs"
         default y
@@ -333,6 +349,48 @@ config LEDS_QCIBL
 	help
 	  Say Y here if you want to use the Quanta backlight driver for ST15
 	  platform.
+
+config LEDS_ADP8862
+    tristate "ADP8862 Display Backlight Driver"
+    default n
+    help
+        ADP8862 Display Backlight Driver support
+
+config LEDS_PM7540_BTN
+    tristate "PM7540 Button LEDS"
+    default n
+    help
+        PM7540 Button LEDS
+
+config LEDS_PM7540_SOC
+    tristate "PM7540 SOC LED"
+    default n
+    help
+        PM7540 SOC LED
+
+config LEDS_PM7540_KPD
+    tristate "PM7540 Keypad LEDS"
+    default n
+    help
+        PM7540 Keypad LEDS
+
+config LEDS_CAMERA
+    tristate "Camera LED Driver"
+    default n
+    help
+        Camera LED Driver support
+
+config LEDS_MORRISON_KPD
+    tristate "Morrison Keypad Backlight Driver"
+    default n
+    help
+        Morrison Keypad Backlight Driver support
+
+config LEDS_FAN5646
+    tristate "Fairchild FAN5646 LED Driver"
+    default n
+    help
+        Fairchild FAN5646 LED Driver support
 
 config LEDS_TRIGGERS
 	bool "LED Trigger support"
@@ -408,5 +466,47 @@ comment "iptables trigger is under Netfilter config (LED target)"
 endif # LEDS_TRIGGERS
 
 endif # LEDS_CLASS
+
+config ADP8860_DISP_BL
+	tristate "ADP8860 Display Backlight Driver"
+	depends on I2C
+	default n
+	help
+	  ADP8860 Display Backlight Driver support
+
+config ADP8870_DISP_BL
+	tristate "ADP8870 Display Backlight Driver"
+	depends on I2C
+	default n
+	help
+	  ADP8870 Display Backlight Driver support
+
+config ADP5588_LEDS_BL
+	tristate "ADP5588 Qwerty Keyboard Backlight Driver"
+	depends on I2C
+	depends on ADP5588_KEYPAD && MACH_CALGARY
+	help
+	  ADP5588 Qwerty Keyboard Backlight Driver
+
+config LEDS_LM3535
+    tristate "LM3535 Display Backlight Driver"
+	depends on MACH_MOT
+    default n
+    help
+        LM3535 Display Backlight Driver support
+
+config LM3535_ESD_RECOVERY
+    tristate "LM3535 Display Backlight Driver ESD Recovery Algorithm"
+    depends on LEDS_LM3535
+    default y if LEDS_LM3535
+    help
+        LM3535 Display Backlight ESD Recovery support
+
+config LM3535_BUTTON_BL
+    tristate "LM3535 Display Backlight Driver Button LED Support"
+    depends on LEDS_LM3535
+    default y if LEDS_LM3535
+    help
+        LM3535 Display Backlight Button LED Support
 
 endif # NEW_LEDS

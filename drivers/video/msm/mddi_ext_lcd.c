@@ -58,9 +58,13 @@ static struct msm_fb_panel_data mddi_ext_lcd_panel_data = {
 	.panel_info.wait_cycle = 0,
 	.panel_info.bpp = 18,
 	.panel_info.fb_num = 2,
+#if defined(CONFIG_KERNEL_MOTOROLA)
+	.panel_info.clk_rate = 98304000,
+#else /* defined(CONFIG_KERNEL_MOTOROLA) */
 	.panel_info.clk_rate = 122880000,
 	.panel_info.clk_min  = 120000000,
 	.panel_info.clk_max  = 125000000,
+#endif /* defined(CONFIG_KERNEL_MOTOROLA) */
 	.on = mddi_ext_lcd_on,
 	.off = mddi_ext_lcd_off,
 };

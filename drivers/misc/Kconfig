@@ -194,6 +194,29 @@ config ATMEL_SSC
 
 	  If unsure, say N.
 
+config OMAP_MODEM_CONTROL
+   bool "OMAP device driver to interface with a modem co-processor"
+   default n
+   ---help---
+         This option enables the omap device driver to control and
+         interface with a modem co-processor.  This module is needed to
+         monitor for modem panics, interact with the modem during master
+         clear, and allow modem power down/up support.
+
+config OMAP_STI
+	bool "Serial Trace Interface support"
+	depends on ARCH_OMAP16XX || ARCH_OMAP24XX || ARCH_OMAP34XX
+	default n
+	help
+	  Serial Trace Interface. The protocols suported for OMAP1/2/3 are
+	  STI/CSTI/XTIv2 correspondingly.
+
+config OMAP_STI_CONSOLE
+	bool "STI console support"
+	depends on OMAP_STI
+	help
+	  This enables a console driver by way of STI/XTI.
+
 config ENCLOSURE_SERVICES
 	tristate "Enclosure Services"
 	default n
@@ -417,6 +440,51 @@ config APANIC_PLABEL
 	 If your platform uses a different flash partition label for storing
  	 crashdumps, enter it here.
 
+config VIB_PWM
+	bool "PWM Vibrator"
+	default n
+
+config VIB_GPIO
+	bool "GPIO Vibrator"
+	default n
+
+config SENSORS_AKM8973
+	tristate "AKM8973 Magnetometer"
+	default n
+	depends on I2C
+	help
+	 Support for the AKM8973 tri-axis magnetometer
+
+config SENSORS_AKM8973_AKMD
+	tristate "AKM8973 Magnetometer"
+	default n
+	depends on I2C
+	help
+	 Support for the AKM8973 tri-axis magnetometer (compass)
+
+config SENSORS_AIRC
+	tristate "Motorola AIRC"
+	default n
+	depends on I2C
+	help
+	 Support for the AIRC driver
+
+config SENSORS_LIS331DLH
+	tristate "LIS331DLH Accelerometer"
+	default n
+	depends on I2C
+	help
+	 Say yes here if you wish to include the STI Micro
+	 LIS331DLH accelerometer driver.
+
+config SENSORS_KXTF9
+	tristate "KXTF9 Accelerometer"
+	default n
+	depends on I2C
+	help
+	 Say yes here if you wish to include the Kionix
+	 KXTF9 accelerometer driver.
+
 config TSIF
 	depends on ARCH_MSM
 	tristate "TSIF (Transport Stream InterFace) support"
@@ -532,5 +600,14 @@ source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
 source "drivers/misc/iwmc3200top/Kconfig"
 source "drivers/misc/video_core/720p/Kconfig"
+
+source "drivers/misc/mot_camera_misc/Kconfig"
+source "drivers/misc/mot_camera_misc_msm/Kconfig"
+source "drivers/misc/ts27010mux/Kconfig"
+source "drivers/misc/netmux/Kconfig"
+source "drivers/misc/netmux_linkdriver/Kconfig"
+source "drivers/misc/modem_pm_driver/Kconfig"
+source "drivers/misc/smc/Kconfig"
+source "drivers/misc/sec/Kconfig"
 
 endif # MISC_DEVICES

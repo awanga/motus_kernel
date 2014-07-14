@@ -106,6 +106,19 @@ done:
 	local_irq_restore(flags);
 }
 
+#ifdef CONFIG_MACH_MOT
+#if 0
+/* Function not being used */
+static void ev_log_freeze(struct ev_log *log, unsigned count)
+{
+	unsigned long flags;
+	local_irq_save(flags);
+	log->fault = count;
+	local_irq_restore(flags);
+}
+#endif
+#endif
+
 static int ev_log_open(struct inode *inode, struct file *file)
 {
 	file->private_data = inode->i_private;

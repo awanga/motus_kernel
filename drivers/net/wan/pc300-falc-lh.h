@@ -31,8 +31,7 @@
 #define NUM_OF_T1_CHANNELS	24
 #define NUM_OF_E1_CHANNELS	32
 
-/*>>>>>>>>>>>>>>>>>  FALC Register Bits (Transmit Mode)  <<<<<<<<<<<<<<<<<<< */
-
+/*
 /* CMDR (Command Register)
    ---------------- E1 & T1 ------------------------------ */
 #define CMDR_RMC	0x80
@@ -1113,8 +1112,7 @@
 #define  VSTR_VN0	0x01
 
 
-/*>>>>>>>>>>>>>>>>>>>>>  Local Control Structures  <<<<<<<<<<<<<<<<<<<<<<<<< */
-
+/*
 /* Write-only Registers (E1/T1 control mode write registers) */
 #define XFIFOH	0x00		/* Tx FIFO High Byte */
 #define XFIFOL	0x01		/* Tx FIFO Low Byte */

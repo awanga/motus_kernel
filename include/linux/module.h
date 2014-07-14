@@ -387,6 +387,11 @@ struct module
 	ctor_fn_t *ctors;
 	unsigned int num_ctors;
 #endif
+
+#ifdef CONFIG_GCOV_PROFILE
+	const char *ctors_start;        /* Pointer to start of .ctors-section */
+	const char *ctors_end;          /* Pointer to end of .ctors-section */
+#endif
 };
 #ifndef MODULE_ARCH_INIT
 #define MODULE_ARCH_INIT {}

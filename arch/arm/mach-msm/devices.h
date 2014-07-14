@@ -55,6 +55,10 @@ extern struct platform_device usb_diag_mdm_device;
 extern struct platform_device usb_gadget_fserial_device;
 extern struct platform_device usb_gadget_facm_device;
 
+#if defined(CONFIG_MACH_MOT)
+extern struct platform_device msm_device_i2c_gpio;
+#endif
+
 extern struct platform_device msm_device_i2c;
 
 extern struct platform_device msm_device_i2c_2;

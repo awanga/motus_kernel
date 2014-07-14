@@ -17,6 +17,7 @@
 #ifndef __ARCH_ARM_MACH_MSM_VREG_H
 #define __ARCH_ARM_MACH_MSM_VREG_H
 
+struct device;
 struct vreg;
 
 struct vreg *vreg_get(struct device *dev, const char *id);

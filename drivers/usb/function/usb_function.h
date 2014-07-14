@@ -177,6 +177,9 @@ void usb_ept_fifo_flush(struct usb_endpoint *ept);
 int usb_ept_set_halt(struct usb_endpoint *ept);
 int usb_ept_clear_halt(struct usb_endpoint *ept);
 struct device *usb_get_device(void);
+#if defined(CONFIG_KERNEL_MOTOROLA)
+unsigned int short usb_get_composition(void);
+#endif /* defined(CONFIG_KERNEL_MOTOROLA) */
 struct usb_endpoint *usb_ept_find(struct usb_endpoint **ept, int type);
 struct usb_function *usb_ept_get_function(struct usb_endpoint *ept);
 int usb_ept_is_stalled(struct usb_endpoint *ept);

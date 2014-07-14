@@ -109,6 +109,7 @@ static int debug_secure_mpp_config_i_sink(char *buf, int size)
 		return -EINVAL;
 	}
 
+/*The PMIC function is not supported*/
 	if (pmic_secure_mpp_config_i_sink(which, level, onoff) < 0)
 		return -EFAULT;
 
@@ -127,6 +128,8 @@ static int debug_secure_mpp_config_digital_input(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/
 	if (pmic_secure_mpp_config_digital_input(which, level, dbus) < 0)
 		return -EFAULT;
 
@@ -515,6 +518,8 @@ static int debug_set_speaker_delay(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/
 	if (pmic_set_speaker_delay(delay) < 0)
 		return -EFAULT;
 
@@ -531,6 +536,8 @@ static int debug_speaker_1k6_zin_enable(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/
 	if (pmic_speaker_1k6_zin_enable(enable) < 0)
 		return -EFAULT;
 
@@ -547,6 +554,8 @@ static int debug_spkr_set_mux_hpf_corner_freq(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_set_mux_hpf_corner_freq(freq) < 0)
 		return -EFAULT;
 
@@ -557,6 +566,7 @@ static int debug_spkr_get_mux_hpf_corner_freq(char *buf, int size)
 {
 	uint freq;
 
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_get_mux_hpf_corner_freq(&freq) < 0)
 		return -EFAULT;
 
@@ -573,6 +583,8 @@ static int debug_spkr_add_right_left_chan(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/	
 	if (pmic_spkr_add_right_left_chan(enable) < 0)
 		return -EFAULT;
 
@@ -583,6 +595,7 @@ static int debug_spkr_is_right_left_chan_added(char *buf, int size)
 {
 	int	enabled;
 
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_is_right_left_chan_added(&enabled) < 0)
 		return -EFAULT;
 
@@ -599,6 +612,8 @@ static int debug_spkr_en_stereo(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_en_stereo(enable) < 0)
 		return -EFAULT;
 
@@ -608,6 +623,7 @@ static int debug_spkr_is_stereo_en(char *buf, int size)
 {
 	int	enabled;
 
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_is_stereo_en(&enabled) < 0)
 		return -EFAULT;
 
@@ -624,6 +640,8 @@ static int debug_spkr_select_usb_with_hpf_20hz(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_select_usb_with_hpf_20hz(enable) < 0)
 		return -EFAULT;
 
@@ -633,6 +651,7 @@ static int debug_spkr_is_usb_with_hpf_20hz(char *buf, int size)
 {
 	int	enabled;
 
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_is_usb_with_hpf_20hz(&enabled) < 0)
 		return -EFAULT;
 
@@ -649,6 +668,8 @@ static int debug_spkr_bypass_mux(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_bypass_mux(enable) < 0)
 		return -EFAULT;
 
@@ -658,6 +679,7 @@ static int debug_spkr_is_mux_bypassed(char *buf, int size)
 {
 	int	enabled;
 
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_is_mux_bypassed(&enabled) < 0)
 		return -EFAULT;
 
@@ -674,6 +696,8 @@ static int debug_spkr_en_hpf(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_en_hpf(enable) < 0)
 		return -EFAULT;
 
@@ -683,6 +707,7 @@ static int debug_spkr_is_hpf_en(char *buf, int size)
 {
 	int	enabled;
 
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_is_hpf_en(&enabled) < 0)
 		return -EFAULT;
 
@@ -699,6 +724,8 @@ static int debug_spkr_en_sink_curr_from_ref_volt_cir(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/	
 	if (pmic_spkr_en_sink_curr_from_ref_volt_cir(enable) < 0)
 		return -EFAULT;
 
@@ -709,6 +736,7 @@ static int debug_spkr_is_sink_curr_from_ref_volt_cir_en(char *buf, int size)
 {
 	int	enabled;
 
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_is_sink_curr_from_ref_volt_cir_en(&enabled) < 0)
 		return -EFAULT;
 
@@ -818,10 +846,13 @@ static int debug_spkr_en(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_en(left_right, enable) >= 0) {
 		debug_spkr_left_right = left_right;
 		return size;
 	}
+
 	return -EFAULT;
 }
 
@@ -846,10 +877,13 @@ static int debug_spkr_set_gain(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/	
 	if (pmic_spkr_set_gain(left_right, enable) >= 0) {
 		debug_spkr_left_right = left_right;
 		return size;
 	}
+
 	return -EFAULT;
 }
 
@@ -873,10 +907,13 @@ static int debug_spkr_set_delay(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_set_delay(left_right, delay) >= 0) {
 		debug_spkr_left_right = left_right;
 		return size;
 	}
+
 	return -EFAULT;
 }
 
@@ -884,6 +921,7 @@ static int debug_spkr_get_delay(char *buf, int size)
 {
 	uint delay;
 
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_get_delay(debug_spkr_left_right, &delay) < 0)
 		return -EFAULT;
 
@@ -901,10 +939,13 @@ static int debug_spkr_en_mute(char *buf, int size)
 		printk(KERN_ERR "%s: sscanf failed cnt=%d" , __func__, cnt);
 		return -EINVAL;
 	}
+
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_en_mute(left_right, enable) >= 0) {
 		debug_spkr_left_right = left_right;
 		return size;
 	}
+
 	return -EFAULT;
 }
 
@@ -912,6 +953,7 @@ static int debug_spkr_is_mute_en(char *buf, int size)
 {
 	int	enabled;
 
+ 	/*The PMIC function is not supported*/
 	if (pmic_spkr_is_mute_en(debug_spkr_left_right, &enabled) < 0)
 		return -EFAULT;
 

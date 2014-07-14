@@ -44,6 +44,7 @@
 #define HCI_UART_LL	4
 #define HCI_UART_IBS	5
 #define HCI_UART_ATH3K	6
+#define HCI_UART_BRCM	7
 
 #define HCI_UART_RAW_DEVICE	0
 
@@ -108,4 +109,9 @@ int ibs_deinit(void);
 #ifdef CONFIG_BT_HCIUART_ATH3K
 int ath_init(void);
 int ath_deinit(void);
+#endif
+
+#ifdef CONFIG_BT_HCIUART_BRCM
+int brcm_init(void);
+int brcm_deinit(void);
 #endif

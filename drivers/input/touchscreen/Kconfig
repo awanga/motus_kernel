@@ -23,6 +23,24 @@ config TOUCHSCREEN_88PM860X
 	  To compile this driver as a module, choose M here: the
 	  module will be called 88pm860x-ts.
 
+choice
+        prompt "QUANTUM Key08 touchpad"
+        default TOUCHSCREEN_KEY08_MULTITOUCH
+
+config TOUCHSCREEN_KEY08
+        tristate "QUANTUM touchpad driver"
+	depends on MACH_MOT
+        help
+          This enables support for Quantum over I2C based touchscreens.
+
+config TOUCHSCREEN_KEY08_MULTITOUCH
+        tristate "QUANTUM touchpad driver(Multi-Touch)"
+	depends on MACH_MOT 
+        help
+          This enables multitouch support for Quantum over I2C based touchscreens.
+
+endchoice
+
 config TOUCHSCREEN_ADS7846
 	tristate "ADS7846/TSC2046/AD7873 and AD(S)7843 based touchscreens"
 	depends on SPI_MASTER
@@ -378,6 +396,32 @@ config TOUCHSCREEN_ATMEL_TSADCC
 	  To compile this driver as a module, choose M here: the
 	  module will be called atmel_tsadcc.
 
+config TOUCHSCREEN_TSC2005
+	tristate "TSC2005 touchscreen support"
+	depends on SPI_MASTER
+	help
+	  Say Y here for if you are using the touchscreen features of TSC2005.
+
+config TOUCHSCREEN_TSC210X
+	tristate "TI TSC210x based touchscreens"
+	depends on SPI_MASTER
+	select SPI_TSC210X
+	help
+	  Say Y here if you have a touchscreen interface using a
+	  TI TSC210x controller, and your board-specific initialisation
+	  code includes that in its table of SPI devices.
+
+	  If unsure, say N (but it's safe to say "Y").
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called tsc210x_ts.
+
+config TOUCHSCREEN_TSC2301
+	tristate "TSC2301 touchscreen support"
+	depends on SPI_TSC2301
+	help
+	  Say Y here for if you are using the touchscreen features of TSC2301.
+
 config TOUCHSCREEN_UCB1400
 	tristate "Philips UCB1400 touchscreen"
 	depends on AC97_BUS
@@ -610,6 +654,23 @@ config TOUCHSCREEN_TSC2007
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called tsc2007.
+
+config TOUCHSCREEN_QUANTUM_OBP
+	tristate "Quantum OBP based touchscreens"
+	depends on I2C
+	default y if MACH_MOT
+	help
+	  Say Y here if you have a Quantum touchscreen that uses
+	  the Object Based Protocol based firmware.
+
+	  If unsure, say N.
+
+config TOUCHSCREEN_MINIPAD
+        tristate "QUANTUM minipad driver"
+	depends on I2C
+	default y if MACH_MOT
+        help
+        This enables support for Quantum over I2C based minipad.
 
 config TOUCHSCREEN_MSM_LEGACY
 	default n

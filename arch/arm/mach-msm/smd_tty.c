@@ -200,7 +200,6 @@ static int smd_tty_open(struct tty_struct *tty, struct file *f)
 	int n = tty->index;
 	struct smd_tty_info *info;
 
-
 	if (!smd_ch_name[n])
 		return -ENODEV;
 

@@ -26,6 +26,7 @@
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <asm/mach-types.h>
 #include <mach/board.h>
 #include <linux/mutex.h>
 #include <linux/timer.h>
@@ -71,8 +72,12 @@ struct msm_i2c_dev {
 	void __iomem                 *base;	/* virtual */
 	int                          irq;
 	struct clk                   *clk;
+#ifndef CONFIG_MACH_MOT
 	struct i2c_adapter           adap_pri;
 	struct i2c_adapter           adap_aux;
+#else
+	struct i2c_adapter           adapter;
+#endif
 
 	spinlock_t                   lock;
 
@@ -191,7 +196,6 @@ msm_i2c_interrupt(int irq, void *devid)
 					dev->rd_acked = 0;
 				if (dev->cnt == 0)
 					goto out_complete;
-
 			} else {
 				/* Now that extra read-cycle-clocks aren't
 				 * generated, this becomes error condition
@@ -220,7 +224,11 @@ msm_i2c_interrupt(int irq, void *devid)
 		if (dev->cnt) {
 			/* Ready to take a byte */
 			data = dev->msg->buf[dev->pos];
+#if defined(CONFIG_MACH_MOT)
+			if (dev->cnt == 1)
+#else 
 			if (dev->cnt == 1 && dev->rem == 1)
+#endif
 				data |= I2C_WRITE_DATA_LAST_BYTE;
 
 			status = readl(dev->base + I2C_STATUS);
@@ -270,7 +278,11 @@ msm_i2c_poll_writeready(struct msm_i2c_dev *dev)
 		if (!(status & I2C_STATUS_WR_BUFFER_FULL))
 			return 0;
 		if (retries++ > 1000)
+#if defined(CONFIG_MACH_MOT)
+			msleep(1);
+#else
 			usleep_range(100, 200);
+#endif
 	}
 	return -ETIMEDOUT;
 }
@@ -286,7 +298,11 @@ msm_i2c_poll_notbusy(struct msm_i2c_dev *dev)
 		if (!(status & I2C_STATUS_BUS_ACTIVE))
 			return 0;
 		if (retries++ > 1000)
+#if defined(CONFIG_MACH_MOT)
+			msleep(1);
+#else
 			usleep_range(100, 200);
+#endif
 	}
 	return -ETIMEDOUT;
 }
@@ -312,8 +328,9 @@ msm_i2c_recover_bus_busy(struct msm_i2c_dev *dev, struct i2c_adapter *adap)
 		gpio_clk = dev->pdata->pri_clk;
 		gpio_dat = dev->pdata->pri_dat;
 	}
-
+#ifndef CONFIG_MACH_MOT
 	disable_irq(dev->irq);
+#endif
 	if (status & I2C_STATUS_RD_BUFFER_FULL) {
 		dev_warn(dev->dev, "Read buffer full, status %x, intf %x\n",
 			 status, readl(dev->base + I2C_INTERFACE_SELECT));
@@ -336,7 +353,7 @@ msm_i2c_recover_bus_busy(struct msm_i2c_dev *dev, struct i2c_adapter *adap)
 		gpio_direction_input(gpio_clk);
 		udelay(5);
 		if (!gpio_get_value(gpio_clk))
-			usleep_range(20, 30);
+			udelay(20);
 		if (!gpio_get_value(gpio_clk))
 			msleep(10);
 		gpio_clk_status = gpio_get_value(gpio_clk);
@@ -351,13 +368,17 @@ msm_i2c_recover_bus_busy(struct msm_i2c_dev *dev, struct i2c_adapter *adap)
 		dev_info(dev->dev, "Bus busy cleared after %d clock cycles, "
 			 "status %x, intf %x\n",
 			 i, status, readl(dev->base + I2C_INTERFACE_SELECT));
+#ifndef CONFIG_MACH_MOT
 		enable_irq(dev->irq);
+#endif
 		return 0;
 	}
 
 	dev_err(dev->dev, "Bus still busy, status %x, intf %x\n",
 		 status, readl(dev->base + I2C_INTERFACE_SELECT));
+#ifndef CONFIG_MACH_MOT
 	enable_irq(dev->irq);
+#endif
 	return -EBUSY;
 }
 
@@ -395,11 +416,14 @@ msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		get_irq_chip(dev->irq)->ack(dev->irq);
 	}
 
+#ifndef CONFIG_MACH_MOT
 	if (adap == &dev->adap_pri)
 		writel(0, dev->base + I2C_INTERFACE_SELECT);
 	else
 		writel(I2C_INTERFACE_SELECT_INTF_SELECT,
 				dev->base + I2C_INTERFACE_SELECT);
+#endif
+
 	enable_irq(dev->irq);
 	while (rem) {
 		addr = msgs->addr << 1;
@@ -408,14 +432,16 @@ msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 
 		spin_lock_irqsave(&dev->lock, flags);
 		dev->msg = msgs;
+#ifndef CONFIG_MACH_MOT
 		dev->rem = rem;
+#endif
 		dev->pos = 0;
 		dev->err = 0;
 		dev->flush_cnt = 0;
 		dev->cnt = msgs->len;
 		dev->complete = &complete;
 		spin_unlock_irqrestore(&dev->lock, flags);
-
+		
 		if (check_busy) {
 			ret = msm_i2c_poll_notbusy(dev);
 			if (ret)
@@ -434,12 +460,18 @@ msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		/* Wait for WR buffer not full */
 		ret = msm_i2c_poll_writeready(dev);
 		if (ret) {
+#ifndef CONFIG_MACH_MOT
 			ret = msm_i2c_recover_bus_busy(dev, adap);
 			if (ret) {
 				dev_err(dev->dev,
 				"Error waiting for write ready before addr\n");
 				goto out_err;
 			}
+#else
+			dev_err(dev->dev,
+				"Error waiting for write ready before addr\n");
+			goto out_err;
+#endif
 		}
 
 		/* special case for doing 1 byte read.
@@ -476,10 +508,12 @@ msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 				/* 1-byte-reads from slow devices in interrupt
 				 * context
 				 */
+
 				goto wait_for_int;
 			}
 
 			dev->rd_acked = 1;
+
 			writel(I2C_WRITE_DATA_LAST_BYTE,
 					dev->base + I2C_WRITE_DATA);
 			spin_unlock_irqrestore(&dev->lock, flags);
@@ -500,7 +534,8 @@ wait_for_int:
 
 		timeout = wait_for_completion_timeout(&complete, HZ);
 		if (!timeout) {
-			dev_err(dev->dev, "Transaction timed out\n");
+			dev_err(dev->dev, "Transaction timed out for addr 0x%x\n",
+				msgs->addr);
 			writel(I2C_WRITE_DATA_LAST_BYTE,
 				dev->base + I2C_WRITE_DATA);
 			msleep(100);
@@ -511,10 +546,16 @@ wait_for_int:
 			goto out_err;
 		}
 		if (dev->err) {
+#ifdef CONFIG_MACH_MOT
+            if (! (dev->msg->flags & I2C_M_NAK_LIKELY))
+#endif
 			dev_err(dev->dev,
 				"(%04x) Error during data xfer (%d)\n",
 				addr, dev->err);
 			ret = dev->err;
+#ifdef CONFIG_MACH_MOT
+			msm_i2c_recover_bus_busy(dev, adap);
+#endif
 			goto out_err;
 		}
 
@@ -530,7 +571,9 @@ wait_for_int:
 	spin_lock_irqsave(&dev->lock, flags);
 	dev->complete = NULL;
 	dev->msg = NULL;
+#ifndef CONFIG_MACH_MOT
 	dev->rem = 0;
+#endif
 	dev->pos = 0;
 	dev->err = 0;
 	dev->flush_cnt = 0;
@@ -644,16 +687,33 @@ msm_i2c_probe(struct platform_device *pdev)
 		if (remote_mutex_init(&dev->r_lock, &rmid) != 0)
 			pdata->rmutex = 0;
 	}
+
 	/* I2C_HS_CLK = I2C_CLK/(3*(HS_DIVIDER_VALUE+1) */
 	/* I2C_FS_CLK = I2C_CLK/(2*(FS_DIVIDER_VALUE+3) */
 	/* FS_DIVIDER_VALUE = ((I2C_CLK / I2C_FS_CLK) / 2) - 3 */
 	i2c_clk = 19200000; /* input clock */
 	fs_div = ((i2c_clk / pdata->clk_freq) / 2) - 3;
+
+#ifdef CONFIG_MACH_MOT
+	/* 
+		Divider formula from the spec gives wrong clock.
+		Experimentally it acts like i2c_clk = tcxo/(2*(fs_div+6))
+		Reduce fs_div by 3 to compensate
+	*/
+	fs_div -= 3; 
+#endif
 	hs_div = 3;
 	clk_ctl = ((hs_div & 0x7) << 8) | (fs_div & 0xff);
 	writel(clk_ctl, dev->base + I2C_CLK_CTL);
+#ifdef CONFIG_MACH_MOT
+	printk(KERN_INFO "msm_i2c_probe: clk_ctl %x, %d Hz\n",
+	       clk_ctl, i2c_clk / (2 * ((clk_ctl & 0xff) + 6)));
+#else
 	printk(KERN_INFO "msm_i2c_probe: clk_ctl %x, %d Hz\n",
 	       clk_ctl, i2c_clk / (2 * ((clk_ctl & 0xff) + 3)));
+#endif
+
+#if !defined(CONFIG_MACH_MOT)
 
 	i2c_set_adapdata(&dev->adap_pri, dev);
 	dev->adap_pri.algo = &msm_i2c_algo;
@@ -681,6 +741,14 @@ msm_i2c_probe(struct platform_device *pdev)
 		i2c_del_adapter(&dev->adap_pri);
 		goto err_i2c_add_adapter_failed;
 	}
+#else
+	i2c_set_adapdata(&dev->adapter, dev);
+	dev->adapter.algo = &msm_i2c_algo;
+	strncpy(dev->adapter.name,
+		"MSM I2C adapter",
+		sizeof(dev->adapter.name));
+#endif
+
 	ret = request_irq(dev->irq, msm_i2c_interrupt,
 			IRQF_TRIGGER_RISING, pdev->name, dev);
 	if (ret) {
@@ -699,8 +767,13 @@ msm_i2c_probe(struct platform_device *pdev)
 	mutex_init(&dev->mlock);
 	dev->clk_state = 0;
 	/* Config GPIOs for primary and secondary lines */
+#if !defined(CONFIG_MACH_MOT)
 	pdata->msm_i2c_config_gpio(dev->adap_pri.nr, 1);
 	pdata->msm_i2c_config_gpio(dev->adap_aux.nr, 1);
+#else
+	pdata->msm_i2c_config_gpio(dev->adapter.nr, 1);
+	pdata->msm_i2c_config_gpio(dev->adapter.nr + 1, 1);
+#endif
 	clk_disable(dev->clk);
 	setup_timer(&dev->pwr_timer, msm_i2c_pwr_timer, (unsigned long) dev);
 
@@ -709,9 +782,13 @@ msm_i2c_probe(struct platform_device *pdev)
 err_pm_qos_add_request_failed:
 	free_irq(dev->irq, dev); 
 err_request_irq_failed:
+#if !defined(CONFIG_MACH_MOT)
 	i2c_del_adapter(&dev->adap_pri);
 	i2c_del_adapter(&dev->adap_aux);
 err_i2c_add_adapter_failed:
+#else
+	i2c_del_adapter(&dev->adapter);
+#endif
 	clk_disable(clk);
 	iounmap(dev->base);
 err_ioremap_failed:
@@ -740,8 +817,12 @@ msm_i2c_remove(struct platform_device *pdev)
 	platform_set_drvdata(pdev, NULL);
 	pm_qos_remove_request(dev->pm_qos_req);
 	free_irq(dev->irq, dev);
+#if !defined(CONFIG_MACH_MOT)
 	i2c_del_adapter(&dev->adap_pri);
 	i2c_del_adapter(&dev->adap_aux);
+#else
+	i2c_del_adapter(&dev->adapter);
+#endif
 	clk_put(dev->clk);
 	iounmap(dev->base);
 	kfree(dev);
@@ -773,7 +854,14 @@ static int msm_i2c_suspend(struct platform_device *pdev, pm_message_t state)
 static int msm_i2c_resume(struct platform_device *pdev)
 {
 	struct msm_i2c_dev *dev = platform_get_drvdata(pdev);
+
 	dev->suspended = 0;
+	/*if (dev) {
+		clk_enable(dev->clk);
+		mutex_lock(&dev->mlock);		
+		dev->suspended = 0;
+		mutex_unlock(&dev->mlock);
+	}*/
 	return 0;
 }
 

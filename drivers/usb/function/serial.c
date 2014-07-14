@@ -66,8 +66,19 @@
 #define GS_LONG_NAME			"Serial Function"
 #define GS_SHORT_NAME			"serial"
 
+#if defined(CONFIG_KERNEL_MOTOROLA) || defined(CONFIG_MACH_MOT)
+#define SERIAL_INTERFACE_NAME           "Motorola Communication Interface"
+#else /* defined(CONFIG_KERNEL_MOTOROLA) */
+#define SERIAL_INTERFACE_NAME           "Motorola AT Comm Interface"
+#endif /* defined(CONFIG_KERNEL_MOTOROLA) */
+
+#ifdef CONFIG_EXPOSE_NMEA
 static int instances = 2;
 #define MAX_INSTANCES 2
+#else
+static int instances = 1;
+#define MAX_INSTANCES 1
+#endif
 
 #define GS_MAJOR			127
 #define GS_MINOR_START			0
@@ -442,7 +453,11 @@ static void gs_init_header_desc(struct gs_dev *dev)
  *  Register as a USB gadget driver and a tty driver.
  */
 
+#ifdef CONFIG_EXPOSE_NMEA
 char *a[] = {"modem", "nmea"};
+#else
+char *a[] = {"modem"};
+#endif
 
 static int __init gs_module_init(void)
 {
@@ -1438,7 +1453,12 @@ static void gs_bind(void *_ctxt)
 
 	ret = usb_msm_get_next_ifc_number(func);
 	dev->gs_ifc_desc.bInterfaceNumber = ret;
+#if defined(CONFIG_MACH_CALGARY) || defined(CONFIG_MACH_MOT)
+	ret = usb_msm_get_next_strdesc_id(SERIAL_INTERFACE_NAME);
+	dev->gs_ifc_desc.iInterface = ret;
+#else
 	dev->gs_ifc_desc.iInterface = 0;
+#endif
 
 	/*Configuring IN Endpoint*/
 	ep = dev->dev_in_ep = usb_alloc_endpoint(USB_DIR_IN);

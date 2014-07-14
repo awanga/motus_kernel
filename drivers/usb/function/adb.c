@@ -45,6 +45,9 @@
 #define TX_REQ_MAX 4
 
 #define ADB_FUNCTION_NAME "adb"
+#if defined(CONFIG_MACH_MOT)
+#define ADB_INTERFACE_NAME "Motorola ADB Interface"
+#endif
 
 struct adb_context
 {
@@ -170,7 +173,16 @@ static void adb_complete_in(struct usb_endpoint *ept, struct usb_request *req)
 
 	if (req->status != 0)
 		ctxt->error = 1;
-
+#if TEMP_7XXX_ANDROID
+	if ((req->length >= ept->max_pkt) &&
+		((req->length % ept->max_pkt) == 0)) {
+		req->length = 0;
+		req->device = ctxt;
+		/* Queue zero length packet */
+		usb_ept_queue_xfer(ctxt->in, req);
+		return;
+	}
+#endif //TEMP_7XXX_ANDROID	
 	req_put(ctxt, &ctxt->tx_idle, req);
 
 	wake_up(&ctxt->write_wq);
@@ -389,6 +401,10 @@ static int adb_enable_open(struct inode *ip, struct file *fp)
 	if (_lock(&ctxt->enable_excl))
 		return -EBUSY;
 
+#ifdef CONFIG_KERNEL_MOTOROLA
+        /* Service has been enabled by ADB Daemon */
+        usb_func_adb.disabled = 0;
+#endif
 	printk(KERN_INFO "enabling adb function\n");
 	usb_function_enable(ADB_FUNCTION_NAME, 1);
 	/* clear the error latch */
@@ -460,6 +476,10 @@ static void adb_bind(void *_ctxt)
 
 	intf_desc.bInterfaceNumber =
 		usb_msm_get_next_ifc_number(&usb_func_adb);
+
+#if defined(CONFIG_MACH_MOT)
+	intf_desc.iInterface = usb_msm_get_next_strdesc_id(ADB_INTERFACE_NAME);
+#endif
 
 	ctxt->in = usb_alloc_endpoint(USB_DIR_IN);
 	if (ctxt->in) {
@@ -548,7 +568,10 @@ static struct usb_function usb_func_adb = {
 
 	.name = ADB_FUNCTION_NAME,
 	.context = &_context,
-
+#if defined(CONFIG_MACH_MOT)
+	/* the adb function is only enabled by the ADB daemon */
+	.disabled = 1,
+#endif
 };
 
 struct usb_descriptor_header *adb_hs_descriptors[4];

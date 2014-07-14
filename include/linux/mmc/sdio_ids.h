@@ -43,4 +43,6 @@
 #define SDIO_DEVICE_ID_SIANO_NOVA_A0		0x1100
 #define SDIO_DEVICE_ID_SIANO_STELLAR 		0x5347
 
+#define SDIO_VENDOR_ID_BROADCOM                 0x02d0
+#define SDIO_DEVICE_ID_BROADCOM_4325            0x0000
 #endif

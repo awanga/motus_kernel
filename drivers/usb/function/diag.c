@@ -28,6 +28,9 @@
 #include <mach/usbdiag.h>
 
 #include "usb_function.h"
+#if defined(CONFIG_MACH_MOT)
+#define DIAG_INTERFACE_NAME "QC Interface"
+#endif
 
 #define WRITE_COMPLETE 0
 #define READ_COMPLETE  0
@@ -101,6 +104,10 @@ static struct usb_function usb_func_diag;
 static struct diag_context _context;
 static void diag_write_complete(struct usb_endpoint *,
 		struct usb_request *);
+#if defined(CONFIG_MACH_MOT)
+static void diag_write_complete_zlp(struct usb_endpoint *,
+		struct usb_request *);
+#endif
 static struct diag_req_entry *diag_alloc_req_entry(struct usb_endpoint *,
 		unsigned len, gfp_t);
 static void diag_free_req_entry(struct usb_endpoint *, struct diag_req_entry *);
@@ -137,6 +144,10 @@ static void diag_bind(void *context)
 
 	intf_desc.bInterfaceNumber =
 		usb_msm_get_next_ifc_number(&usb_func_diag);
+
+#if defined(CONFIG_MACH_MOT)
+	intf_desc.iInterface = usb_msm_get_next_strdesc_id(DIAG_INTERFACE_NAME);
+#endif
 
 	ctxt->epin = usb_alloc_endpoint(USB_DIR_IN);
 	if (ctxt->epin) {
@@ -230,10 +241,14 @@ EXPORT_SYMBOL(diag_usb_unregister);
 
 int diag_open(int num_req)
 {
+	unsigned long flags;
 	struct diag_context *ctxt = &_context;
 	struct diag_req_entry *write_entry;
 	struct diag_req_entry *read_entry;
 	int i = 0;
+
+	// put in by jwnd84... to keep funny things from happening.
+	spin_lock_irqsave(&ctxt->dev_lock , flags);
 
 	for (i = 0; i < num_req; i++) {
 		write_entry = diag_alloc_req_entry(ctxt->epin, 0, GFP_KERNEL);
@@ -257,6 +272,7 @@ int diag_open(int num_req)
 			goto read_error;
 		}
 	ctxt->diag_opened = 1;
+	spin_unlock_irqrestore(&ctxt->dev_lock , flags);
 	return 0;
 read_error:
 	printk(KERN_ERR "%s:read requests allocation failure\n", __func__);
@@ -275,16 +291,21 @@ write_error:
 		diag_free_req_entry(ctxt->epin, write_entry);
 	}
 	ctxt->diag_opened = 0;
+	spin_unlock_irqrestore(&ctxt->dev_lock , flags);
 	return -ENOMEM;
 }
 EXPORT_SYMBOL(diag_open);
 
 void diag_close(void)
 {
+	unsigned long flags;
 	struct diag_context *ctxt = &_context;
 	struct diag_req_entry *req_entry;
 	/* free write requests */
+	spin_lock_irqsave(&ctxt->dev_lock , flags);
 
+	if(ctxt->diag_opened)
+	{
 	while (!list_empty(&ctxt->dev_write_req_list)) {
 		req_entry = list_entry(ctxt->dev_write_req_list.next,
 				struct diag_req_entry, re_entry);
@@ -299,6 +320,8 @@ void diag_close(void)
 		list_del(&req_entry->re_entry);
 		diag_free_req_entry(ctxt->epout, req_entry);
 	}
+	}
+	spin_unlock_irqrestore(&ctxt->dev_lock , flags);
 	return;
 }
 EXPORT_SYMBOL(diag_close);
@@ -367,8 +390,12 @@ int diag_read(struct diag_request *d_req)
 			return -EIO;
 		}
 	} else {
+
+#if defined(CONFIG_KERNEL_MOTOROLA)
 		printk(KERN_ERR
 				"diag_read:no requests avialable\n");
+#endif /* defined(CONFIG_KERNEL_MOTOROLA) */
+
 		return -EIO;
 	}
 	return 0;
@@ -397,6 +424,16 @@ int diag_write(struct diag_request *d_req)
 		req->buf = d_req->buf;
 		req->length = d_req->length;
 		req->device = ctxt;
+#if defined(CONFIG_MACH_MOT)
+		/* Works for packet size factor of 2, 64 or 512 */
+		if (length & (ctxt->epin->max_pkt - 1)) {
+			/* no ZLP needed. */
+			req->complete = diag_write_complete;
+		} else {
+			/* ZLP Required. */
+			req->complete = diag_write_complete_zlp;
+		}
+#endif
 		if (usb_ept_queue_xfer(ctxt->epin, req)) {
 			/* If error add the link to linked list again*/
 			spin_lock_irqsave(&ctxt->dev_lock, flags);
@@ -408,12 +445,30 @@ int diag_write(struct diag_request *d_req)
 			return -EIO;
 		}
 	} else {
+
+#if defined(CONFIG_KERNEL_MOTOROLA)
 		printk(KERN_ERR	"diag_write: no requests available\n");
+#endif /* defined(CONFIG_KERNEL_MOTOROLA) */
+
 		return -EIO;
 	}
 	return 0;
 }
 EXPORT_SYMBOL(diag_write);
+
+#if defined(CONFIG_MACH_MOT)
+static void diag_write_complete_zlp(struct usb_endpoint *ep ,
+					struct usb_request *req)
+{
+	/* Send a zero-length packet and then normally complete the transfer */
+	if (req->status == 0) {
+		struct diag_context *ctxt = (struct diag_context *)req->device;
+		req->length = 0;
+		req->complete = diag_write_complete;
+		usb_ept_queue_xfer(ctxt->epin, req);
+	}
+}
+#endif
 
 static void diag_write_complete(struct usb_endpoint *ep ,
 		struct usb_request *req)

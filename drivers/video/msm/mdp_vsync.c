@@ -65,11 +65,12 @@ extern struct workqueue_struct *mdp_vsync_wq;
 extern int lcdc_mode;
 extern int vsync_mode;
 
+int vsync_clk_status;
+
 #ifdef MDP_HW_VSYNC
 int vsync_above_th = 4;
 int vsync_start_th = 1;
 int vsync_load_cnt;
-int vsync_clk_status;
 DEFINE_MUTEX(vsync_clk_lock);
 DEFINE_MUTEX(vsync_timer_lock);
 
@@ -133,6 +134,7 @@ void mdp_vsync_clk_disable(void)
 
 static void mdp_set_vsync(unsigned long data)
 {
+#ifdef MDP_HW_VSYNC
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)data;
 	struct msm_fb_panel_data *pdata = NULL;
 
@@ -167,6 +169,7 @@ static void mdp_set_vsync(unsigned long data)
 		add_timer(&mfd->vsync_resync_timer);
 	}
 	mutex_unlock(&vsync_timer_lock);
+#endif
 }
 
 static void mdp_vsync_handler(void *data)

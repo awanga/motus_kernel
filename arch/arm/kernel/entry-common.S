@@ -6,6 +6,9 @@
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
+ * Date      Author    Comment
+ * --------- --------- ---------------------------------------
+ * 11/05/2007 Motorola add system call log for LTT-LITE
  */
 
 #include <asm/unistd.h>

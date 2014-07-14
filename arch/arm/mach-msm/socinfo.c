@@ -26,6 +26,9 @@
 #include <mach/socinfo.h>
 
 #include "smd_private.h"
+#if defined(CONFIG_CUST_SOCINFO)
+#include "../../../init/mot_version.h"
+#endif
 
 #define BUILD_ID_LENGTH 32
 
@@ -216,11 +219,12 @@ uint32_t socinfo_get_version(void)
 	return (socinfo) ? socinfo->v1.version : 0;
 }
 
+#ifdef CONFIG_CUST_SOCINFO
 char *socinfo_get_build_id(void)
 {
 	return (socinfo) ? socinfo->v1.build_id : NULL;
 }
-
+#endif
 uint32_t socinfo_get_raw_id(void)
 {
 	return socinfo ?

@@ -700,6 +700,11 @@ void mdp_hw_vsync_clk_enable(struct msm_fb_data_type *mfd);
 void mdp_hw_vsync_clk_disable(struct msm_fb_data_type *mfd);
 void mdp_vsync_clk_disable(void);
 void mdp_vsync_clk_enable(void);
+#else
+static inline void mdp_hw_vsync_clk_enable(struct msm_fb_data_type *mfd) {}
+static inline void mdp_hw_vsync_clk_disable(struct msm_fb_data_type *mfd) {}
+static inline void mdp_vsync_clk_disable(void) {}
+static inline void mdp_vsync_clk_enable(void) {}
 #endif
 
 #ifdef CONFIG_DEBUG_FS
@@ -707,7 +712,23 @@ int mdp_debugfs_init(void);
 #endif
 
 void mdp_dma_s_update(struct msm_fb_data_type *mfd);
+#ifndef CONFIG_FB_MSM_MDP22
 int mdp_start_histogram(struct fb_info *info);
 int mdp_stop_histogram(struct fb_info *info);
 int mdp_histogram_ctrl(boolean en);
+#else
+static inline int mdp_start_histogram(struct fb_info *info)
+{
+	return 0;
+}
+static inline int mdp_stop_histogram(struct fb_info *info)
+{
+	return 0;
+}
+static inline int mdp_histogram_ctrl(boolean en)
+{
+	return 0;
+}
+#endif
+
 #endif /* MDP_H */

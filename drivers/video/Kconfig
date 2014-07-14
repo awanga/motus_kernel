@@ -2264,6 +2264,7 @@ config FB_MSM_MDP40
 	  Say Y here if this is msm7x30 variant platform.
 endchoice
 
+
 config FB_MSM_EBI2
 	bool
 	default n
@@ -2591,6 +2592,12 @@ config FB_MSM_EBI2_TMD_QVGA_EPSON_QCIF
 	---help---
 	  Support for EBI2 TMD QVGA (240x320) and Epson QCIF (176x220) panel
 
+config FB_MSM_MDDI_TPO_NV_PANEL
+	bool "MDDI TPO NV"
+	select FB_MSM_MDDI
+	---help---
+	  Support for MDDI TPO NV panel
+
 config FB_MSM_PANEL_NONE
 	bool "NONE"
 	---help---
@@ -2599,8 +2606,7 @@ endchoice
 
 choice
 	prompt "Secondary LCD Panel"
-	depends on  FB_MSM_MDP31
-	default FB_MSM_SECONDARY_PANEL_NONE
+	depends on  ( FB_MSM_MDP31 )
 
 config FB_MSM_LCDC_EXTERNAL_WXGA
 	depends on FB_MSM_MDP31

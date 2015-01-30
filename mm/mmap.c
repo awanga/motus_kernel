@@ -252,9 +252,12 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	down_write(&mm->mmap_sem);
 
 #ifdef CONFIG_COMPAT_BRK
-	min_brk = mm->end_code;
+	if (current->brk_randomized)
+		min_brk = mm->start_brk;
+	else
+		min_brk = mm->end_data;
 #else
-	min_brk = mm->start_brk;
+	min_brk = mm->end_brk;
 #endif
 	if (brk < min_brk)
 		goto out;

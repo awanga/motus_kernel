@@ -1225,6 +1225,10 @@ struct task_struct {
 #if defined(SPLIT_RSS_COUNTING)
 	struct task_rss_stat	rss_stat;
 #endif
+#ifdef CONFIG_COMPAT_BRK
+	unsigned brk_randomized:1;
+#endif
+
 /* task state */
 	int exit_state;
 	int exit_code, exit_signal;

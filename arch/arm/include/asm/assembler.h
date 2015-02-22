@@ -157,7 +157,7 @@
 /*
  * SMP data memory barrier
  */
-	.macro	smp_dmb
+	.macro	smp_dmb mode
 #ifdef CONFIG_SMP
 #if __LINUX_ARM_ARCH__ >= 7
 	dmb

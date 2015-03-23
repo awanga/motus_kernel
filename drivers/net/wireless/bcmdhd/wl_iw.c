@@ -44,6 +44,11 @@
 typedef void wlc_info_t;
 typedef void wl_info_t;
 typedef const struct si_pub  si_t;
+
+struct wl_priv *wlcfg_drv_priv = NULL;
+
+u32 wl_dbg_level = 1; /* WL_DBG_ERR */
+
 #include <wlioctl.h>
 
 #include <proto/ethernet.h>

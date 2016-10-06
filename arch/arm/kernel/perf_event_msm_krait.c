@@ -678,7 +678,7 @@ static struct arm_pmu *__init armv7_krait_pmu_init(void)
 }
 
 #else
-static const struct arm_pmu *__init armv7_krait_pmu_init(void)
+static /*const*/ struct arm_pmu *__init armv7_krait_pmu_init(void)
 {
 	return NULL;
 }

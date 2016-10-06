@@ -1328,6 +1328,20 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 	 *    (discarding status on the first one).
 	 */
 
+#if defined(CONFIG_MACH_MOT)
+	/* Per I2C spec, address below 0x08 is reserved for high speed devices
+	 * MSM cannot support fast speed devices for these addresses,
+	 * so we need use I2C over GPIO with a low address devices
+	 */
+	if (msgs[0].addr < 0x08) {
+		printk(KERN_INFO "i2c_transfer: low addr: %02x\n", msgs[0].addr);
+		adap = i2c_get_adapter(1);
+		if (!adap)
+			return -ENODEV;
+	}
+	/* end hack */
+#endif
+
 	if (adap->algo->master_xfer) {
 #ifdef DEBUG
 		for (ret = 0; ret < num; ret++) {

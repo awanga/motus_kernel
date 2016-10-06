@@ -17,11 +17,13 @@
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
+#include <linux/gpio.h>
 
 #include <mach/irqs.h>
 #include <mach/msm_iomap.h>
 #include <mach/dma.h>
 #include <mach/proc_comm.h>
+#include <mach/board.h>
 #include <asm/clkdev.h>
 #include "devices.h"
 
@@ -202,24 +204,27 @@ struct platform_device msm_device_i2c = {
 
 #define GPIO_I2C_CLK 60
 #define GPIO_I2C_DAT 61
+#define PCOM_GPIO_CFG(gpio, func, dir, pull, drvstr) \
+	gpio_tlmm_config(GPIO_CFG(gpio, func, dir, pull, drvstr), GPIO_CFG_ENABLE)
+
 void msm_set_i2c_mux(bool gpio, int *gpio_clk, int *gpio_dat)
 {
 	unsigned id;
 	if (gpio) {
-		id = PCOM_GPIO_CFG(GPIO_I2C_CLK, 0, GPIO_OUTPUT,
-				   GPIO_NO_PULL, GPIO_2MA);
+		id = PCOM_GPIO_CFG(GPIO_I2C_CLK, 0, GPIO_CFG_OUTPUT,
+				   GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
 		msm_proc_comm(PCOM_RPC_GPIO_TLMM_CONFIG_EX, &id, 0);
-		id = PCOM_GPIO_CFG(GPIO_I2C_DAT, 0, GPIO_OUTPUT,
-				   GPIO_NO_PULL, GPIO_2MA);
+		id = PCOM_GPIO_CFG(GPIO_I2C_DAT, 0, GPIO_CFG_OUTPUT,
+				   GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
 		msm_proc_comm(PCOM_RPC_GPIO_TLMM_CONFIG_EX, &id, 0);
 		*gpio_clk = GPIO_I2C_CLK;
 		*gpio_dat = GPIO_I2C_DAT;
 	} else {
-		id = PCOM_GPIO_CFG(GPIO_I2C_CLK, 1, GPIO_INPUT,
-				   GPIO_NO_PULL, GPIO_8MA);
+		id = PCOM_GPIO_CFG(GPIO_I2C_CLK, 1, GPIO_CFG_INPUT,
+				   GPIO_CFG_NO_PULL, GPIO_CFG_8MA);
 		msm_proc_comm(PCOM_RPC_GPIO_TLMM_CONFIG_EX, &id, 0);
-		id = PCOM_GPIO_CFG(GPIO_I2C_DAT , 1, GPIO_INPUT,
-				   GPIO_NO_PULL, GPIO_8MA);
+		id = PCOM_GPIO_CFG(GPIO_I2C_DAT , 1, GPIO_CFG_INPUT,
+				   GPIO_CFG_NO_PULL, GPIO_CFG_8MA);
 		msm_proc_comm(PCOM_RPC_GPIO_TLMM_CONFIG_EX, &id, 0);
 	}
 }
@@ -252,11 +257,19 @@ struct flash_platform_data msm_nand_data = {
 	.nr_parts	= 0,
 };
 
+#define MSM_NAND_PHYS		0xA0A00000
 static struct resource resources_nand[] = {
 	[0] = {
-		.start	= 7,
-		.end	= 7,
+		.name   = "msm_nand_dmac",
+		.start	= DMOV_NAND_CHAN,
+		.end	= DMOV_NAND_CHAN,
 		.flags	= IORESOURCE_DMA,
+	},
+	[1] = {
+		.name   = "msm_nand_phys",
+		.start  = MSM_NAND_PHYS,
+		.end    = MSM_NAND_PHYS + 0x7FF,
+		.flags  = IORESOURCE_MEM,
 	},
 };
 
@@ -464,7 +477,7 @@ static struct resource resources_mddi1[] = {
 	},
 };
 
-struct platform_device msm_device_mddi0 = {
+static struct platform_device msm_device_mddi0 = {
 	.name = "msm_mddi",
 	.id = 0,
 	.num_resources = ARRAY_SIZE(resources_mddi0),
@@ -474,7 +487,7 @@ struct platform_device msm_device_mddi0 = {
 	},
 };
 
-struct platform_device msm_device_mddi1 = {
+static struct platform_device msm_device_mddi1 = {
 	.name = "msm_mddi",
 	.id = 1,
 	.num_resources = ARRAY_SIZE(resources_mddi1),
@@ -498,12 +511,92 @@ static struct resource resources_mdp[] = {
 	},
 };
 
-struct platform_device msm_device_mdp = {
+static struct platform_device msm_device_mdp = {
 	.name = "msm_mdp",
 	.id = 0,
 	.num_resources = ARRAY_SIZE(resources_mdp),
 	.resource = resources_mdp,
 };
+
+static struct resource resources_ebi2_lcd[] = {
+	{
+		.name   = "base",
+		.start  = 0xa0d00000,
+		.end    = 0xa0d00000 + PAGE_SIZE - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{
+		.name   = "lcd01",
+		.start  = 0x98000000,
+		.end    = 0x98000000 + 0x80000 - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{
+		.name   = "lcd02",
+		.start  = 0x9c000000,
+		.end    = 0x9c000000 + 0x80000 - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device msm_device_ebi2_lcd = {
+	.name   = "ebi2_lcd",
+	.id     = 0,
+	.num_resources  = ARRAY_SIZE(resources_ebi2_lcd),
+	.resource       = resources_ebi2_lcd,
+};
+
+static struct platform_device msm_device_lcdc = {
+	.name   = "lcdc",
+	.id     = 0,
+};
+
+static struct resource resources_tvenc[] = {
+	{
+		.name   = "tvenc",
+		.start  = MSM_TVENC_PHYS,
+		.end    = MSM_TVENC_PHYS + MSM_TVENC_SIZE - 1,
+		.flags  = IORESOURCE_MEM,
+	}
+};
+
+static struct platform_device msm_device_tvenc = {
+	.name   = "tvenc",
+	.id     = 0,
+	.num_resources  = ARRAY_SIZE(resources_tvenc),
+	.resource       = resources_tvenc,
+};
+
+static void __init msm_register_device(struct platform_device *pdev, void *data)
+{
+	int ret;
+
+	pdev->dev.platform_data = data;
+
+	ret = platform_device_register(pdev);
+	if (ret)
+		dev_err(&pdev->dev,
+			  "%s: platform_device_register() failed = %d\n",
+			  __func__, ret);
+}
+
+void __init msm_fb_register_device(char *name, void *data)
+{
+	if (!strncmp(name, "mdp", 3))
+		msm_register_device(&msm_device_mdp, data);
+	else if (!strncmp(name, "pmdh", 4))
+		msm_register_device(&msm_device_mddi0, data);
+	else if (!strncmp(name, "emdh", 4))
+		msm_register_device(&msm_device_mddi1, data);
+	else if (!strncmp(name, "ebi2", 4))
+		msm_register_device(&msm_device_ebi2_lcd, data);
+	else if (!strncmp(name, "tvenc", 5))
+		msm_register_device(&msm_device_tvenc, data);
+	else if (!strncmp(name, "lcdc", 4))
+		msm_register_device(&msm_device_lcdc, data);
+	else
+		printk(KERN_ERR "%s: unknown device! %s\n", __func__, name);
+}
 
 static struct resource resources_tssc[] = {
 	{
@@ -531,4 +624,19 @@ struct platform_device msm_device_touchscreen = {
 	.id = 0,
 	.num_resources = ARRAY_SIZE(resources_tssc),
 	.resource = resources_tssc,
+
 };
+
+static struct platform_device msm_camera_device = {
+	.name	= "msm_camera",
+	.id	= 0,
+};
+
+void __init msm_camera_register_device(void *res, uint32_t num,
+	void *data)
+{
+	msm_camera_device.num_resources = num;
+	msm_camera_device.resource = res;
+
+	msm_register_device(&msm_camera_device, data);
+}

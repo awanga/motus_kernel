@@ -273,4 +273,9 @@ static inline int pm8901_mpp_config_dtest_output(unsigned mpp, unsigned level,
 	return pm8901_mpp_config(mpp, PM_MPP_TYPE_DTEST_OUTPUT,
 				 level, control);
 }
+
+unsigned mpp_get(struct device *dev, const char *id);
+int mpp_config_digital_out(unsigned mpp, unsigned config);
+int mpp_config_analog_sink(unsigned mpp, unsigned config);
+
 #endif

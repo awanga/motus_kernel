@@ -456,6 +456,7 @@ int msm_clock_register(struct clk_lookup *table, size_t size)
 }
 EXPORT_SYMBOL(msm_clock_register);
 
+#if 0
 static enum handoff __init __handoff_clk(struct clk *clk)
 {
 	enum handoff ret;
@@ -507,6 +508,7 @@ out:
 	}
 	return ret;
 }
+#endif
 
 /**
  * msm_clock_init() - Register and initialize a clock driver
@@ -540,28 +542,32 @@ int __init msm_clock_init(struct clock_init_data *data)
 			list_add(&clk->siblings, &parent->children);
 	}
 
+#if 0
 	/*
 	 * Detect and preserve initial clock state until clock_late_init() or
 	 * a driver explicitly changes it, whichever is first.
 	 */
 	for (n = 0; n < num_clocks; n++)
 		__handoff_clk(clock_tbl[n].clk);
+#endif
 
 	clkdev_add_table(clock_tbl, num_clocks);
 
 	if (clk_init_data->post_init)
 		clk_init_data->post_init();
 
-	clock_debug_init();
-	clock_debug_register(clock_tbl, num_clocks);
+	/*clock_debug_init();
+	clock_debug_register(clock_tbl, num_clocks);*/
 
 	return 0;
 }
 
 static int __init clock_late_init(void)
 {
-	struct handoff_clk *h, *h_temp;
 	int ret = 0;
+
+#if 0
+	struct handoff_clk *h, *h_temp;
 
 	pr_info("%s: Removing enables held for handed-off clocks\n", __func__);
 	list_for_each_entry_safe(h, h_temp, &handoff_list, list) {
@@ -569,6 +575,7 @@ static int __init clock_late_init(void)
 		list_del(&h->list);
 		kfree(h);
 	}
+#endif
 
 	if (clk_init_data->late_init)
 		ret = clk_init_data->late_init();

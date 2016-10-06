@@ -30,7 +30,7 @@ void msm_pm_collapse_exit(void);
 extern void *msm_saved_state;
 extern unsigned long msm_saved_state_phys;
 
-#ifdef CONFIG_CPU_V7
+#if defined(CONFIG_CPU_V7) || defined(CONFIG_MSM_PM)
 void msm_pm_boot_entry(void);
 void msm_pm_set_l2_flush_flag(unsigned int flag);
 int msm_pm_get_l2_flush_flag(void);

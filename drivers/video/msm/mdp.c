@@ -39,9 +39,9 @@
 #include <mach/clk.h>
 #include "mdp.h"
 #include "msm_fb.h"
-#ifdef CONFIG_FB_MSM_MDP40
+/*#ifdef CONFIG_FB_MSM_MDP40*/
 #include "mdp4.h"
-#endif
+/*#endif*/
 #include "mipi_dsi.h"
 #include <mach/board_asustek.h>
 
@@ -60,11 +60,13 @@ struct res_mmu_clk {
 	struct clk *mmu_clk;
 };
 
+#ifndef CONFIG_FB_MSM_MDP22
 static struct res_mmu_clk mdp_sec_mmu_clks[] = {
 	{"mdp_iommu_clk"}, {"rot_iommu_clk"},
 	{"vcodec_iommu0_clk"}, {"vcodec_iommu1_clk"},
 	{"smmu_iface_clk"}
 };
+#endif
 
 int mdp_rev;
 int mdp_iommu_split_domain;
@@ -1460,7 +1462,7 @@ error:
 }
 #endif
 
-#ifdef CONFIG_FB_MSM_MDP303
+#if defined(CONFIG_FB_MSM_MDP303) || defined(CONFIG_FB_MSM_MDP22)
 /* vsync_isr_handler: Called from isr context*/
 static void vsync_isr_handler(void)
 {
@@ -1685,11 +1687,13 @@ void mdp_disable_irq_nosync(uint32 term)
 
 void mdp_pipe_kickoff_simplified(uint32 term)
 {
+#ifndef CONFIG_FB_MSM_MDP22
 	if (term == MDP_OVERLAY0_TERM) {
 		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 		mdp_lut_enable();
 		outpdw(MDP_BASE + 0x0004, 0);
 	}
+#endif
 }
 
 void mdp_pipe_kickoff(uint32 term, struct msm_fb_data_type *mfd)
@@ -2052,7 +2056,10 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 	struct mdp_dma_data *dma;
 	unsigned long flag;
 	struct mdp_hist_mgmt *mgmt = NULL;
-	int i, ret;
+#ifndef CONFIG_FB_MSM_MDP22
+	int i;
+#endif
+	int ret;
 	int vsync_isr;
 	/* Ensure all the register write are complete */
 	mb();
@@ -2121,12 +2128,14 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 			/*when underflow happens HW resets all the histogram
 			  registers that were set before so restore them back
 			  to normal.*/
+#ifndef CONFIG_FB_MSM_MDP22
 			for (i = 0; i < MDP_HIST_MGMT_MAX; i++) {
 				mgmt = mdp_hist_mgmt_array[i];
 				if (!mgmt)
 					continue;
 				mgmt->mdp_is_hist_valid = FALSE;
 			}
+#endif
 		}
 
 		/* LCDC Frame Start */
@@ -2238,7 +2247,9 @@ static void mdp_drv_init(void)
 
 	/* initialize spin lock and workqueue */
 	spin_lock_init(&mdp_spin_lock);
+#ifndef CONFIG_FB_MSM_MDP22
 	spin_lock_init(&mdp_lut_push_lock);
+#endif
 	mdp_dma_wq = create_singlethread_workqueue("mdp_dma_wq");
 	mdp_vsync_wq = create_singlethread_workqueue("mdp_vsync_wq");
 	mdp_pipe_ctrl_wq = create_singlethread_workqueue("mdp_pipe_ctrl_wq");
@@ -2384,8 +2395,9 @@ static int mdp_off(struct platform_device *pdev)
 	complete_all(&vsync_cntrl.vsync_wait);
 
 	mdp_clk_ctrl(1);
+#ifndef CONFIG_FB_MSM_MDP22
 	mdp_lut_status_backup();
-
+#endif
 	ret = panel_next_early_off(pdev);
 
 	if (mfd->panel.type == MIPI_CMD_PANEL)
@@ -2413,7 +2425,7 @@ static int mdp_off(struct platform_device *pdev)
 	return ret;
 }
 
-#ifdef CONFIG_FB_MSM_MDP303
+#if defined(CONFIG_FB_MSM_MDP22) || defined(CONFIG_FB_MSM_MDP303)
 unsigned is_mdp4_hw_reset(void)
 {
 	return 0;
@@ -2431,7 +2443,9 @@ static int mdp_on(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct msm_fb_data_type *mfd;
+#ifndef CONFIG_FB_MSM_MDP22
 	int i;
+#endif
 	mfd = platform_get_drvdata(pdev);
 
 	pr_debug("%s:+\n", __func__);
@@ -2456,6 +2470,7 @@ static int mdp_on(struct platform_device *pdev)
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 		mdp_clk_ctrl(1);
 		mdp_bus_scale_restore_request();
+#ifndef CONFIG_FB_MSM_MDP22
 		mdp4_hw_init();
 		/* Initialize HistLUT to last LUT */
 		for (i = 0; i < MDP_HIST_LUT_SIZE; i++) {
@@ -2477,6 +2492,7 @@ static int mdp_on(struct platform_device *pdev)
 
 		mdp_clk_ctrl(0);
 		mdp4_overlay_reset();
+#endif
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	}
 
@@ -2871,8 +2887,10 @@ static int mdp_probe(struct platform_device *pdev)
 	}
 
 	/* initialize Post Processing data*/
+#ifndef CONFIG_FB_MSM_MDP22
 	mdp_hist_lut_init();
 	mdp_histogram_init();
+#endif
 	mdp_pp_initialized = TRUE;
 
 	/* add panel data */
@@ -3315,8 +3333,10 @@ static int mdp_remove(struct platform_device *pdev)
 		regulator_put(footswitch);
 
 	/*free post processing memory*/
+#ifndef CONFIG_FB_MSM_MDP22
 	mdp_histogram_destroy();
 	mdp_hist_lut_destroy();
+#endif
 	mdp_pp_initialized = FALSE;
 
 	iounmap(msm_mdp_base);

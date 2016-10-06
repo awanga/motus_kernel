@@ -162,6 +162,7 @@ struct genlock *genlock_create_lock(struct genlock_handle *handle)
 }
 EXPORT_SYMBOL(genlock_create_lock);
 
+#ifdef CONFIG_GENLOCK_MISCDEVICE
 /*
  * Get a file descriptor reference to a lock suitable for sharing with
  * other processes
@@ -182,6 +183,7 @@ static int genlock_get_fd(struct genlock *lock)
 	fd_install(ret, lock->file);
 	return ret;
 }
+#endif
 
 /**
  * genlock_attach_lock - Attach an existing lock to a handle

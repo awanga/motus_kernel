@@ -228,6 +228,42 @@ static unsigned long msmrtc_get_seconds(void)
 	return now;
 }
 
+#if 0 /*defined(CONFIG_PM) */
+struct suspend_state_info {
+	atomic_t state;
+	int64_t tick_at_suspend;
+};
+
+static struct suspend_state_info suspend_state = {ATOMIC_INIT(0), 0};
+
+void msmrtc_updateatsuspend(struct timespec *ts)
+{
+	int64_t now, sleep, sclk_max;
+
+	if (atomic_read(&suspend_state.state)) {
+		now = msmrtc_get_seconds();
+
+		if (now && suspend_state.tick_at_suspend) {
+			if (now < suspend_state.tick_at_suspend) {
+				sleep = sclk_max -
+					suspend_state.tick_at_suspend + now;
+			} else
+				sleep = now - suspend_state.tick_at_suspend;
+
+			timespec_add_ns(ts, sleep);
+			suspend_state.tick_at_suspend = now;
+		} else
+			pr_err("%s: Invalid ticks from SCLK now=%lld"
+				"tick_at_suspend=%lld", __func__, now,
+				suspend_state.tick_at_suspend);
+	}
+
+}
+#else
+void msmrtc_updateatsuspend(struct timespec *ts) { }
+#endif
+EXPORT_SYMBOL(msmrtc_updateatsuspend);
+
 static int
 msmrtc_suspend(struct platform_device *dev, pm_message_t state)
 {

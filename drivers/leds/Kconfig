@@ -363,6 +363,63 @@ config LEDS_MSM_PMIC
           (Power Management IC) chip on Qualcomm reference boards,
           for example SURF and FFAs.
 
+config LEDS_ADP8862
+	tristate "ADP8862 Display Backlight Driver"
+	default n
+	help
+	  ADP8862 Display Backlight Driver support
+
+config LEDS_PM7540_BTN
+	tristate "PM7540 Button LEDS"
+	default n
+	help
+	  PM7540 Button LEDS
+
+config LEDS_PM7540_SOC
+	tristate "PM7540 SOC LED"
+	default n
+	help
+	  PM7540 SOC LED
+
+config LEDS_PM7540_KPD
+	tristate "PM7540 Keypad LEDS"
+	default n
+	help
+	  PM7540 Keypad LEDS
+
+config LEDS_MOT_CAMERA
+	tristate "Motus Camera LED Driver"
+	default n
+	help
+	  Motorola BAckflip (Motus) Camera LED Driver support
+
+config LEDS_FAN5646
+	tristate "Fairchild FAN5646 LED Driver"
+	default n
+	help
+	  Fairchild FAN5646 LED Driver support
+
+config LEDS_LM3535
+    tristate "LM3535 Display Backlight Driver"
+    depends on MACH_MOT
+    default n
+    help
+        LM3535 Display Backlight Driver support
+
+config LM3535_ESD_RECOVERY
+    tristate "LM3535 Display Backlight Driver ESD Recovery Algorithm"
+    depends on LEDS_LM3535
+    default y if LEDS_LM3535
+    help
+        LM3535 Display Backlight ESD Recovery support
+
+config LM3535_BUTTON_BL
+    tristate "LM3535 Display Backlight Driver Button LED Support"
+    depends on LEDS_LM3535
+    default y if LEDS_LM3535
+    help
+        LM3535 Display Backlight Button LED Support
+
 config LEDS_PMIC8058
 	tristate "LED Support for Qualcomm PMIC8058"
 	default n

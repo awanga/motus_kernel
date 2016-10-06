@@ -114,6 +114,12 @@ enum msm_stereo_state {
 	STEREO_RAW_SNAP_STARTED,
 };
 
+enum camera_vreg_type {
+	REG_LDO,
+	REG_VS,
+	REG_GPIO,
+};
+
 struct msm_vpe_phy_info {
 	uint32_t sbuf_phy;
 	uint32_t planar0_off;
@@ -148,6 +154,15 @@ struct msm_camera_csiphy_params {
 struct msm_camera_csi2_params {
 	struct msm_camera_csid_params csid_params;
 	struct msm_camera_csiphy_params csiphy_params;
+};
+
+struct camera_vreg_t {
+	const char *reg_name;
+	enum camera_vreg_type type;
+	int min_voltage;
+	int max_voltage;
+	int op_mode;
+	uint32_t delay;
 };
 
 #ifndef CONFIG_MSM_CAMERA_V4L2

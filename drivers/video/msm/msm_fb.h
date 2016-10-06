@@ -47,7 +47,11 @@
 #define MFD_KEY  0x11161126
 #define MSM_FB_MAX_DEV_LIST 32
 /* Disable EARLYSUSPEND for mdp driver */
+#ifndef CONFIG_HAS_EARLYSUSPEND
 #define DISABLE_EARLY_SUSPEND
+#else
+#include <linux/earlysuspend.h>
+#endif
 
 struct disp_info_type_suspend {
 	boolean op_enable;

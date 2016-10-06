@@ -115,6 +115,9 @@ enum pmem_allocator_type {
 struct android_pmem_platform_data
 {
 	const char* name;
+
+	unsigned long start;
+
 	/* size of memory region */
 	unsigned long size;
 

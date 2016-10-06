@@ -23,6 +23,8 @@ DHDOFILES = aiutils.o bcmsdh_sdmmc_linux.o dhd_linux.o siutils.o bcmutils.o   \
 	bcmsdh.o dhd_cdc.o bcmsdh_linux.o dhd_common.o linux_osl.o            \
 	bcmsdh_sdmmc.o dhd_custom_gpio.o sbutils.o wldev_common.o wl_android.o
 
+DHDCFLAGS-$(CONFIG_MACH_MOT) += -DCUSTOM_OOB_GPIO_NUM=2
+
 obj-$(CONFIG_BCMDHD) += bcmdhd.o
 bcmdhd-objs += $(DHDOFILES)
 ifneq ($(CONFIG_WIRELESS_EXT),)

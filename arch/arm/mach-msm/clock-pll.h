@@ -45,7 +45,11 @@ struct pll_shared_clk {
 	void *const __iomem *base;
 };
 
+#ifndef CONFIG_ARCH_MSM7X01A
 extern struct clk_ops clk_ops_pll;
+#else
+struct clk_ops clk_ops_pll;
+#endif
 
 static inline struct pll_shared_clk *to_pll_shared_clk(struct clk *c)
 {
@@ -55,7 +59,11 @@ static inline struct pll_shared_clk *to_pll_shared_clk(struct clk *c)
 /**
  * msm_shared_pll_control_init() - Initialize shared pll control structure
  */
+#ifndef CONFIG_ARCH_MSM7X01A
 void msm_shared_pll_control_init(void);
+#else
+static void msm_shared_pll_control_init(void) {}
+#endif
 
 /**
  * struct pll_vote_clk - phase locked loop (HW voteable)

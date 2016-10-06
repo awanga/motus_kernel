@@ -17,7 +17,12 @@
 	.macro	get_irqnr_preamble, base, tmp
 	@ enable imprecise aborts
 	cpsie	a
+#if __LINUX_ARM_ARCH__ < 7
+	mov	\base, #(MSM_VIC_BASE & 0xFF000000)
+	orr	\base, \base, #(MSM_VIC_BASE & 0x00FF0000)
+#else
 	mov	\base, #MSM_VIC_BASE
+#endif
 	.endm
 
 	.macro	get_irqnr_and_base, irqnr, irqstat, base, tmp

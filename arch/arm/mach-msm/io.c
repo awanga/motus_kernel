@@ -476,3 +476,20 @@ void __init msm_map_msm9625_io(void)
 	msm_map_io(msm9625_io_desc, ARRAY_SIZE(msm9625_io_desc));
 }
 #endif /* CONFIG_ARCH_MSM9625 */
+
+#ifdef CONFIG_ARCH_MSM7X01A
+void __iomem *__msm_ioremap_caller(unsigned long phys_addr, size_t size,
+				unsigned int mtype, void *caller)
+{
+	if (mtype == MT_DEVICE) {
+		/* The peripherals in the 88000000 - D0000000 range
+		 * are only accessible by type MT_DEVICE_NONSHARED.
+		 * Adjust mtype as necessary to make this "just work."
+		 */
+		if ((phys_addr >= 0x88000000) && (phys_addr < 0xD0000000))
+			mtype = MT_DEVICE_NONSHARED;
+	}
+
+	return __arm_ioremap_caller(phys_addr, size, mtype, caller);
+}
+#endif

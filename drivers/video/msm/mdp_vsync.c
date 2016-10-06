@@ -146,7 +146,9 @@ static void mdp_set_vsync(unsigned long data)
 
 	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
 
+#ifdef MDP_HW_VSYNC
 	vsync_mfd = mfd;
+#endif
 	init_timer(&mfd->vsync_resync_timer);
 
 	if ((pdata) && (pdata->set_vsync_notifier == NULL))
@@ -166,6 +168,7 @@ static void mdp_set_vsync(unsigned long data)
 		     mfd->vsync_handler_pending);
 	}
 
+#ifdef MDP_HW_SYNC
 	spin_lock(&vsync_timer_lock);
 	if (!timer_shutdown_flag) {
 		mfd->vsync_resync_timer.function = mdp_set_vsync;
@@ -175,17 +178,20 @@ static void mdp_set_vsync(unsigned long data)
 		add_timer(&mfd->vsync_resync_timer);
 	}
 	spin_unlock(&vsync_timer_lock);
+#endif
 }
 
 static void mdp_vsync_handler(void *data)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)data;
 
+#ifdef MDP_HW_VSYNC
 	if (vsync_clk_status == 0) {
 		pr_debug("Warning: vsync clk is disabled\n");
 		mfd->vsync_handler_pending = FALSE;
 		return;
 	}
+#endif
 
 	if (mfd->use_mdp_vsync) {
 #ifdef MDP_HW_VSYNC
@@ -313,7 +319,9 @@ void mdp_config_vsync(struct platform_device *pdev,
 		goto err_handle;
 	}
 
+#ifdef MDP_HW_VSYNC
 	vsync_clk_status = 0;
+#endif
 	if (mfd->panel_info.lcd.vsync_enable) {
 		mfd->total_porch_lines = mfd->panel_info.lcd.v_back_porch +
 		    mfd->panel_info.lcd.v_front_porch +
@@ -409,7 +417,9 @@ void mdp_config_vsync(struct platform_device *pdev,
 			}
 		}
 #endif
+#ifdef MDP_HW_VSYNC
 		mdp_hw_vsync_clk_enable(mfd);
+#endif
 		mdp_set_vsync((unsigned long)mfd);
 	}
 

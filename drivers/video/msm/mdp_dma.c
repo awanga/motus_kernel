@@ -55,7 +55,9 @@ static void mdp_dma2_update_lcd(struct msm_fb_data_type *mfd)
 {
 	MDPIBUF *iBuf = &mfd->ibuf;
 	int mddi_dest = FALSE;
+#ifndef CONFIG_FB_MSM_MDP22
 	int cmd_mode = FALSE;
+#endif
 	uint32 outBpp = iBuf->bpp;
 	uint32 dma2_cfg_reg;
 	uint8 *src;

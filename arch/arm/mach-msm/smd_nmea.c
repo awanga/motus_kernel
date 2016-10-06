@@ -120,6 +120,10 @@ static ssize_t nmea_read(struct file *fp, char __user *buf,
 	mutex_lock(&nmea_rx_buf_lock);
 	bytes_read = nmea_devp->bytes_read;
 	nmea_devp->bytes_read = 0;
+#ifdef CONFIG_MACH_MOT
+        if (bytes_read > count)
+                bytes_read = count;
+#endif
 	r = copy_to_user(buf, nmea_devp->rx_buf, bytes_read);
 	mutex_unlock(&nmea_rx_buf_lock);
 

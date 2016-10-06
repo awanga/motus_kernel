@@ -55,6 +55,16 @@ obj-$(CONFIG_LEDS_QCIBL)		+= leds-qci-backlight.o
 obj-$(CONFIG_LEDS_MSM_PDM)		+= leds-msm-pdm.o
 obj-$(CONFIG_LEDS_MSM_TRICOLOR)		+= leds-msm-tricolor.o
 
+ifeq ($(CONFIG_MACH_MOT),y)
+obj-$(CONFIG_LEDS_ADP8862)		+= leds-adp8862.o
+obj-$(CONFIG_LEDS_PM7540_BTN)		+= leds-pm7540-btn.o
+obj-$(CONFIG_LEDS_PM7540_SOC)		+= leds-pm7540-soc.o
+obj-$(CONFIG_LEDS_PM7540_KPD)		+= leds-pm7540-kpd.o
+obj-$(CONFIG_LEDS_MOT_CAMERA)		+= leds-mot-camera.o
+obj-$(CONFIG_LEDS_FAN5646)		+= leds-fan5646.o
+obj-$(CONFIG_LEDS_LM3535)		+= leds-lm3535.o
+endif
+
 # LED SPI Drivers
 obj-$(CONFIG_LEDS_DAC124S085)		+= leds-dac124s085.o
 

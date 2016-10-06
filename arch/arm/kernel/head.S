@@ -397,7 +397,7 @@ __secondary_data:
  *  r13 = *virtual* address to jump to upon completion
  */
 __enable_mmu:
-#if defined(CONFIG_ALIGNMENT_TRAP) && __LINUX_ARM_ARCH__ < 6
+#if defined(CONFIG_ALIGNMENT_TRAP) && __LINUX_ARM_ARCH__ <= 6
 	orr	r0, r0, #CR_A
 #else
 	bic	r0, r0, #CR_A

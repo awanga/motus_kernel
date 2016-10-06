@@ -15,10 +15,12 @@
 #ifndef MDP4_H
 #define MDP4_H
 
+#ifdef CONFIG_FB_MSM_MDP40
 extern struct mdp_dma_data dma2_data;
 extern struct mdp_dma_data dma_s_data;
 extern struct mdp_dma_data dma_e_data;
 extern struct mdp_dma_data dma_wb_data;
+#endif
 extern unsigned int mdp_hist_frame_cnt;
 extern struct completion mdp_hist_comp;
 extern boolean mdp_is_in_isr;
@@ -557,6 +559,7 @@ void mdp4_atv_overlay(struct msm_fb_data_type *mfd);
 int mdp4_atv_on(struct platform_device *pdev);
 int mdp4_atv_off(struct platform_device *pdev);
 void mdp4_dsi_video_fxn_register(cmd_fxn_t fxn);
+#ifdef CONFIG_FB_MSM_OVERLAY
 void mdp4_dsi_video_overlay(struct msm_fb_data_type *mfd);
 void mdp4_overlay_free_base_pipe(struct msm_fb_data_type *mfd);
 void mdp4_lcdc_vsync_ctrl(struct fb_info *info, int enable);
@@ -566,6 +569,15 @@ void mdp4_primary_rdptr(void);
 void mdp4_dsi_cmd_overlay(struct msm_fb_data_type *mfd);
 int mdp4_overlay_commit(struct fb_info *info);
 void mdp4_overlay_commit_finish(struct fb_info *info);
+#else
+static inline int mdp4_overlay_commit(struct fb_info *info)
+{
+	return 0;
+}
+
+static inline void mdp4_overlay_free_base_pipe(struct msm_fb_data_type *mfd) {}
+static inline void mdp4_overlay_commit_finish(struct fb_info *info) {}
+#endif
 int mdp4_dsi_video_pipe_commit(int cndx, int wait);
 int mdp4_dsi_cmd_pipe_commit(int cndx, int wait, u32 *release_busy);
 int mdp4_lcdc_pipe_commit(int cndx, int wait);
@@ -861,8 +873,9 @@ static inline void mdp4_overlay_dsi_video_start(void)
 	/* empty */
 }
 
-static int mdp4_dsi_video_splash_done(void)
+static inline int mdp4_dsi_video_splash_done(void)
 {
+	return 0;
 }
 #endif /* CONFIG_FB_MSM_MIPI_DSI */
 
@@ -891,7 +904,7 @@ void mdp4_overlay_resource_release(void);
 uint32_t mdp4_ss_table_value(int8_t param, int8_t index);
 void mdp4_overlay_borderfill_stage_down(struct mdp4_overlay_pipe *pipe);
 
-#ifdef CONFIG_FB_MSM_MDP303
+#if defined(CONFIG_FB_MSM_MDP22) || defined(CONFIG_FB_MSM_MDP303)
 static inline int mdp4_overlay_borderfill_supported(void)
 {
 	return 0;
@@ -949,8 +962,12 @@ int mdp4_overlay_mdp_pipe_req(struct mdp4_overlay_pipe *pipe,
 			      struct msm_fb_data_type *mfd);
 int mdp4_calc_blt_mdp_bw(struct msm_fb_data_type *mfd,
 			 struct mdp4_overlay_pipe *pipe);
+#ifdef CONFIG_FB_MSM_OVERLAY
 int mdp4_overlay_mdp_perf_req(struct msm_fb_data_type *mfd);
 void mdp4_overlay_mdp_perf_upd(struct msm_fb_data_type *mfd, int flag);
+#else
+static inline void mdp4_overlay_mdp_perf_upd(struct msm_fb_data_type *mfd, int flag) {}
+#endif
 int mdp4_overlay_reset(void);
 void mdp4_vg_csc_restore(void);
 
@@ -976,7 +993,7 @@ int mdp4_wfd_pipe_commit(struct msm_fb_data_type *mfd, int cndx, int wait);
 #ifdef CONFIG_FB_MSM_OVERLAY
 int mdp4_unmap_sec_resource(struct msm_fb_data_type *mfd);
 #else
-static inline void mdp4_unmap_sec_resource(struct msm_fb_data_type *mfd);
+static inline int mdp4_unmap_sec_resource(struct msm_fb_data_type *mfd)
 {
 	/* empty */
 	return 0;

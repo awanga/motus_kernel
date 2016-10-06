@@ -12,7 +12,6 @@
 
 #include <mach/camera.h>
 #include "msm_camera_i2c.h"
-#include "msm.h"
 #include "msm_cci.h"
 
 int32_t msm_camera_i2c_rxdata(struct msm_camera_i2c_client *dev_client,

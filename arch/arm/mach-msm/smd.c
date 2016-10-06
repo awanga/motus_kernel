@@ -70,7 +70,11 @@
 #define SMSM_SNAPSHOT_CNT 64
 #define SMSM_SNAPSHOT_SIZE ((SMSM_NUM_ENTRIES + 1) * 4)
 
+#if defined(CONFIG_MSM_N_WAY_SMSM)
 uint32_t SMSM_NUM_ENTRIES = 8;
+#else
+uint32_t SMSM_NUM_ENTRIES = _SMSM_NUM_ENTRIES;
+#endif
 uint32_t SMSM_NUM_HOSTS = 3;
 
 /* Legacy SMSM interrupt notifications */

@@ -101,6 +101,13 @@ static struct mmc_command dummy52cmd = {
 	.data = NULL,
 	.mrq = &dummy52mrq,
 };
+
+#if defined(CONFIG_MACH_MOT)
+static struct workqueue_struct *power_cycle_work;
+
+static void msmsdcc_check_status(unsigned long data);
+#endif
+
 /*
  * An array holding the Tuning pattern to compare with when
  * executing a tuning cycle.
@@ -2158,6 +2165,10 @@ msmsdcc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	}
 
 	spin_lock_irqsave(&host->lock, flags);
+#if defined(CONFIG_MACH_MOT)
+        if ((mmc->caps & MMC_CAP_NEEDS_POLL) && (host->eject))
+                msmsdcc_check_status((unsigned long) host);
+#endif
 
 	if (host->eject) {
 		if (mrq->data && !(mrq->data->flags & MMC_DATA_READ)) {
@@ -4346,6 +4357,35 @@ msmsdcc_init_dma(struct msmsdcc_host *host)
 	return 0;
 }
 
+#if defined(CONFIG_MACH_MOT)
+static void
+do_power_cycle_work(struct work_struct *work)
+{
+	struct msmsdcc_host *host =
+		container_of(work, struct msmsdcc_host, power_cycle_task);
+	struct mmc_host *mmc = host->mmc;
+
+	pr_info("%s: potential esd failure\n", __func__);
+
+	/* we only power cycle to deal with esd issues on the sd card */
+	if((host->pdev_id != 1) || !host->plat->status(mmc_dev(mmc)))
+		return;
+
+	if (mmc) {
+		pr_info("%s: power cycling card\n", __func__);
+		mmc_suspend_host(mmc);
+		/* gotta give time for the unmount */
+		ssleep(3);
+		mmc_resume_host(mmc);
+	}
+}
+
+void report_sd_failure(struct mmc_host *mmc) {
+	struct msmsdcc_host *host = mmc_priv(mmc);
+	queue_work(power_cycle_work, &host->power_cycle_task);
+}
+#endif
+
 #ifdef CONFIG_MMC_MSM_SPS_SUPPORT
 /**
  * Allocate and Connect a SDCC peripheral's SPS endpoint
@@ -5718,6 +5758,15 @@ msmsdcc_probe(struct platform_device *pdev)
 
 	tasklet_init(&host->sps.tlet, msmsdcc_sps_complete_tlet,
 			(unsigned long)host);
+
+#if defined(CONFIG_MACH_MOT)
+	/* create a wq to deal with potential esd issues on the sd card */
+	INIT_WORK(&host->power_cycle_task, do_power_cycle_work);
+
+	if(pdev->id == 1)
+		power_cycle_work = create_singlethread_workqueue("msmsdcc_power_cycle");
+#endif
+
 	if (is_dma_mode(host)) {
 		/* Setup DMA */
 		ret = msmsdcc_init_dma(host);

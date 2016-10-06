@@ -434,7 +434,7 @@ armv6pmu_write_counter(int counter,
 
 static void
 armv6pmu_enable_event(struct hw_perf_event *hwc,
-		      int idx)
+		      int idx, int cpu)
 {
 	unsigned long val, mask, evt, flags;
 	struct pmu_hw_events *events = cpu_pmu->get_hw_events();

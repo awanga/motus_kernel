@@ -80,6 +80,7 @@ const char edid_blk1[0x100] = {
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xDF};
 #endif /* DEBUG_EDID */
 
+# ifdef CONFIG_FB_MSM_DTV
 #define DMA_E_BASE 0xB0000
 void mdp_vid_quant_set(void)
 {
@@ -96,6 +97,7 @@ void mdp_vid_quant_set(void)
 		MDP_OUTP(MDP_BASE + DMA_E_BASE + 0x78, 0x00FF0000);
 	}
 }
+#endif
 
 const char *video_format_2string(uint32 format)
 {
@@ -812,14 +814,15 @@ static ssize_t external_common_rda_connected(struct device *dev,
 static ssize_t external_common_rda_hdmi_mode(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	ssize_t ret;
+	ssize_t ret = 0;
 
+#ifdef CONFIG_FB_MSM_HDMI_COMMON
 	ret = snprintf(buf, PAGE_SIZE, "%d\n",
 		external_common_state->hdmi_sink);
 
 	DEV_DBG("%s: '%d'\n", __func__,
 		external_common_state->hdmi_sink);
-
+#endif
 	return ret;
 }
 
@@ -835,6 +838,7 @@ static ssize_t hdmi_common_rda_hdmi_primary(struct device *dev,
 static ssize_t hdmi_common_rda_audio_data_block(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
+#ifdef CONFIG_FB_MSM_HDMI_COMMON
 	int adb_size = external_common_state->adb_size;
 	int adb_count = 1;
 	ssize_t ret = sizeof(adb_count) + sizeof(adb_size) + adb_size;
@@ -855,13 +859,16 @@ static ssize_t hdmi_common_rda_audio_data_block(struct device *dev,
 
 	print_hex_dump(KERN_DEBUG, "AUDIO DATA BLOCK: ", DUMP_PREFIX_NONE,
 			32, 8, buf, ret, false);
-
 	return ret;
+#else
+	return 0;
+#endif
 }
 
 static ssize_t hdmi_common_rda_spkr_alloc_data_block(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
+#ifdef CONFIG_FB_MSM_HDMI_COMMON
 	int sadb_size = external_common_state->sadb_size;
 	int sadb_count = 1;
 	ssize_t ret = sizeof(sadb_count) + sizeof(sadb_size) + sadb_size;
@@ -884,6 +891,9 @@ static ssize_t hdmi_common_rda_spkr_alloc_data_block(struct device *dev,
 			32, 8, buf, ret, false);
 
 	return ret;
+#else
+	return 0;
+#endif
 }
 
 static DEVICE_ATTR(video_mode, S_IRUGO | S_IWUSR,

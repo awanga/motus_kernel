@@ -1866,8 +1866,10 @@ uint32 mddi_get_client_id(void)
 		mddi_client_id = (mddi_client_capability_pkt.Mfr_Name<<16) |
 				mddi_client_capability_pkt.Product_Code;
 
+#if !defined(CONFIG_MACH_MOT)
 		if (!mddi_client_id)
 			mddi_disable(1);
+#endif
 
 		ret = mddi_client_power(mddi_client_id);
 		if (ret < 0)

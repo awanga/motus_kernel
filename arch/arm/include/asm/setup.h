@@ -26,6 +26,15 @@ struct tag_header {
 	__u32 tag;
 };
 
+#ifdef CONFIG_MACH_MOT
+/* KEYPAD TYPE */
+#define ATAG_KEYPAD     0x54410010
+
+struct tag_keypad {
+        char name[8];
+};
+#endif
+
 /* The list must start with an ATAG_CORE node */
 #define ATAG_CORE	0x54410001
 
@@ -165,6 +174,13 @@ struct tag {
 		 * DC21285 specific
 		 */
 		struct tag_memclk	memclk;
+
+                /*
+                 * Keypad type Motorola specific
+                 */
+#ifdef CONFIG_MACH_MOT
+                struct tag_keypad keypad;
+#endif
 	} u;
 };
 

@@ -159,6 +159,11 @@ config FB_MSM_MDDI_QUICKVX
 	select FB_MSM_MDDI
 	default n
 
+config FB_MSM_MDDI_TPO_NV
+	bool
+	select FB_MSM_MDDI
+	default y if MACH_MOT
+
 config FB_MSM_MDDI_AUTO_DETECT
 	bool
 	select FB_MSM_MDDI

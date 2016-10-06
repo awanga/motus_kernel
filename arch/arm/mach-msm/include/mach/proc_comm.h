@@ -169,6 +169,26 @@ enum {
 	PCOM_CMD_FAIL_PROC_COMM_NOT_INIT,
 };
 
+/*  Enumeration for meta-proc function */
+enum {
+        PROCCOMM_MODEM_FORCEPANIC = 1,
+        PROCCOMM_MODEM_WDOGSTATUS,
+        PROCCOMM_MODEM_SET_PANIC_REASON,
+        PROCCOMM_MODEM_SET_HARD_RESET_REASON,
+        PROCCOMM_NV_READ,
+        PROCCOMM_NV_WRITE,
+        PROCCOMM_MODEM_SET_AP_FLASH_REASON,
+        PROCCOMM_MODEM_STAY_IN_AP_FLASH,
+        PROCCOMM_MODEM_SET_SYSTEM_REBOOT_REASON,
+        PROCCOMM_MODEM_SET_FTI,
+        PROCCOMM_FACTORY_BYTE,
+        PROCCOMM_GET_PANIC,
+        PROCCOMM_CLEAR_PANIC,
+        PROCCOMM_NUM_METAFUNCS
+};
+
+int meta_proc(unsigned cmd, unsigned *data);
+
 #ifdef CONFIG_MSM_PROC_COMM
 void msm_proc_comm_reset_modem_now(void);
 int msm_proc_comm(unsigned cmd, unsigned *data1, unsigned *data2);

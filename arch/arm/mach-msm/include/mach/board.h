@@ -27,6 +27,18 @@
 #include <linux/msm_ssbi.h>
 #include <mach/msm_bus.h>
 
+/* platform device data structures */
+struct msm_acpu_clock_platform_data {
+	uint32_t acpu_switch_time_us;
+	uint32_t max_speed_delta_khz;
+	uint32_t vdd_switch_time_us;
+	unsigned long power_collapse_khz;
+	unsigned long wait_for_irq_khz;
+	unsigned int max_axi_khz;
+	unsigned int max_vdd;
+	int (*acpu_set_vdd) (int mvolts);
+};
+
 struct msm_camera_io_ext {
 	uint32_t mdcphy;
 	uint32_t mdcsz;
@@ -611,8 +623,8 @@ void msm_map_mpq8092_io(void);
 void mpq8092_init_gpiomux(void);
 
 struct mmc_platform_data;
-int msm_add_sdcc(unsigned int controller,
-		struct mmc_platform_data *plat);
+int __init msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat,
+                        unsigned int stat_irq, unsigned long stat_irq_flags);
 
 void msm_pm_register_irqs(void);
 struct msm_usb_host_platform_data;

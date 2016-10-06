@@ -51,6 +51,7 @@ static int mddi_resume(struct platform_device *pdev);
 #endif
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
 static void mddi_early_suspend(struct early_suspend *h);
 static void mddi_early_resume(struct early_suspend *h);
 #endif
@@ -438,7 +439,6 @@ static int mddi_probe(struct platform_device *pdev)
 	mfd->mddi_early_suspend.resume = mddi_early_resume;
 	register_early_suspend(&mfd->mddi_early_suspend);
 #endif
-
 	return 0;
 
 mddi_probe_err:

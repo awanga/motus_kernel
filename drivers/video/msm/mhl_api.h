@@ -17,7 +17,7 @@
 #ifdef CONFIG_FB_MSM_HDMI_MHL_8334
 bool mhl_is_connected(void);
 #else
-static bool mhl_is_connected(void)
+static inline bool mhl_is_connected(void)
 {
 	return false;
 }

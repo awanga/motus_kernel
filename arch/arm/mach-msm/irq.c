@@ -109,7 +109,8 @@ static struct {
 } msm_irq_shadow_reg[2];
 static uint32_t msm_irq_idle_disable[2];
 
-#if defined(CONFIG_ARCH_MSM_SCORPION) && !defined(CONFIG_MSM_SMP)
+/*#if defined(CONFIG_ARCH_MSM_SCORPION) && !defined(CONFIG_MSM_SMP)*/
+#if defined(CONFIG_MSM_SMD_PKG3)
 #define INT_INFO_SMSM_ID SMEM_SMSM_INT_INFO
 struct smsm_interrupt_info *smsm_int_info;
 #else
@@ -125,7 +126,7 @@ static uint8_t msm_irq_to_smsm[NR_MSM_IRQS + NR_SIRC_IRQS] = {
 	[INT_MDDI_CLIENT] = 3,
 	[INT_USB_OTG] = 4,
 
-	/* [INT_PWB_I2C] = 5 -- not usable */
+	[INT_PWB_I2C] = 5,
 	[INT_SDC1_0] = 6,
 	[INT_SDC1_1] = 7,
 	[INT_SDC2_0] = 8,
@@ -263,11 +264,11 @@ static int msm_irq_set_type(unsigned int irq, unsigned int flow_type)
 	type = msm_irq_shadow_reg[index].int_type;
 	if (flow_type & (IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING)) {
 		type |= b;
-		__irq_set_handler_locked(d->irq, handle_edge_irq);
+		__irq_set_handler_locked(irq, handle_edge_irq);
 	}
 	if (flow_type & (IRQF_TRIGGER_HIGH | IRQF_TRIGGER_LOW)) {
 		type &= ~b;
-		__irq_set_handler_locked(d->irq, handle_level_irq);
+		__irq_set_handler_locked(irq, handle_level_irq);
 	}
 	writel(type, treg);
 	msm_irq_shadow_reg[index].int_type = type;
@@ -288,15 +289,18 @@ int msm_irq_idle_sleep_allowed(void)
 		 !smsm_int_info);
 }
 
-/* If arm9_wake is set: pass control to the other core.
- * If from_idle is not set: disable non-wakeup interrupts.
+/*
+ * Prepare interrupt subsystem for entering sleep -- phase 1.
+ * If modem_wake is true, return currently enabled interrupts in *irq_mask.
  */
-void msm_irq_enter_sleep1(bool arm9_wake, int from_idle)
+void msm_irq_enter_sleep1(bool modem_wake, int from_idle, uint32_t *irq_mask)
 {
-	if (!arm9_wake || !smsm_int_info)
-		return;
-	smsm_int_info->interrupt_mask = msm_irq_smsm_wake_enable[!from_idle];
-	smsm_int_info->pending_interrupts = 0;
+        if (modem_wake) {
+                *irq_mask = msm_irq_smsm_wake_enable[!from_idle];
+                if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP)
+                        printk(KERN_INFO
+                                "%s irq_mask %x\n", __func__, *irq_mask);
+        }
 }
 
 int msm_irq_enter_sleep2(bool arm9_wake, int from_idle)
@@ -351,7 +355,8 @@ int msm_irq_enter_sleep2(bool arm9_wake, int from_idle)
 	return 0;
 }
 
-void msm_irq_exit_sleep1(void)
+void msm_irq_exit_sleep1(uint32_t irq_mask, uint32_t wakeup_reason,
+	uint32_t pending_irqs)
 {
 	int i;
 
@@ -364,34 +369,21 @@ void msm_irq_exit_sleep1(void)
 		writel(msm_irq_shadow_reg[i].int_select, VIC_INT_SELECT0 + i * 4);
 	}
 	writel(3, VIC_INT_MASTEREN);
-	if (!smsm_int_info) {
-		printk(KERN_ERR "msm_irq_exit_sleep <SM NO INT_INFO>\n");
-		return;
-	}
+
 	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP)
-		printk(KERN_INFO "msm_irq_exit_sleep1 %x %x %x now %x %x\n",
-		       smsm_int_info->interrupt_mask,
-		       smsm_int_info->pending_interrupts,
-		       smsm_int_info->wakeup_reason,
-		       readl(VIC_IRQ_STATUS0), readl(VIC_IRQ_STATUS1));
+		printk(KERN_INFO "%s %x %x %x now",
+			__func__, irq_mask, pending_irqs, wakeup_reason);
 }
 
-void msm_irq_exit_sleep2(void)
+void msm_irq_exit_sleep2(uint32_t irq_mask, uint32_t wakeup_reason,
+	uint32_t pending)
 {
 	int i;
-	uint32_t pending;
 
-	if (!smsm_int_info) {
-		printk(KERN_ERR "msm_irq_exit_sleep <SM NO INT_INFO>\n");
-		return;
-	}
 	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP)
-		printk(KERN_INFO "msm_irq_exit_sleep2 %x %x %x now %x %x\n",
-		       smsm_int_info->interrupt_mask,
-		       smsm_int_info->pending_interrupts,
-		       smsm_int_info->wakeup_reason,
-		       readl(VIC_IRQ_STATUS0), readl(VIC_IRQ_STATUS1));
-	pending = smsm_int_info->pending_interrupts;
+		printk(KERN_INFO "%s %x %x %x now",
+			__func__, irq_mask, pending, wakeup_reason);
+
 	for (i = 0; pending && i < ARRAY_SIZE(msm_irq_to_smsm); i++) {
 		unsigned reg_offset = (i & 32) ? 4 : 0;
 		uint32_t reg_mask = 1UL << (i & 31);
@@ -421,29 +413,23 @@ void msm_irq_exit_sleep2(void)
 	}
 }
 
-void msm_irq_exit_sleep3(void)
+void msm_irq_exit_sleep3(uint32_t irq_mask, uint32_t wakeup_reason,
+	uint32_t pending_irqs)
 {
-	if (!smsm_int_info) {
-		printk(KERN_ERR "msm_irq_exit_sleep <SM NO INT_INFO>\n");
-		return;
-	}
 	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP)
-		printk(KERN_INFO "msm_irq_exit_sleep3 %x %x %x now %x %x "
-		       "state %x\n", smsm_int_info->interrupt_mask,
-		       smsm_int_info->pending_interrupts,
-		       smsm_int_info->wakeup_reason, readl(VIC_IRQ_STATUS0),
-		       readl(VIC_IRQ_STATUS1),
-		       smsm_get_state(SMSM_STATE_MODEM));
+		printk(KERN_INFO "%s %x %x %x state %x now",
+			__func__, irq_mask, pending_irqs, wakeup_reason,
+			smsm_get_state(SMSM_MODEM_STATE));
 }
 
 static struct irq_chip msm_irq_chip = {
-	.name      = "msm",
-	.disable   = msm_irq_mask,
-	.ack       = msm_irq_ack,
-	.mask      = msm_irq_mask,
-	.unmask    = msm_irq_unmask,
-	.set_wake  = msm_irq_set_wake,
-	.set_type  = msm_irq_set_type,
+	.name          = "msm",
+	.irq_disable   = msm_irq_mask,
+	.irq_ack       = msm_irq_ack,
+	.irq_mask      = msm_irq_mask,
+	.irq_unmask    = msm_irq_unmask,
+	.irq_set_wake  = msm_irq_set_wake,
+	.irq_set_type  = msm_irq_set_type,
 };
 
 void __init msm_init_irq(void)

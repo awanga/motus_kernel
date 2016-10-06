@@ -2644,6 +2644,8 @@ int pmem_setup(struct android_pmem_platform_data *pdata,
 
 	pmem[id].cached = pdata->cached;
 	pmem[id].buffered = pdata->buffered;
+	if (pdata->start)
+		pmem[id].base = pdata->start;
 	pmem[id].size = pdata->size;
 	pmem[id].memory_type = pdata->memory_type;
 	strlcpy(pmem[id].name, pdata->name, PMEM_NAME_SIZE);
@@ -2796,8 +2798,9 @@ int pmem_setup(struct android_pmem_platform_data *pdata,
 	}
 
 	if (!pmem[id].reusable) {
-		pmem[id].base = allocate_contiguous_memory_nomap(pmem[id].size,
-			pmem[id].memory_type, PAGE_SIZE);
+		if (!pmem[id].base)
+			pmem[id].base = allocate_contiguous_memory_nomap(pmem[id].size,
+				pmem[id].memory_type, PAGE_SIZE);
 		if (!pmem[id].base) {
 			pr_err("pmem: Cannot allocate from reserved memory for %s\n",
 				pdata->name);

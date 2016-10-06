@@ -129,6 +129,20 @@ static int rettags(struct yaffs_ext_tags *etags, int ecc_result, int retval)
 	return retval;
 }
 
+#ifdef CONFIG_YAFFS_9BYTE_TAGS
+/* Count the bits in an unsigned char or a U32 */
+int yaffs_count_bits(unsigned char x)
+{
+	int r = 0;
+	while (x) {
+		if (x & 1)
+			r++;
+		x >>= 1;
+	}
+	return r;
+}
+#endif
+
 /* Read a chunk (page) from NAND.
  *
  * Caller expects ExtendedTags data to be usable even on error; that is,

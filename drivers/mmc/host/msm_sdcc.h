@@ -378,6 +378,10 @@ struct msmsdcc_host {
 	int polling_enabled;
 #endif
 
+#if defined(CONFIG_MACH_MOT)
+	struct work_struct 	power_cycle_task;
+#endif
+
 	struct tasklet_struct 	dma_tlet;
 
 	unsigned int prog_enable;

@@ -71,6 +71,67 @@ static void i2c_gpio_setscl_val(void *data, int state)
 	gpio_set_value(pdata->scl_pin, state);
 }
 
+#ifdef CONFIG_MACH_MOT
+#include <asm/gpio.h>
+
+#define I2C_GPIO_SCL     60
+#define I2C_GPIO_SDA     61
+
+static bool i2c_gpio_active = 0;
+
+static void i2c_gpio_xfer_disable(struct i2c_adapter *adap)
+{
+	int ret = 0;
+	unsigned gpio_cfg;
+
+	if (i2c_gpio_active)
+	{
+		i2c_gpio_active = 0;
+		gpio_cfg = GPIO_CFG(I2C_GPIO_SCL, 1, GPIO_CFG_OUTPUT,\
+				 GPIO_CFG_PULL_UP, GPIO_CFG_16MA);
+		ret = gpio_tlmm_config(gpio_cfg, GPIO_CFG_ENABLE);
+		if (ret) {
+			enable_irq(INT_PWB_I2C);
+			return;
+		}
+		gpio_cfg = GPIO_CFG(I2C_GPIO_SDA, 1, GPIO_CFG_OUTPUT,\
+				 GPIO_CFG_PULL_UP, GPIO_CFG_16MA);
+		ret = gpio_tlmm_config(gpio_cfg, GPIO_CFG_ENABLE);
+
+		if (ret) {
+			enable_irq(INT_PWB_I2C);
+			return;
+		}
+
+		enable_irq(INT_PWB_I2C);
+	}
+	return;
+}
+
+static int i2c_gpio_xfer_enable(struct i2c_adapter *adap)
+{
+	int ret;
+	unsigned gpio_cfg;
+
+	i2c_gpio_active = 1;
+	disable_irq(INT_PWB_I2C);
+	gpio_cfg = GPIO_CFG(I2C_GPIO_SCL, 0, GPIO_CFG_OUTPUT,\
+			  GPIO_CFG_NO_PULL, GPIO_CFG_16MA);
+	ret = gpio_tlmm_config(gpio_cfg, GPIO_CFG_ENABLE);
+	if (ret) {
+		return ret;
+	}
+	gpio_cfg = GPIO_CFG(I2C_GPIO_SDA, 0, GPIO_CFG_OUTPUT,\
+			  GPIO_CFG_NO_PULL, GPIO_CFG_16MA);
+	ret = gpio_tlmm_config(gpio_cfg, GPIO_CFG_ENABLE);
+	if (ret) {
+		return ret;
+	}
+
+	return ret;
+}
+#endif
+
 static int i2c_gpio_getsda(void *data)
 {
 	struct i2c_gpio_platform_data *pdata = data;
@@ -182,6 +243,13 @@ static int __devinit i2c_gpio_probe(struct platform_device *pdev)
 		bit_data->timeout = HZ / 10;		/* 100 ms */
 
 	bit_data->data = pdata;
+
+#ifdef CONFIG_MACH_MOT
+       bit_data->pre_xfer = i2c_gpio_xfer_enable;
+       bit_data->post_xfer = i2c_gpio_xfer_disable;
+
+       i2c_gpio_xfer_disable(adap);
+#endif
 
 	adap->owner = THIS_MODULE;
 	snprintf(adap->name, sizeof(adap->name), "i2c-gpio%d", pdev->id);

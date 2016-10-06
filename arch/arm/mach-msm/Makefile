@@ -22,7 +22,11 @@ endif
 	endif
 endif
 
+ifndef CONFIG_ARCH_MSM_ARM11
 obj-y += acpuclock.o
+else
+obj-y += acpuclock-arm11_oc.o
+endif
 obj-$(CONFIG_ARCH_MSM_KRAIT) += acpuclock-krait.o
 obj-$(CONFIG_ARCH_MSM7X27) += acpuclock-7627.o clock-pll.o
 obj-$(CONFIG_ARCH_MSM_SCORPION) += pmu.o
@@ -36,7 +40,11 @@ ifndef CONFIG_MSM_SMP
 obj-$(CONFIG_ARCH_MSM_SCORPION) += msm_fault_handlers.o
 endif
 
+#ifdef CONFIG_ARCH_MSM_ARM11
+#obj-$(CONFIG_MSM_VIC) += irq.o
+#else
 obj-$(CONFIG_MSM_VIC) += irq-vic.o
+#endif
 
 ifdef CONFIG_ARCH_QSD8X50
 	obj-$(CONFIG_MSM_SOC_REV_NONE) += acpuclock-8x50.o
@@ -168,6 +176,7 @@ obj-$(CONFIG_PM) += pm-boot.o
 obj-$(CONFIG_MSM_PM8X60) += pm-8x60.o pm-data.o
 obj-$(CONFIG_MSM_IDLE_STATS) += pm-stats.o
 obj-$(CONFIG_MSM_PM2) += pm2.o
+obj-$(CONFIG_MSM_PM) += pm.o
 obj-$(CONFIG_MSM_NOPM) += no-pm.o
 
 obj-$(CONFIG_MSM_PCIE) += pcie.o pcie_irq.o
@@ -178,7 +187,13 @@ obj-$(CONFIG_MSM_SPM_V2) += spm-v2.o spm_devices.o
 obj-$(CONFIG_MSM_DMA_TEST) += dma_test.o
 obj-$(CONFIG_SURF_FFA_GPIO_KEYPAD) += keypad-surf-ffa.o
 
-obj-$(CONFIG_ARCH_MSM7X01A) += board-halibut.o devices-msm7x01a.o clock-pcom-lookup.o
+obj-$(CONFIG_ARCH_MSM7X01A) += devices-msm7x00.o clock-pcom-lookup.o
+obj-$(CONFIG_MACH_HALIBUT) += board-halibut.o
+obj-$(CONFIG_MACH_MOT) += board-mot-7x01a.o board-mot-akm.o board-mot-battery.o board-mot-keypad.o board-mot-misc.o board-mot-switch.o board-mot-vibrator.o
+ifdef CONFIG_MACH_MOT
+obj-$(CONFIG_PUPD) += powerup_info.o
+endif
+
 obj-$(CONFIG_MACH_TROUT) += board-trout.o board-trout-gpio.o
 obj-$(CONFIG_MACH_TROUT) += board-trout-keypad.o board-trout-panel.o
 obj-$(CONFIG_MACH_TROUT) += htc_akm_cal.o htc_wifi_nvs.o htc_acoustic.o
@@ -370,6 +385,7 @@ obj-$(CONFIG_MSM_MODEM_RESTART) += restart_7k.o
 
 obj-$(CONFIG_MSM_PROC_COMM_REGULATOR) += proccomm-regulator.o
 ifdef CONFIG_MSM_PROC_COMM_REGULATOR
+obj-$(CONFIG_ARCH_MSM7X01A) += board-msm7x01a-regulator.o
 obj-$(CONFIG_MACH_MSM7X27_SURF) += board-msm7627-regulator.o
 obj-$(CONFIG_MACH_MSM7X27_FFA) += board-msm7627-regulator.o
 obj-$(CONFIG_ARCH_MSM7X30) += board-msm7x30-regulator.o

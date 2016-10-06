@@ -97,6 +97,10 @@ else
 CFLAGS_ABI	:=$(call cc-option,-mapcs-32,-mabi=apcs-gnu) $(call cc-option,-mno-thumb-interwork,)
 endif
 
+ifeq ($(CONFIG_ALIGNMENT_TRAP),y)
+CFLAGS_ABI     +=$(call cc-option,-mno-unaligned-access,)
+endif
+
 ifeq ($(CONFIG_ARM_UNWIND),y)
 CFLAGS_ABI	+=-funwind-tables
 endif

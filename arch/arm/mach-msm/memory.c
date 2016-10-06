@@ -47,11 +47,12 @@
 void *strongly_ordered_page;
 char strongly_ordered_mem[PAGE_SIZE*2-4];
 
-void map_page_strongly_ordered(void)
+void __init map_page_strongly_ordered(void)
 {
 #if defined(CONFIG_ARCH_MSM7X27) && !defined(CONFIG_ARCH_MSM7X27A)
 	long unsigned int phys;
 	struct map_desc map;
+	extern void __init create_mapping(struct map_desc *, bool);
 
 	if (strongly_ordered_page)
 		return;
@@ -63,7 +64,7 @@ void map_page_strongly_ordered(void)
 	map.virtual = MSM_STRONGLY_ORDERED_PAGE;
 	map.length = PAGE_SIZE;
 	map.type = MT_DEVICE_STRONGLY_ORDERED;
-	create_mapping(&map);
+	create_mapping(&map, false);
 
 	printk(KERN_ALERT "Initialized strongly ordered page successfully\n");
 #endif

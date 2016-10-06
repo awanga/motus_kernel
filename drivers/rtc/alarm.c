@@ -69,6 +69,25 @@ static struct platform_device *alarm_platform_dev;
 struct alarm_queue alarms[ANDROID_ALARM_TYPE_COUNT];
 static bool suspended;
 
+/**
+ * alarmtimer_get_rtcdev - Return selected rtcdevice
+ *
+ * This function returns the rtc device to use for wakealarms.
+ * If one has not already been chosen, it checks to see if a
+ * functional rtc device is available.
+ */
+struct rtc_device *alarmtimer_get_rtcdev(void)
+{
+	unsigned long flags;
+	struct rtc_device *ret;
+
+	spin_lock_irqsave(&alarm_slock, flags);
+	ret = alarm_rtc_dev;
+	spin_unlock_irqrestore(&alarm_slock, flags);
+
+	return ret;
+}
+
 static void update_timer_locked(struct alarm_queue *base, bool head_removed)
 {
 	struct alarm *alarm;
@@ -179,6 +198,16 @@ void alarm_start_range(struct alarm *alarm, ktime_t start, ktime_t end)
 	alarm->expires = end;
 	alarm_enqueue_locked(alarm);
 	spin_unlock_irqrestore(&alarm_slock, flags);
+}
+
+/**
+ * alarm_start - Sets an alarm to fire
+ * @alarm: ptr to alarm to set
+ * @start: time to run the alarm
+ */
+void alarm_start(struct alarm *alarm, ktime_t start)
+{
+	alarm_start_range(alarm, start, start);
 }
 
 /**

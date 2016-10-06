@@ -76,8 +76,9 @@ struct async_entry {
 
 static DECLARE_WAIT_QUEUE_HEAD(async_done);
 
+#ifndef CONFIG_ARCH_MSM7X01A
 static atomic_t entry_count;
-
+#endif
 
 /*
  * MUST be called with the lock held!
@@ -110,6 +111,7 @@ static async_cookie_t  lowest_in_progress(struct list_head *running)
 	return ret;
 }
 
+#ifndef CONFIG_ARCH_MSM7X01A
 /*
  * pick the first pending entry and run it
  */
@@ -195,6 +197,23 @@ static async_cookie_t __async_schedule(async_func_ptr *ptr, void *data, struct l
 
 	return newcookie;
 }
+#else
+
+static async_cookie_t __async_schedule(async_func_ptr *ptr, void *data, struct list_head *running)
+{
+	//struct async_entry *entry;
+	unsigned long flags;
+	async_cookie_t newcookie;
+
+	spin_lock_irqsave(&async_lock, flags);
+	newcookie = next_cookie++;
+	spin_unlock_irqrestore(&async_lock, flags);
+
+	/* run synchronously */
+	ptr(data, newcookie);
+	return newcookie;
+}
+#endif /* CONFIG_ARCH_MSM7X01A */
 
 /**
  * async_schedule - schedule a function for asynchronous execution

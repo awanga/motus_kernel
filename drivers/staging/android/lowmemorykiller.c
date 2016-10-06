@@ -43,6 +43,12 @@
 #include <linux/fs.h>
 #include <linux/cpuset.h>
 
+#ifdef CONFIG_HIGHMEM
+#define _ZONE ZONE_HIGHMEM
+#else
+#define _ZONE ZONE_NORMAL
+#endif
+
 static uint32_t lowmem_debug_level = 1;
 static int lowmem_adj[6] = {
 	0,
@@ -217,17 +223,17 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
 			tune_lmk_zone_param(zonelist, classzone_idx, other_free,
 				       NULL, use_cma_pages);
 
-		if (zone_watermark_ok(preferred_zone, 0, 0, ZONE_HIGHMEM, 0)) {
+		if (zone_watermark_ok(preferred_zone, 0, 0, _ZONE, 0)) {
 			if (!use_cma_pages) {
 				*other_free -= min(
-				  preferred_zone->lowmem_reserve[ZONE_HIGHMEM]
+				  preferred_zone->lowmem_reserve[_ZONE]
 				  + zone_page_state(
 				    preferred_zone, NR_FREE_CMA_PAGES),
 				  zone_page_state(
 				    preferred_zone, NR_FREE_PAGES));
 			} else {
 				*other_free -=
-				  preferred_zone->lowmem_reserve[ZONE_HIGHMEM];
+				  preferred_zone->lowmem_reserve[_ZONE];
 			}
 		} else {
 			*other_free -= zone_page_state(preferred_zone,

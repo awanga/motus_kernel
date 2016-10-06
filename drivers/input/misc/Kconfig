@@ -177,6 +177,16 @@ config INPUT_MPU3050
 	  To compile this driver as a module, choose M here: the
 	  module will be called mpu3050.
 
+config INPUT_MSM_SFH7743
+        tristate "Proximity sensor SFH 7743 for QualCommon MSM"
+        depends on MACH_MOT
+        default n
+        help
+          Say Y here if you are using a driver for a SFH 7743
+          proximity device.
+
+          If unsure, say N.
+
 config INPUT_APANEL
 	tristate "Fujitsu Lifebook Application Panel buttons"
 	depends on X86 && I2C && LEDS_CLASS

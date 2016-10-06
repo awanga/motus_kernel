@@ -106,6 +106,7 @@ enum mic_volt {
 enum ledtype {
 	LED_LCD,
 	LED_KEYPAD,
+	LED_TYPE_OUT_OF_RANGE,
 };
 
 enum flash_led_mode {
@@ -354,6 +355,7 @@ enum mpp_i_sink_level {
 	PM_MPP__I_SINK__LEVEL_30mA,
 	PM_MPP__I_SINK__LEVEL_35mA,
 	PM_MPP__I_SINK__LEVEL_40mA,
+	PM_MPP__I_SINK__LEVEL_INVALID,
 };
 
 enum mpp_i_sink_switch {

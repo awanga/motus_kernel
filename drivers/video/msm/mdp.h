@@ -282,7 +282,9 @@ enum {
 	MDP_HIST_MGMT_MAX,
 };
 
+#ifndef CONFIG_FB_MSM_MDP22
 extern struct mdp_hist_mgmt *mdp_hist_mgmt_array[];
+#endif
 
 #define MDP_CMD_DEBUG_ACCESS_BASE   (MDP_BASE+0x10000)
 
@@ -791,15 +793,17 @@ static inline int mdp4_dsi_video_off(struct platform_device *pdev)
 {
 	return 0;
 }
-static inline int mdp4_lcdc_off(struct platform_device *pdev)
-{
-	return 0;
-}
 static inline int mdp4_dsi_cmd_on(struct platform_device *pdev)
 {
 	return 0;
 }
 static inline int mdp4_dsi_video_on(struct platform_device *pdev)
+{
+	return 0;
+}
+#endif
+#if defined(CONFIG_FB_MSM_MDP22) || defined(CONFIG_FB_MSM_MDP303)
+static inline int mdp4_lcdc_off(struct platform_device *pdev)
 {
 	return 0;
 }
@@ -858,12 +862,16 @@ void mdp_hw_vsync_clk_enable(struct msm_fb_data_type *mfd);
 void mdp_hw_vsync_clk_disable(struct msm_fb_data_type *mfd);
 void mdp_vsync_clk_disable(void);
 void mdp_vsync_clk_enable(void);
+#else
+static inline void mdp_vsync_clk_disable(void) {}
+static inline void mdp_vsync_clk_enable(void) {}
 #endif
 
 #ifdef CONFIG_DEBUG_FS
 int mdp_debugfs_init(void);
 #endif
 
+#ifndef CONFIG_FB_MSM_MDP22
 void mdp_dma_s_update(struct msm_fb_data_type *mfd);
 int mdp_histogram_start(struct mdp_histogram_start_req *req);
 int mdp_histogram_stop(struct fb_info *info, uint32_t block);
@@ -876,6 +884,18 @@ void __mdp_histogram_reset(struct mdp_hist_mgmt *mgmt);
 void mdp_footswitch_ctrl(boolean on);
 int mdp_enable_iommu_clocks(void);
 int mdp_disable_iommu_clocks(void);
+#else
+static inline int mdp_histogram_ctrl_all(boolean en)
+{
+	return 0;
+}
+static inline int mdp_histogram_block2mgmt(uint32_t block,
+	struct mdp_hist_mgmt **mgmt)
+{
+	return 0;
+}
+static inline void __mdp_histogram_kickoff(struct mdp_hist_mgmt *mgmt) {}
+#endif
 
 #ifdef CONFIG_FB_MSM_MDP303
 static inline void mdp4_dsi_cmd_dma_busy_wait(struct msm_fb_data_type *mfd)

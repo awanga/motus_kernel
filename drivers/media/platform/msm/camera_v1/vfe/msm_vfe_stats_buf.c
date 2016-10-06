@@ -28,7 +28,6 @@
 #include <linux/android_pmem.h>
 #include <media/msm_camera.h>
 #include <media/msm_isp.h>
-#include "msm.h"
 #include "msm_vfe_stats_buf.h"
 
 #ifdef CONFIG_MSM_CAMERA_DEBUG

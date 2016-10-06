@@ -37,8 +37,8 @@ static struct resource resources_uart1[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
-		.start	= MSM_UART1_PHYS,
-		.end	= MSM_UART1_PHYS + MSM_UART1_SIZE - 1,
+		.start	= MSM7XXX_UART1_PHYS,
+		.end	= MSM7XXX_UART1_PHYS + MSM7XXX_UART1_SIZE - 1,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -50,8 +50,8 @@ static struct resource resources_uart2[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
-		.start	= MSM_UART2_PHYS,
-		.end	= MSM_UART2_PHYS + MSM_UART2_SIZE - 1,
+		.start	= MSM7XXX_UART2_PHYS,
+		.end	= MSM7XXX_UART2_PHYS + MSM7XXX_UART2_SIZE - 1,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -63,8 +63,8 @@ static struct resource resources_uart3[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
-		.start	= MSM_UART3_PHYS,
-		.end	= MSM_UART3_PHYS + MSM_UART3_SIZE - 1,
+		.start	= MSM7XXX_UART3_PHYS,
+		.end	= MSM7XXX_UART3_PHYS + MSM7XXX_UART3_SIZE - 1,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -275,7 +275,7 @@ struct platform_device msm_device_hsusb_peripheral = {
 	},
 };
 
-struct platform_device msm_device_gadget_peripheral = {
+struct platform_device msm_device_hsusb = {
 	.name		= "msm_hsusb",
 	.id		= -1,
 	.num_resources	= ARRAY_SIZE(resources_gadget_peripheral),
@@ -423,8 +423,13 @@ static struct resource resources_sdc1[] = {
 	},
 	{
 		.start	= INT_SDC1_0,
-		.end	= INT_SDC1_1,
+		.end	= INT_SDC1_0,
 		.flags	= IORESOURCE_IRQ,
+		.name	= "cmd_irq",
+	},
+	{
+		.flags	= IORESOURCE_IRQ | IORESOURCE_DISABLED,
+		.name	= "status_irq"
 	},
 	{
 		.start	= 8,
@@ -441,8 +446,13 @@ static struct resource resources_sdc2[] = {
 	},
 	{
 		.start	= INT_SDC2_0,
-		.end	= INT_SDC2_1,
+		.end	= INT_SDC2_0,
 		.flags	= IORESOURCE_IRQ,
+		.name	= "cmd_irq",
+	},
+	{
+		.flags	= IORESOURCE_IRQ | IORESOURCE_DISABLED,
+		.name	= "status_irq"
 	},
 	{
 		.start	= 8,
@@ -459,8 +469,13 @@ static struct resource resources_sdc3[] = {
 	},
 	{
 		.start	= INT_SDC3_0,
-		.end	= INT_SDC3_1,
+		.end	= INT_SDC3_0,
 		.flags	= IORESOURCE_IRQ,
+		.name	= "cmd_irq",
+	},
+	{
+		.flags	= IORESOURCE_IRQ | IORESOURCE_DISABLED,
+		.name	= "status_irq"
 	},
 	{
 		.start	= 8,
@@ -477,8 +492,13 @@ static struct resource resources_sdc4[] = {
 	},
 	{
 		.start	= INT_SDC4_0,
-		.end	= INT_SDC4_1,
+		.end	= INT_SDC4_0,
 		.flags	= IORESOURCE_IRQ,
+		.name	= "cmd_irq",
+	},
+	{
+		.flags	= IORESOURCE_IRQ | IORESOURCE_DISABLED,
+		.name	= "status_irq"
 	},
 	{
 		.start	= 8,
@@ -534,15 +554,27 @@ static struct platform_device *msm_sdcc_devices[] __initdata = {
 	&msm_device_sdc4,
 };
 
-int __init msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat)
+int __init msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat,
+			unsigned int stat_irq, unsigned long stat_irq_flags)
 {
 	struct platform_device	*pdev;
+	struct resource *res;
 
 	if (controller < 1 || controller > 4)
 		return -EINVAL;
 
 	pdev = msm_sdcc_devices[controller-1];
 	pdev->dev.platform_data = plat;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_IRQ, "status_irq");
+	if (!res)
+		return -EINVAL;
+	else if (stat_irq) {
+		res->start = res->end = stat_irq;
+		res->flags &= ~IORESOURCE_DISABLED;
+		res->flags |= stat_irq_flags;
+	}
+
 	return platform_device_register(pdev);
 }
 
@@ -621,14 +653,14 @@ static struct resource msm_tvenc_resources[] = {
 };
 
 static struct platform_device msm_mdp_device = {
-	.name   = "mdp",
+	.name   = "msm_mdp",
 	.id     = 0,
 	.num_resources  = ARRAY_SIZE(msm_mdp_resources),
 	.resource       = msm_mdp_resources,
 };
 
 static struct platform_device msm_mddi_device = {
-	.name   = "mddi",
+	.name   = "msm_mddi",
 	.id     = 0,
 	.num_resources  = ARRAY_SIZE(msm_mddi_resources),
 	.resource       = msm_mddi_resources,

@@ -22,6 +22,61 @@
 #include <mach/mpp.h>
 #include <mach/proc_comm.h>
 
+#define MPP(_name, _id, _status) { .name = _name, .id = _id, .status = _status}
+
+struct mpp {
+        const char *name;
+        unsigned id;
+        int status;
+};
+
+static struct mpp mpps[] = {
+        MPP("mpp1", 0, 0),
+        MPP("mpp2", 1, 0),
+        MPP("mpp3", 2, 0),
+        MPP("mpp4", 3, 0),
+        MPP("mpp5", 4, 0),
+        MPP("mpp6", 5, 0),
+        MPP("mpp7", 6, 0),
+        MPP("mpp8", 7, 0),
+        MPP("mpp9", 8, 0),
+        MPP("mpp10", 9, 0),
+        MPP("mpp11", 10, 0),
+        MPP("mpp12", 11, 0),
+        MPP("mpp13", 12, 0),
+        MPP("mpp14", 13, 0),
+        MPP("mpp15", 14, 0),
+        MPP("mpp16", 15, 0),
+        MPP("mpp17", 16, 0),
+        MPP("mpp18", 17, 0),
+        MPP("mpp19", 18, 0),
+        MPP("mpp20", 19, 0),
+        MPP("mpp21", 20, 0),
+        MPP("mpp22", 21, 0),
+};
+
+unsigned mpp_get(struct device *dev, const char *id)
+{
+        int n;
+        for (n = 0; n < ARRAY_SIZE(mpps); n++) {
+                if (!strcmp(mpps[n].name, id))
+                        return (mpps + n)->id;
+        }
+        return 0;
+}
+EXPORT_SYMBOL(mpp_get);
+
+#if defined(CONFIG_MACH_MOT)
+int mpp_config_analog_sink(unsigned mpp, unsigned config)
+{
+        unsigned id = mpp;
+        int err;
+        err = msm_proc_comm(PCOM_PM_MPP_CONFIG_I_SINK, &id, &config);
+        return err;
+}
+EXPORT_SYMBOL(mpp_config_analog_sink);
+#endif
+
 int mpp_config_digital_out(unsigned mpp, unsigned config)
 {
 	int err;

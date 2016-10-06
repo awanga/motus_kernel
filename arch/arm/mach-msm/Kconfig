@@ -9,6 +9,8 @@ config ARCH_MSM7X01A
 	select CPU_V6
 	select GPIO_MSM_V1
 	select MSM_REMOTE_SPINLOCK_SWP
+	select MSM_PM if PM
+	select IRQ_FORCED_THREADING
 
 config ARCH_MSM7X25
 	bool "MSM7x25"
@@ -18,6 +20,7 @@ config ARCH_MSM7X25
 	select GPIO_MSM_V1
 	select MSM_REMOTE_SPINLOCK_SWP
 	select MULTI_IRQ_HANDLER
+	select MSM_PM if PM
 
 config ARCH_MSM7X27
 	bool "MSM7x27"
@@ -489,6 +492,16 @@ config MSM_ADM3
 	bool
 
 menu "MSM Board Selection"
+
+config MACH_MOT
+	depends on ARCH_MSM
+	depends on MSM_STACKED_MEMORY
+	select CPU_32v6K
+	select MSM_PROC_COMM_REGULATOR
+	default y
+	bool "Motorola Morrison"
+	help
+	  Support for Motorola Morrison MSM7201 platform
 
 config MACH_HALIBUT
 	depends on ARCH_MSM7X01A
@@ -999,13 +1012,13 @@ config MSM_HAS_DEBUG_UART_HS_V14
 
 config MSM_DEBUG_UART_PHYS
 	hex
-	default 0xA9A00000 if (ARCH_MSM7X27 || ARCH_QSD8X50) && DEBUG_MSM_UART1
+	default 0xA9A00000 if (ARCH_MSM7X01A || ARCH_MSM7X27 || ARCH_QSD8X50) && DEBUG_MSM_UART1
 	default 0xACA00000 if ARCH_MSM7X30 && DEBUG_MSM_UART1
 	default 0x94000000 if ARCH_FSM9XXX && DEBUG_MSM_UART1
-	default 0xA9B00000 if (ARCH_MSM7X27 || ARCH_QSD8X50) && DEBUG_MSM_UART2
+	default 0xA9B00000 if (ARCH_MSM7X01A || ARCH_MSM7X27 || ARCH_QSD8X50) && DEBUG_MSM_UART2
 	default 0xACB00000 if ARCH_MSM7X30 && DEBUG_MSM_UART2
 	default 0x94100000 if ARCH_FSM9XXX && DEBUG_MSM_UART2
-	default 0xA9C00000 if (ARCH_MSM7X27 || ARCH_QSD8X50) && DEBUG_MSM_UART3
+	default 0xA9C00000 if (ARCH_MSM7X01A || ARCH_MSM7X27 || ARCH_QSD8X50) && DEBUG_MSM_UART3
 	default 0xACC00000 if ARCH_MSM7X30 && DEBUG_MSM_UART3
 
 choice
@@ -1014,21 +1027,21 @@ choice
 
 	config DEBUG_MSM_UART1
 		bool "Kernel low-level debugging messages via MSM UART1"
-		depends on ARCH_MSM7X27 || ARCH_MSM7X30 || ARCH_QSD8X50 || ARCH_FSM9XXX
+		depends on ARCH_MSM7X01A || ARCH_MSM7X27 || ARCH_MSM7X30 || ARCH_QSD8X50 || ARCH_FSM9XXX
 		help
 		  Say Y here if you want the debug print routines to direct
 		  their output to the first serial port on MSM devices.
 
 	config DEBUG_MSM_UART2
 		bool "Kernel low-level debugging messages via MSM UART2"
-		depends on ARCH_MSM7X27 || ARCH_MSM7X30 || ARCH_QSD8X50 || ARCH_FSM9XXX
+		depends on ARCH_MSM7X01A || ARCH_MSM7X27 || ARCH_MSM7X30 || ARCH_QSD8X50 || ARCH_FSM9XXX
 		help
 		  Say Y here if you want the debug print routines to direct
 		  their output to the second serial port on MSM devices.
 
 	config DEBUG_MSM_UART3
 		bool "Kernel low-level debugging messages via MSM UART3"
-		depends on ARCH_MSM7X27 || ARCH_MSM7X30 || ARCH_QSD8X50
+		depends on ARCH_MSM7X01A || ARCH_MSM7X27 || ARCH_MSM7X30 || ARCH_QSD8X50
 		help
 		  Say Y here if you want the debug print routines to direct
 		  their output to the third serial port on MSM devices.
@@ -2122,6 +2135,10 @@ config MSM_NATIVE_RESTART
 	bool
 
 config MSM_MODEM_RESTART
+	bool
+
+config MSM_PM
+	depends on PM
 	bool
 
 config MSM_PM2

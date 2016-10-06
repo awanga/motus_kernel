@@ -29,10 +29,12 @@ ENTRY(v6_early_abort)
  * Faulty SWP instruction on 1136 doesn't set bit 11 in DFSR.
  */
 #ifdef CONFIG_ARM_ERRATA_326103
+#ifndef CONFIG_MSM_STACKED_MEMORY
 	ldr	ip, =0x4107b36
 	mrc	p15, 0, r3, c0, c0, 0		@ get processor id
 	teq	ip, r3, lsr #4			@ r0 ARM1136?
 	bne	do_DataAbort
+#endif
 	tst	r5, #PSR_J_BIT			@ Java?
 	tsteq	r5, #PSR_T_BIT			@ Thumb?
 	bne	do_DataAbort

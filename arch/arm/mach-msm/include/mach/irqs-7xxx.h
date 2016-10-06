@@ -72,6 +72,10 @@
 #define INT_UART2DM_IRQ      (32 + 20)
 #define INT_UART2DM_RX       (32 + 21)
 
+#if defined(CONFIG_ARCH_MSM7X01A)
+#define NR_SIRC_IRQS 0
+#endif
+
 /* 22-31 are reserved except 7x27a*/
 #if defined(CONFIG_ARCH_MSM7X27A)
 #define INT_L2CC_EM          (32 + 22)

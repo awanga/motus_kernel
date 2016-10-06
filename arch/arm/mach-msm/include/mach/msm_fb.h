@@ -20,6 +20,7 @@
 #include <linux/device.h>
 
 struct mddi_info;
+struct mdp_overlay;
 
 /* output interface format */
 #define MSM_MDP_OUT_IF_FMT_RGB565 0

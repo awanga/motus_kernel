@@ -35,6 +35,7 @@
 #include <linux/mot_battery_info.h>
 #include <linux/proc_fs.h>
 #include <linux/power_supply.h>
+#include <linux/timeriomem-rng.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
@@ -1406,6 +1407,20 @@ static struct platform_device msm_bluesleep_device = {
 #define bt_power_init(x) do {} while (0)
 #endif /* CONFIG_BT */
 
+
+/* Pseudo Random Timer Entropy */
+
+static struct timeriomem_rng_data rng_io_pdata = {
+    .address = MSM_GPT_BASE + 0x14, /* DG timer count */
+    .period = 20, /* 19.2us period */
+};
+
+static struct platform_device rng_io_device = {
+    .name = "timeriomem_rng",
+    .dev = { .platform_data = &rng_io_pdata },
+};
+
+
 /* 
     List of platform devices to use by init_machine 
  */
@@ -1442,6 +1457,7 @@ static struct platform_device *devices[] __initdata = {
 	&ramconsole_device,
 #endif
 	&mot_vibrator,          /* Vibrator */
+	&rng_io_device,
 };
 
 static struct msm_acpu_clock_platform_data mot_clock_data = {

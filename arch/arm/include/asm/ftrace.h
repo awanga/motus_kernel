@@ -8,6 +8,21 @@
 #ifndef __ASSEMBLY__
 extern void mcount(void);
 extern void __gnu_mcount_nc(void);
+
+#ifdef CONFIG_DYNAMIC_FTRACE
+struct dyn_arch_ftrace {
+	bool	gnu_mcount;
+};
+
+static inline unsigned long ftrace_call_adjust(unsigned long addr)
+{
+	/* With Thumb-2, the recorded addresses have the lsb set */
+	return addr & ~1;
+}
+
+extern void ftrace_caller_gnu(void);
+#endif
+
 #endif
 
 #endif

@@ -96,16 +96,25 @@ ENDPROC(ret_from_fork)
 
 #ifdef CONFIG_FUNCTION_TRACER
 #ifdef CONFIG_DYNAMIC_FTRACE
-ENTRY(mcount)
-	stmdb sp!, {r0-r3, lr}
-	mov r0, lr
-	sub r0, r0, #MCOUNT_INSN_SIZE
+ENTRY(__gnu_mcount_nc)
+	mov	ip, lr
+	ldm	sp!, {lr}
+	mov	pc, ip
 
-	.globl mcount_call
-mcount_call:
-	bl ftrace_stub
-	ldr lr, [fp, #-4]			@ restore lr
-	ldmia sp!, {r0-r3, pc}
+ENTRY(mcount)
+	stmdb	sp!, {lr}
+	ldr	lr, [fp, #-4]
+	ldmia	sp!, {pc}
+
+ENTRY(ftrace_caller_gnu)
+	add	sp, sp,	#4
+
+	/*
+	 * We take advantage of the fact that we build with frame pointers and
+	 * -mapcs-frame to combine the ftrace_caller implementations for the
+	 * two mcounts with just the above adjustment.  This will need to be
+	 * revisited if Thumb-2 support is added.
+	 */
 
 ENTRY(ftrace_caller)
 	stmdb sp!, {r0-r3, lr}

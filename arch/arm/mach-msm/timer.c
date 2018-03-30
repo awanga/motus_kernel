@@ -635,7 +635,7 @@ static inline s64 cyc2ns_orig(struct clocksource *cs, cycle_t cycles)
 	return ret;
 }
 
-unsigned long long sched_clock(void)
+unsigned long long notrace sched_clock(void)
 {
 	static cycle_t saved_ticks;
 	static int saved_ticks_valid;

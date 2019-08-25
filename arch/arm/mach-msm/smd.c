@@ -189,23 +189,23 @@ void smd_diag(void)
 
 	if (x != 0) 
 	{
-		oops_enter();
 		x[SZ_DIAG_ERR_MSG - 1] = 0;
-#if defined(CONFIG_MACH_MOT) && !defined(CONFIG_MOT_PANIC)
-		printk(KERN_EMERG "smem: DIAG '%s'\n", x);
-	}
-#else
+#if defined(CONFIG_MACH_MOT) && defined(CONFIG_MOT_PANIC)
 	}
 	printk(KERN_EMERG "smem: DIAG:\n");
 	x = smem_get_entry(SMEM_MOT_PANIC_DMP, &size);
 
 	if (x != 0) {
+		oops_enter();
 		x[size - 1] = 0;
 		ram_console_scribble(x, size);
+		panic("BP panic");
+		oops_exit();
 	}
-#endif /* CONFIG_MACH_MOT */
-	panic("BP panic");
-	oops_exit();
+#else
+		printk(KERN_EMERG "smem: DIAG '%s'\n", x);
+	}
+#endif /* defined(CONFIG_MACH_MOT) && defined(CONFIG_MOT_PANIC) */
 }
 
 extern int (*msm_check_for_modem_crash)(void);

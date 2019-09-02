@@ -259,14 +259,14 @@ static struct input_handler slider_handler = {
 	.id_table = slider_ids,
 };
 static	int	key08_open(struct inode *inode, struct file *filp);
-static int key08_ioctl(struct inode *node, struct file *filp, unsigned int cmd, unsigned long arg);
+static long key08_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 // static int key08_release(struct inode *inode, struct file *filp);
 static int key08_write(struct file *flip, const char __user *buf, size_t count, loff_t *f_pos );
 struct	file_operations	key08_fops =
 {
 	.owner		= THIS_MODULE,
 	.open		= key08_open,
-	.ioctl		= key08_ioctl,
+	.unlocked_ioctl	= key08_ioctl,
 //	.release	= key08_release,
 	.write		= key08_write,
 };
@@ -1883,7 +1883,7 @@ unsigned char	kernelBuffer[255];
  * @param arg Ioctl argument
  * @return 0 in success, or negative error code
  */
-static int key08_ioctl(struct inode *node, struct file *filp, unsigned int cmd, unsigned long arg)
+static long key08_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	A_TOUCH_POINT_PTR	dataPoint;
 	unsigned long	bCount;

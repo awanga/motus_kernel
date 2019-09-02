@@ -121,12 +121,12 @@ obj-$(CONFIG_MSM_DMA_TEST) += dma_test.o
 #obj-$(CONFIG_SURF_FFA_GPIO_KEYPAD) += keypad-surf-ffa.o
 
 obj-$(CONFIG_ARCH_MSM7X01A) += devices-msm7x01a.o
-obj-$(CONFIG_MACH_TROUT) += board-trout.o board-trout-gpio.o
-obj-$(CONFIG_MACH_TROUT) += board-trout-keypad.o board-trout-panel.o
-obj-$(CONFIG_MACH_TROUT) += htc_akm_cal.o htc_wifi_nvs.o htc_acoustic.o
-obj-$(CONFIG_MACH_TROUT) += board-trout-mmc.o board-trout-wifi.o
+obj-$(CONFIG_MACH_TROUT) += board-trout.o board-trout-gpio.o board-trout-mmc.o devices-msm7x00.o
+obj-$(CONFIG_MACH_HALIBUT) += board-halibut.o devices-msm7x00.o
+obj-$(CONFIG_ARCH_MSM7X30) += board-msm7x30.o devices-msm7x30.o
+obj-$(CONFIG_ARCH_QSD8X50) += board-qsd8x50.o devices-qsd8x50.o
 
-obj-$(CONFIG_MACH_MOT) += board-mot-7x01a.o board-mot-battery.o board-mot-keypad.o board-mot-switch.o board-mot-vibrator.o board-mot-akm.o board-mot-misc.o board-mot-pmic.o
+obj-$(CONFIG_MACH_MOT) += board-mot-7x01a.o board-mot-battery.o board-mot-keypad.o board-mot-switch.o board-mot-vibrator.o board-mot-akm.o board-mot-misc.o board-mot-pmic.o board-mot-usbhost.o
 ifdef CONFIG_MACH_MOT
 obj-$(CONFIG_PUPD) += powerup_info.o
 endif

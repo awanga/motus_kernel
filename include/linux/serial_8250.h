@@ -38,9 +38,9 @@ struct plat_serial8250_port {
 	unsigned int	type;		/* If UPF_FIXED_TYPE */
 	unsigned int	(*serial_in)(struct uart_port *, int);
 	void		(*serial_out)(struct uart_port *, int, int);
-#ifdef CONFIG_SERIAL_OMAP3430_HW_FLOW_CONTROL
-	unsigned char   rtscts;     /* bit0: rts, bit1: cts */
-#endif
+	void		(*set_termios)(struct uart_port *,
+			               struct ktermios *new,
+			               struct ktermios *old);
 };
 
 /*
@@ -80,5 +80,7 @@ extern int early_serial_setup(struct uart_port *port);
 extern int serial8250_find_port(struct uart_port *p);
 extern int serial8250_find_port_for_earlycon(void);
 extern int setup_early_serial8250_console(char *cmdline);
+extern void serial8250_do_set_termios(struct uart_port *port,
+		struct ktermios *termios, struct ktermios *old);
 
 #endif

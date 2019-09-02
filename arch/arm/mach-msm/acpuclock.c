@@ -978,7 +978,7 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 {
 	pr_info("acpu_clock_init()\n");
 
-	drv_state.ebi1_clk = clk_get(NULL, "ebi1_acpu_clk");
+	drv_state.ebi1_clk = clk_get(NULL, "ebi1_clk");
 	BUG_ON(IS_ERR(drv_state.ebi1_clk));
 
 	mutex_init(&drv_state.lock);

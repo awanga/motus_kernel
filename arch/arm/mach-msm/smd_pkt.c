@@ -177,8 +177,7 @@ static void loopback_probe_worker(struct work_struct *work)
 }
 
 
-int smd_pkt_ioctl(struct inode *inode,
-		    struct file *file,
+long smd_pkt_ioctl(struct file *file,
 		    unsigned int cmd,
 		    unsigned long arg)
 {
@@ -696,7 +695,7 @@ static const struct file_operations smd_pkt_fops = {
 	.read = smd_pkt_read,
 	.write = smd_pkt_write,
 	.poll = smd_pkt_poll,
-	.ioctl = smd_pkt_ioctl,
+	.unlocked_ioctl = smd_pkt_ioctl,
 };
 
 static int __init smd_pkt_init(void)

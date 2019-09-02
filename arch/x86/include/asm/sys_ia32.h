@@ -54,11 +54,6 @@ asmlinkage long sys32_pwrite(unsigned int, const char __user *, u32, u32, u32);
 asmlinkage long sys32_personality(unsigned long);
 asmlinkage long sys32_sendfile(int, int, compat_off_t __user *, s32);
 
-struct oldold_utsname;
-struct old_utsname;
-asmlinkage long sys32_olduname(struct oldold_utsname __user *);
-long sys32_uname(struct old_utsname __user *);
-
 asmlinkage long sys32_execve(const char __user *, compat_uptr_t __user *,
 			     compat_uptr_t __user *, struct pt_regs *);
 asmlinkage long sys32_clone(unsigned int, unsigned int, struct pt_regs *);
@@ -85,4 +80,7 @@ asmlinkage long sys32_rt_sigreturn(struct pt_regs *);
 
 /* ia32/ipc32.c */
 asmlinkage long sys32_ipc(u32, int, int, int, compat_uptr_t, u32);
+
+asmlinkage long sys32_fanotify_mark(int, unsigned int, u32, u32, int,
+				    const char __user *);
 #endif /* _ASM_X86_SYS_IA32_H */

@@ -270,7 +270,7 @@ static void
 msmsdcc_dma_complete_tlet(unsigned long data)
 {
 	struct msmsdcc_host *host = (struct msmsdcc_host *)data;
-	//unsigned long		flags;
+	unsigned long		flags;
 	struct mmc_request	*mrq;
 
 /* MOT_BUGFIX: Is this spinlock needed here?
@@ -278,7 +278,7 @@ msmsdcc_dma_complete_tlet(unsigned long data)
  *             locks the resources with the msm_dmov_lock
  *             Opened SR to track the issue
  */
-//	spin_lock_irqsave(&host->lock, flags);
+	spin_lock_irqsave(&host->lock, flags);
 	mrq = host->curr.mrq;
 	BUG_ON(!mrq);
 
@@ -346,7 +346,7 @@ msmsdcc_dma_complete_tlet(unsigned long data)
 			mrq->data->bytes_xfered = host->curr.data_xfered;
 			del_timer(&host->req_tout_timer);
 /* MOT_BUGFIX: Please, see the description at spin_lock_irqsave */
-//			spin_unlock_irqrestore(&host->lock, flags);
+			spin_unlock_irqrestore(&host->lock, flags);
 			mmc_request_done(host->mmc, mrq);
 			return;
 		} else
@@ -355,7 +355,7 @@ msmsdcc_dma_complete_tlet(unsigned long data)
 
 out:
 /* MOT_BUGFIX: Please, see the description at spin_lock_irqsave */
-//	spin_unlock_irqrestore(&host->lock, flags);
+	spin_unlock_irqrestore(&host->lock, flags);
 	return;
 }
 
@@ -1587,14 +1587,14 @@ do_power_cycle_work(struct work_struct *work)
 	struct msmsdcc_host *host =
 		container_of(work, struct msmsdcc_host, power_cycle_task);
 	struct mmc_host *mmc = host->mmc;
-	printk("%s: potential esd failure\n", __func__);
+	pr_info("%s: potential esd failure\n", __func__);
 
 	/* we only power cycle to deal with esd issues on the sd card */
 	if((host->pdev_id != 1) || !host->plat->status(mmc_dev(mmc)))
 		return;
 
 	if (mmc) {
-		printk("%s: power cycling card\n", __func__);
+		pr_info("%s: power cycling card\n", __func__);
 		mmc_suspend_host(mmc);
 		/* gotta give time for the unmount */
 		ssleep(3);
@@ -1999,6 +1999,7 @@ msmsdcc_probe(struct platform_device *pdev)
 
 	wake_lock_init(&host->sdio_suspend_wlock, WAKE_LOCK_SUSPEND,
 			mmc_hostname(mmc));
+
 	/*
 	 * Setup card detect change
 	 */
@@ -2011,7 +2012,7 @@ msmsdcc_probe(struct platform_device *pdev)
 	if (plat->status_irq) {
 		ret = request_threaded_irq(plat->status_irq, NULL,
 				  msmsdcc_platform_status_irq,
-				  plat->irq_flags,
+				  IRQF_SHARED | (plat->irq_flags & IRQF_TRIGGER_MASK),
 				  DRIVER_NAME " (slot)",
 				  host);
 		if (ret) {

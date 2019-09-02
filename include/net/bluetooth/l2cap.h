@@ -524,10 +524,10 @@ struct l2cap_pinfo {
 
 	__le16		sport;
 
-	struct delayed_work	retrans_work;
-	struct delayed_work	monitor_work;
-	struct delayed_work	ack_work;
 	struct work_struct	tx_work;
+	struct timer_list	retrans_timer;
+	struct timer_list	monitor_timer;
+	struct timer_list	ack_timer;
 	struct sk_buff_head	tx_queue;
 	struct sk_buff_head	srej_queue;
 	struct l2cap_seq_list srej_list;

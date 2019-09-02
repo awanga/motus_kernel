@@ -717,11 +717,16 @@ static int __init hw3d_probe(struct platform_device *pdev)
 	for (i = 0; i < HW3D_NUM_REGIONS; ++i) {
 		info->regions[i].pbase = res[i]->start;
 		info->regions[i].size = res[i]->end - res[i]->start + 1;
-		info->regions[i].vbase = ioremap(info->regions[i].pbase,
-						 info->regions[i].size);
-		if (info->regions[i].vbase == 0) {
-			pr_err("%s: Cannot remap region %d\n", __func__, i);
-			goto err_remap_region;
+
+		if (pfn_valid(__phys_to_pfn(info->regions[i].pbase)))
+			info->regions[i].vbase = phys_to_virt(info->regions[i].pbase);
+		else {
+			info->regions[i].vbase = ioremap(info->regions[i].pbase,
+							 info->regions[i].size);
+			if (info->regions[i].vbase == 0) {
+				pr_err("%s: Cannot remap region %d\n", __func__, i);
+				goto err_remap_region;
+			}
 		}
 	}
 

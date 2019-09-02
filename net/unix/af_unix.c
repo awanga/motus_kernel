@@ -282,7 +282,7 @@ static inline struct sock *unix_find_socket_byname(struct net *net,
 	return s;
 }
 
-static struct sock *unix_find_socket_byinode(struct net *net, struct inode *i)
+static struct sock *unix_find_socket_byinode(struct inode *i)
 {
 	struct sock *s;
 	struct hlist_node *node;
@@ -291,9 +291,6 @@ static struct sock *unix_find_socket_byinode(struct net *net, struct inode *i)
 	sk_for_each(s, node,
 		    &unix_socket_table[i->i_ino & (UNIX_HASH_SIZE - 1)]) {
 		struct dentry *dentry = unix_sk(s)->dentry;
-
-		if (!net_eq(sock_net(s), net))
-			continue;
 
 		if (dentry && dentry->d_inode == i) {
 			sock_hold(s);
@@ -450,11 +447,31 @@ static int unix_release_sock(struct sock *sk, int embrion)
 	return 0;
 }
 
+static void init_peercred(struct sock *sk)
+{
+	put_pid(sk->sk_peer_pid);
+	if (sk->sk_peer_cred)
+		put_cred(sk->sk_peer_cred);
+	sk->sk_peer_pid  = get_pid(task_tgid(current));
+	sk->sk_peer_cred = get_current_cred();
+}
+
+static void copy_peercred(struct sock *sk, struct sock *peersk)
+{
+	put_pid(sk->sk_peer_pid);
+	if (sk->sk_peer_cred)
+		put_cred(sk->sk_peer_cred);
+	sk->sk_peer_pid  = get_pid(peersk->sk_peer_pid);
+	sk->sk_peer_cred = get_cred(peersk->sk_peer_cred);
+}
+
 static int unix_listen(struct socket *sock, int backlog)
 {
 	int err;
 	struct sock *sk = sock->sk;
 	struct unix_sock *u = unix_sk(sk);
+	struct pid *old_pid = NULL;
+	const struct cred *old_cred = NULL;
 
 	err = -EOPNOTSUPP;
 	if (sock->type != SOCK_STREAM && sock->type != SOCK_SEQPACKET)
@@ -470,12 +487,14 @@ static int unix_listen(struct socket *sock, int backlog)
 	sk->sk_max_ack_backlog	= backlog;
 	sk->sk_state		= TCP_LISTEN;
 	/* set credentials so connect can copy them */
-	sk->sk_peercred.pid	= task_tgid_vnr(current);
-	current_euid_egid(&sk->sk_peercred.uid, &sk->sk_peercred.gid);
+	init_peercred(sk);
 	err = 0;
 
 out_unlock:
 	unix_state_unlock(sk);
+	put_pid(old_pid);
+	if (old_cred)
+		put_cred(old_cred);
 out:
 	return err;
 }
@@ -745,7 +764,7 @@ static struct sock *unix_find_other(struct net *net,
 		err = -ECONNREFUSED;
 		if (!S_ISSOCK(inode->i_mode))
 			goto put_fail;
-		u = unix_find_socket_byinode(net, inode);
+		u = unix_find_socket_byinode(inode);
 		if (!u)
 			goto put_fail;
 
@@ -1149,8 +1168,7 @@ restart:
 	unix_peer(newsk)	= sk;
 	newsk->sk_state		= TCP_ESTABLISHED;
 	newsk->sk_type		= sk->sk_type;
-	newsk->sk_peercred.pid	= task_tgid_vnr(current);
-	current_euid_egid(&newsk->sk_peercred.uid, &newsk->sk_peercred.gid);
+	init_peercred(newsk);
 	newu = unix_sk(newsk);
 	newsk->sk_wq		= &newu->peer_wq;
 	otheru = unix_sk(other);
@@ -1166,7 +1184,7 @@ restart:
 	}
 
 	/* Set credentials */
-	sk->sk_peercred = other->sk_peercred;
+	copy_peercred(sk, other);
 
 	sock->state	= SS_CONNECTED;
 	sk->sk_state	= TCP_ESTABLISHED;
@@ -1208,10 +1226,8 @@ static int unix_socketpair(struct socket *socka, struct socket *sockb)
 	sock_hold(skb);
 	unix_peer(ska) = skb;
 	unix_peer(skb) = ska;
-	ska->sk_peercred.pid = skb->sk_peercred.pid = task_tgid_vnr(current);
-	current_euid_egid(&skb->sk_peercred.uid, &skb->sk_peercred.gid);
-	ska->sk_peercred.uid = skb->sk_peercred.uid;
-	ska->sk_peercred.gid = skb->sk_peercred.gid;
+	init_peercred(ska);
+	init_peercred(skb);
 
 	if (ska->sk_type != SOCK_DGRAM) {
 		ska->sk_state = TCP_ESTABLISHED;
@@ -1926,7 +1942,7 @@ static int unix_stream_recvmsg(struct kiocb *iocb, struct socket *sock,
 				break;
 			}
 
-			kfree_skb(skb);
+			consume_skb(skb);
 
 			if (siocb->scm->fp)
 				break;

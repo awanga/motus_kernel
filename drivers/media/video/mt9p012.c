@@ -15,6 +15,7 @@
  * kind, whether express or implied.
  */
 
+#include <linux/slab.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include <media/v4l2-int-device.h>

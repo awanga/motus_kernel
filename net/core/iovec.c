@@ -35,9 +35,10 @@
  *	in any case.
  */
 
-int verify_iovec(struct msghdr *m, struct iovec *iov, struct sockaddr *address, int mode)
+long verify_iovec(struct msghdr *m, struct iovec *iov, struct sockaddr *address, int mode)
 {
-	int size, err, ct;
+	int size, ct;
+	long err;
 
 	if (m->msg_namelen) {
 		if (mode == VERIFY_READ) {
@@ -94,6 +95,7 @@ int memcpy_toiovec(struct iovec *iov, unsigned char *kdata, int len)
 
 	return 0;
 }
+EXPORT_SYMBOL(memcpy_toiovec);
 
 /*
  *	Copy kernel to iovec. Returns -EFAULT on error.
@@ -119,6 +121,7 @@ int memcpy_toiovecend(const struct iovec *iov, unsigned char *kdata,
 
 	return 0;
 }
+EXPORT_SYMBOL(memcpy_toiovecend);
 
 /*
  *	Copy iovec to kernel. Returns -EFAULT on error.
@@ -143,6 +146,7 @@ int memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len)
 
 	return 0;
 }
+EXPORT_SYMBOL(memcpy_fromiovec);
 
 /*
  *	Copy iovec from kernel. Returns -EFAULT on error.
@@ -171,6 +175,7 @@ int memcpy_fromiovecend(unsigned char *kdata, const struct iovec *iov,
 
 	return 0;
 }
+EXPORT_SYMBOL(memcpy_fromiovecend);
 
 /*
  *	And now for the all-in-one: copy and checksum from a user iovec
@@ -255,9 +260,4 @@ out_fault:
 	err = -EFAULT;
 	goto out;
 }
-
 EXPORT_SYMBOL(csum_partial_copy_fromiovecend);
-EXPORT_SYMBOL(memcpy_fromiovec);
-EXPORT_SYMBOL(memcpy_fromiovecend);
-EXPORT_SYMBOL(memcpy_toiovec);
-EXPORT_SYMBOL(memcpy_toiovecend);

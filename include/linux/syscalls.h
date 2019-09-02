@@ -35,6 +35,7 @@ struct oldold_utsname;
 struct old_utsname;
 struct pollfd;
 struct rlimit;
+struct rlimit64;
 struct rusage;
 struct sched_param;
 struct sel_arg_struct;
@@ -167,7 +168,6 @@ extern struct trace_event_functions exit_syscall_print_funcs;
 		.enter_event	= &event_enter_##sname,		\
 		.exit_event	= &event_exit_##sname,		\
 		.enter_fields	= LIST_HEAD_INIT(__syscall_meta_##sname.enter_fields), \
-		.exit_fields	= LIST_HEAD_INIT(__syscall_meta_##sname.exit_fields), \
 	};
 
 #define SYSCALL_DEFINE0(sname)					\
@@ -182,7 +182,6 @@ extern struct trace_event_functions exit_syscall_print_funcs;
 		.enter_event	= &event_enter__##sname,	\
 		.exit_event	= &event_exit__##sname,		\
 		.enter_fields	= LIST_HEAD_INIT(__syscall_meta__##sname.enter_fields), \
-		.exit_fields	= LIST_HEAD_INIT(__syscall_meta__##sname.exit_fields), \
 	};							\
 	asmlinkage long sys_##sname(void)
 #else
@@ -646,6 +645,9 @@ asmlinkage long sys_old_getrlimit(unsigned int resource, struct rlimit __user *r
 #endif
 asmlinkage long sys_setrlimit(unsigned int resource,
 				struct rlimit __user *rlim);
+asmlinkage long sys_prlimit64(pid_t pid, unsigned int resource,
+				const struct rlimit64 __user *new_rlim,
+				struct rlimit64 __user *old_rlim);
 asmlinkage long sys_getrusage(int who, struct rusage __user *ru);
 asmlinkage long sys_umask(int mask);
 
@@ -813,6 +815,10 @@ asmlinkage long sys_pselect6(int, fd_set __user *, fd_set __user *,
 asmlinkage long sys_ppoll(struct pollfd __user *, unsigned int,
 			  struct timespec __user *, const sigset_t __user *,
 			  size_t);
+asmlinkage long sys_fanotify_init(unsigned int flags, unsigned int event_f_flags);
+asmlinkage long sys_fanotify_mark(int fanotify_fd, unsigned int flags,
+				  u64 mask, int fd,
+				  const char  __user *pathname);
 
 int kernel_execve(const char *filename, const char *const argv[], const char *const envp[]);
 

@@ -374,7 +374,6 @@ static int ehci_msm_run(struct usb_hcd *hcd)
 	struct msm_usb_host_platform_data *pdata = mhcd->pdata;
 
 	hcd->uses_new_polling = 1;
-	hcd->poll_rh = 0;
 
 	/* set hostmode */
 	reg_ptr = (u32 __iomem *)(((u8 __iomem *)ehci->regs) + USBMODE);

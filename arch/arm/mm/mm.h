@@ -25,6 +25,7 @@ extern void __flush_dcache_page(struct address_space *mapping, struct page *page
 struct pglist_data;
 struct map_desc;
 
-void __init bootmem_init(void);
 void reserve_node_zero(struct pglist_data *pgdat);
 void __init create_mapping(struct map_desc *md);
+void __init bootmem_init(void);
+void arm_mm_memblock_reserve(void);

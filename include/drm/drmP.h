@@ -52,7 +52,6 @@
 #include <linux/platform_device.h>
 #include <linux/pci.h>
 #include <linux/jiffies.h>
-#include <linux/smp_lock.h>	/* For (un)lock_kernel */
 #include <linux/dma-mapping.h>
 #include <linux/mm.h>
 #include <linux/cdev.h>
@@ -306,14 +305,16 @@ struct drm_ioctl_desc {
 	unsigned int cmd;
 	int flags;
 	drm_ioctl_t *func;
+	unsigned int cmd_drv;
 };
 
 /**
  * Creates a driver or general drm_ioctl_desc array entry for the given
  * ioctl, for use by drm_ioctl().
  */
-#define DRM_IOCTL_DEF(ioctl, _func, _flags) \
-	[DRM_IOCTL_NR(ioctl)] = {.cmd = ioctl, .func = _func, .flags = _flags}
+
+#define DRM_IOCTL_DEF_DRV(ioctl, _func, _flags)			\
+	[DRM_IOCTL_NR(DRM_##ioctl)] = {.cmd = DRM_##ioctl, .func = _func, .flags = _flags, .cmd_drv = DRM_IOCTL_##ioctl}
 
 struct drm_magic_entry {
 	struct list_head head;
@@ -406,6 +407,8 @@ struct drm_pending_event {
 	struct drm_event *event;
 	struct list_head link;
 	struct drm_file *file_priv;
+	pid_t pid; /* pid of requester, no guarantee it's valid by the time
+		      we deliver the event, for tracing only */
 	void (*destroy)(struct drm_pending_event *event);
 };
 
@@ -609,7 +612,7 @@ struct drm_gem_object {
 	struct kref refcount;
 
 	/** Handle count of this object. Each handle also holds a reference */
-	struct kref handlecount;
+	atomic_t handle_count; /* number of handles on this object */
 
 	/** Related drm device */
 	struct drm_device *dev;
@@ -1073,7 +1076,6 @@ static __inline__ int drm_core_check_feature(struct drm_device *dev,
 	return ((dev->driver->driver_features & feature) ? 1 : 0);
 }
 
-
 static inline int drm_dev_to_irq(struct drm_device *dev)
 {
 	if (drm_core_check_feature(dev, DRIVER_USE_PLATFORM_DEVICE))
@@ -1082,11 +1084,22 @@ static inline int drm_dev_to_irq(struct drm_device *dev)
 		return dev->pdev->irq;
 }
 
-#ifdef __alpha__
-#define drm_get_pci_domain(dev) dev->hose->index
-#else
-#define drm_get_pci_domain(dev) 0
-#endif
+static inline int drm_get_pci_domain(struct drm_device *dev)
+{
+	if (drm_core_check_feature(dev, DRIVER_USE_PLATFORM_DEVICE))
+		return 0;
+
+#ifndef __alpha__
+	/* For historical reasons, drm_get_pci_domain() is busticated
+	 * on most archs and has to remain so for userspace interface
+	 * < 1.4, except on alpha which was right from the beginning
+	 */
+	if (dev->if_version < 0x10004)
+		return 0;
+#endif /* __alpha__ */
+
+	return pci_domain_nr(dev->pdev->bus);
+}
 
 #if __OS_HAS_AGP
 static inline int drm_core_has_AGP(struct drm_device *dev)
@@ -1149,6 +1162,7 @@ extern long drm_compat_ioctl(struct file *filp,
 extern int drm_lastclose(struct drm_device *dev);
 
 				/* Device support (drm_fops.h) */
+extern struct mutex drm_global_mutex;
 extern int drm_open(struct inode *inode, struct file *filp);
 extern int drm_stub_open(struct inode *inode, struct file *filp);
 extern int drm_fasync(int fd, struct file *filp, int on);
@@ -1286,10 +1300,6 @@ extern int drm_freebufs(struct drm_device *dev, void *data,
 extern int drm_mapbufs(struct drm_device *dev, void *data,
 		       struct drm_file *file_priv);
 extern int drm_order(unsigned long size);
-extern resource_size_t drm_get_resource_start(struct drm_device *dev,
-					      unsigned int resource);
-extern resource_size_t drm_get_resource_len(struct drm_device *dev,
-					    unsigned int resource);
 
 				/* DMA support (drm_dma.h) */
 extern int drm_dma_setup(struct drm_device *dev);
@@ -1450,10 +1460,12 @@ struct drm_gem_object *drm_gem_object_alloc(struct drm_device *dev,
 					    size_t size);
 int drm_gem_object_init(struct drm_device *dev,
 			struct drm_gem_object *obj, size_t size);
-void drm_gem_object_handle_free(struct kref *kref);
+void drm_gem_object_handle_free(struct drm_gem_object *obj);
 void drm_gem_vm_open(struct vm_area_struct *vma);
 void drm_gem_vm_close(struct vm_area_struct *vma);
 int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma);
+
+#include "drm_global.h"
 
 static inline void
 drm_gem_object_reference(struct drm_gem_object *obj)
@@ -1487,7 +1499,7 @@ static inline void
 drm_gem_object_handle_reference(struct drm_gem_object *obj)
 {
 	drm_gem_object_reference(obj);
-	kref_get(&obj->handlecount);
+	atomic_inc(&obj->handle_count);
 }
 
 static inline void
@@ -1496,12 +1508,15 @@ drm_gem_object_handle_unreference(struct drm_gem_object *obj)
 	if (obj == NULL)
 		return;
 
+	if (atomic_read(&obj->handle_count) == 0)
+		return;
 	/*
 	 * Must bump handle count first as this may be the last
 	 * ref, in which case the object would disappear before we
 	 * checked for a name
 	 */
-	kref_put(&obj->handlecount, drm_gem_object_handle_free);
+	if (atomic_dec_and_test(&obj->handle_count))
+		drm_gem_object_handle_free(obj);
 	drm_gem_object_unreference(obj);
 }
 
@@ -1511,12 +1526,17 @@ drm_gem_object_handle_unreference_unlocked(struct drm_gem_object *obj)
 	if (obj == NULL)
 		return;
 
+	if (atomic_read(&obj->handle_count) == 0)
+		return;
+
 	/*
 	* Must bump handle count first as this may be the last
 	* ref, in which case the object would disappear before we
 	* checked for a name
 	*/
-	kref_put(&obj->handlecount, drm_gem_object_handle_free);
+
+	if (atomic_dec_and_test(&obj->handle_count))
+		drm_gem_object_handle_free(obj);
 	drm_gem_object_unreference_unlocked(obj);
 }
 

@@ -23,6 +23,7 @@
 #include <linux/usb.h>
 #include <linux/leds-pmic8058.h>
 #include <linux/msm_ssbi.h>
+#include <mach/mmc.h>
 #ifdef CONFIG_MSM_BUS_SCALING
 #include <mach/msm_bus.h>
 #endif

@@ -25,8 +25,6 @@
 #include <linux/workqueue.h>
 #include <linux/i2c/sx150x.h>
 
-#define NO_UPDATE_PENDING	-1
-
 struct sx150x_device_data {
 	u8 reg_pullup;
 	u8 reg_pulldn;
@@ -49,11 +47,8 @@ struct sx150x_chip {
 	const struct sx150x_device_data *dev_cfg;
 	int                              irq_summary;
 	int                              irq_base;
-	int				 irq_update;
 	u32                              irq_sense;
-	u32				 irq_masked;
-	u32				 dev_sense;
-	u32				 dev_masked;
+	unsigned long                    irq_set_type_pending;
 	struct irq_chip                  irq_chip;
 	struct mutex                     lock;
 };
@@ -189,9 +184,9 @@ static int sx150x_get_io(struct sx150x_chip *chip, unsigned offset)
 	return err;
 }
 
-static s32 sx150x_set_oscio(struct sx150x_chip *chip, int val)
+static void sx150x_set_oscio(struct sx150x_chip *chip, int val)
 {
-	return sx150x_i2c_write(chip->client,
+	sx150x_i2c_write(chip->client,
 			chip->dev_cfg->reg_clock,
 			(val ? 0x1f : 0x10));
 }
@@ -286,13 +281,11 @@ static int sx150x_gpio_direction_output(struct gpio_chip *gc,
 
 	chip = container_of(gc, struct sx150x_chip, gpio_chip);
 
-	mutex_lock(&chip->lock);
-	if (offset_is_oscio(chip, offset))
-		status = sx150x_set_oscio(chip, val);
-	else
+	if (!offset_is_oscio(chip, offset)) {
+		mutex_lock(&chip->lock);
 		status = sx150x_io_output(chip, offset, val);
-	mutex_unlock(&chip->lock);
-
+		mutex_unlock(&chip->lock);
+	}
 	return status;
 }
 
@@ -320,8 +313,8 @@ static void sx150x_irq_mask(unsigned int irq)
 	chip = container_of(ic, struct sx150x_chip, irq_chip);
 	n = irq - chip->irq_base;
 
-	chip->irq_masked |= (1 << n);
-	chip->irq_update = n;
+	sx150x_write_cfg(chip, n, 1, chip->dev_cfg->reg_irq_mask, 1);
+	sx150x_write_cfg(chip, n, 2, chip->dev_cfg->reg_sense, 0);
 }
 
 static void sx150x_irq_unmask(unsigned int irq)
@@ -333,8 +326,9 @@ static void sx150x_irq_unmask(unsigned int irq)
 	chip = container_of(ic, struct sx150x_chip, irq_chip);
 	n = irq - chip->irq_base;
 
-	chip->irq_masked &= ~(1 << n);
-	chip->irq_update = n;
+	sx150x_write_cfg(chip, n, 1, chip->dev_cfg->reg_irq_mask, 0);
+	sx150x_write_cfg(chip, n, 2, chip->dev_cfg->reg_sense,
+			 chip->irq_sense >> (n * 2));
 }
 
 static int sx150x_irq_set_type(unsigned int irq, unsigned int flow_type)
@@ -356,7 +350,7 @@ static int sx150x_irq_set_type(unsigned int irq, unsigned int flow_type)
 
 	chip->irq_sense &= ~(3UL << (n * 2));
 	chip->irq_sense |= val << (n * 2);
-	chip->irq_update = n;
+	chip->irq_set_type_pending |= BIT(n);
 	return 0;
 }
 
@@ -410,29 +404,15 @@ static void sx150x_irq_bus_sync_unlock(unsigned int irq)
 
 	chip = container_of(ic, struct sx150x_chip, irq_chip);
 
-	if (chip->irq_update == NO_UPDATE_PENDING)
-		goto out;
-
-	n = chip->irq_update;
-	chip->irq_update = NO_UPDATE_PENDING;
-
-	/* Avoid updates if nothing changed */
-	if (chip->dev_sense == chip->irq_sense &&
-	    chip->dev_sense == chip->irq_masked)
-		goto out;
-
-	chip->dev_sense = chip->irq_sense;
-	chip->dev_masked = chip->irq_masked;
-
-	if (chip->irq_masked & (1 << n)) {
-		sx150x_write_cfg(chip, n, 1, chip->dev_cfg->reg_irq_mask, 1);
-		sx150x_write_cfg(chip, n, 2, chip->dev_cfg->reg_sense, 0);
-	} else {
-		sx150x_write_cfg(chip, n, 1, chip->dev_cfg->reg_irq_mask, 0);
-		sx150x_write_cfg(chip, n, 2, chip->dev_cfg->reg_sense,
-				 chip->irq_sense >> (n * 2));
+	while (chip->irq_set_type_pending) {
+		n = __ffs(chip->irq_set_type_pending);
+		chip->irq_set_type_pending &= ~BIT(n);
+		if (!(irq_to_desc(n + chip->irq_base)->status & IRQ_MASKED))
+			sx150x_write_cfg(chip, n, 2,
+					chip->dev_cfg->reg_sense,
+					chip->irq_sense >> (n * 2));
 	}
-out:
+
 	mutex_unlock(&chip->lock);
 }
 
@@ -457,19 +437,16 @@ static void sx150x_init_chip(struct sx150x_chip *chip,
 	if (pdata->oscio_is_gpo)
 		++chip->gpio_chip.ngpio;
 
-	chip->irq_chip.name                = client->name;
+	chip->irq_chip.name            = client->name;
 	chip->irq_chip.mask            = sx150x_irq_mask;
 	chip->irq_chip.unmask          = sx150x_irq_unmask;
 	chip->irq_chip.set_type        = sx150x_irq_set_type;
 	chip->irq_chip.bus_lock        = sx150x_irq_bus_lock;
 	chip->irq_chip.bus_sync_unlock = sx150x_irq_bus_sync_unlock;
-	chip->irq_summary                  = -1;
-	chip->irq_base                     = -1;
-	chip->irq_masked                   = ~0;
-	chip->irq_sense                    = 0;
-	chip->dev_masked                   = ~0;
-	chip->dev_sense                    = 0;
-	chip->irq_update		   = NO_UPDATE_PENDING;
+	chip->irq_summary              = -1;
+	chip->irq_base                 = -1;
+	chip->irq_sense                = 0;
+	chip->irq_set_type_pending     = 0;
 }
 
 static int sx150x_init_io(struct sx150x_chip *chip, u8 base, u16 cfg)

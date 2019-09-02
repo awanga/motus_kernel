@@ -199,7 +199,7 @@ struct __attribute__((packed)) mddi_client_caps {
 	uint8_t  Year_of_Manufacture;
 
 	uint16_t crc16;
-} mddi_client_capability_type;
+};
 
 
 struct __attribute__((packed)) mddi_video_stream {

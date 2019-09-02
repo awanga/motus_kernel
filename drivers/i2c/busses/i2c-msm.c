@@ -97,7 +97,7 @@ struct msm_i2c_dev {
 	int                          clk_state;
 	void                         *complete;
 
-	struct pm_qos_request_list *pm_qos_req;
+	struct pm_qos_request_list pm_qos_req;
 };
 
 static void
@@ -407,7 +407,7 @@ msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	}
 
 	/* Don't allow power collapse until we release remote spinlock */
-	pm_qos_update_request(dev->pm_qos_req,  dev->pdata->pm_lat);
+	pm_qos_update_request(&dev->pm_qos_req,  dev->pdata->pm_lat);
 	if (dev->pdata->rmutex) {
 		remote_mutex_lock(&dev->r_lock);
 		/* If other processor did some transactions, we may have
@@ -582,7 +582,7 @@ wait_for_int:
 	disable_irq(dev->irq);
 	if (dev->pdata->rmutex)
 		remote_mutex_unlock(&dev->r_lock);
-	pm_qos_update_request(dev->pm_qos_req,
+	pm_qos_update_request(&dev->pm_qos_req,
 			      PM_QOS_DEFAULT_VALUE);
 	mod_timer(&dev->pwr_timer, (jiffies + 3*HZ));
 	mutex_unlock(&dev->mlock);
@@ -755,12 +755,12 @@ msm_i2c_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "request_irq failed\n");
 		goto err_request_irq_failed;
 	}
-	dev->pm_qos_req = pm_qos_add_request(PM_QOS_CPU_DMA_LATENCY,
+	pm_qos_add_request(&dev->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
 					     PM_QOS_DEFAULT_VALUE);
-	if (!dev->pm_qos_req) {
+	/*if (ret) {
 		dev_err(&pdev->dev, "pm_qos_add_request failed\n");
 		goto err_pm_qos_add_request_failed;
-	}
+	}*/
 
 	disable_irq(dev->irq);
 	dev->suspended = 0;
@@ -779,8 +779,8 @@ msm_i2c_probe(struct platform_device *pdev)
 
 	return 0;
 
-err_pm_qos_add_request_failed:
-	free_irq(dev->irq, dev); 
+/*err_pm_qos_add_request_failed:
+	free_irq(dev->irq, dev);*/
 err_request_irq_failed:
 #if !defined(CONFIG_MACH_MOT)
 	i2c_del_adapter(&dev->adap_pri);
@@ -815,7 +815,7 @@ msm_i2c_remove(struct platform_device *pdev)
 	if (dev->clk_state != 0)
 		msm_i2c_pwr_mgmt(dev, 0);
 	platform_set_drvdata(pdev, NULL);
-	pm_qos_remove_request(dev->pm_qos_req);
+	pm_qos_remove_request(&dev->pm_qos_req);
 	free_irq(dev->irq, dev);
 #if !defined(CONFIG_MACH_MOT)
 	i2c_del_adapter(&dev->adap_pri);

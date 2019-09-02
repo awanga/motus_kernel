@@ -24,7 +24,7 @@
 #include <linux/input.h>
 #include <linux/io.h>
 #include <linux/delay.h>
-#include <linux/bootmem.h>
+#include <linux/memblock.h>
 #include <linux/i2c.h>
 #include <linux/android_pmem.h>
 #include <linux/mtd/nand.h>
@@ -34,6 +34,7 @@
 #include <linux/mot_battery_info.h>
 #include <linux/proc_fs.h>
 #include <linux/power_supply.h>
+#include <linux/pm_qos_params.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
@@ -48,6 +49,8 @@
 #include <mach/irqs.h>
 #include <mach/gpio.h>
 #include <mach/board.h>
+#include <mach/msm_hsusb.h>
+#include <mach/rpc_hsusb.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_serial_hs.h>
 #include <mach/irqs-7xxx.h>
@@ -86,6 +89,9 @@ char *board_model;
 char *board_model_name(void);
 static int i2c_speed_set;
 static int mfg_mode;
+
+extern struct msm_otg_platform_data msm_otg_pdata;
+extern struct msm_hsusb_gadget_platform_data msm_hsusb_peripheral_pdata;
 
 static struct vreg *vreg_slide;
 
@@ -616,201 +622,6 @@ static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
 };
 
 /* 
-    USB stuff
-    ---------------------------------------------------------------- 
- */
-#ifdef CONFIG_USB_FUNCTION
-static void hsusb_gpio_init(void)
-{
-	if (gpio_request(111, "ulpi_data_0"))
-		pr_err("failed to request gpio ulpi_data_0\n");
-	if (gpio_request(112, "ulpi_data_1"))
-		pr_err("failed to request gpio ulpi_data_1\n");
-	if (gpio_request(113, "ulpi_data_2"))
-		pr_err("failed to request gpio ulpi_data_2\n");
-	if (gpio_request(114, "ulpi_data_3"))
-		pr_err("failed to request gpio ulpi_data_3\n");
-	if (gpio_request(115, "ulpi_data_4"))
-		pr_err("failed to request gpio ulpi_data_4\n");
-	if (gpio_request(116, "ulpi_data_5"))
-		pr_err("failed to request gpio ulpi_data_5\n");
-	if (gpio_request(117, "ulpi_data_6"))
-		pr_err("failed to request gpio ulpi_data_6\n");
-	if (gpio_request(118, "ulpi_data_7"))
-		pr_err("failed to request gpio ulpi_data_7\n");
-	if (gpio_request(119, "ulpi_dir"))
-		pr_err("failed to request gpio ulpi_dir\n");
-	if (gpio_request(120, "ulpi_next"))
-		pr_err("failed to request gpio ulpi_next\n");
-	if (gpio_request(121, "ulpi_stop"))
-		pr_err("failed to request gpio ulpi_stop\n");
-}
-
-static unsigned usb_gpio_lpm_config[] = {
-	GPIO_CFG(111, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_8MA),	/* DATA 0 */
-	GPIO_CFG(112, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_8MA),	/* DATA 1 */
-	GPIO_CFG(113, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_8MA),	/* DATA 2 */
-	GPIO_CFG(114, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_8MA),	/* DATA 3 */
-	GPIO_CFG(115, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_8MA),	/* DATA 4 */
-	GPIO_CFG(116, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_8MA),	/* DATA 5 */
-	GPIO_CFG(117, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_8MA),	/* DATA 6 */
-	GPIO_CFG(118, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_8MA),	/* DATA 7 */
-	GPIO_CFG(119, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_8MA),	/* DIR */
-	GPIO_CFG(120, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_8MA),	/* NEXT */
-	GPIO_CFG(121, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),	/* STOP */
-};
-
-static unsigned usb_gpio_lpm_unconfig[] = {
-	GPIO_CFG(111, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA), /* DATA 0 */
-	GPIO_CFG(112, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA), /* DATA 1 */
-	GPIO_CFG(113, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA), /* DATA 2 */
-	GPIO_CFG(114, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA), /* DATA 3 */
-	GPIO_CFG(115, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA), /* DATA 4 */
-	GPIO_CFG(116, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA), /* DATA 5 */
-	GPIO_CFG(117, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA), /* DATA 6 */
-	GPIO_CFG(118, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA), /* DATA 7 */
-	GPIO_CFG(119, 1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA), /* DIR */
-	GPIO_CFG(120, 1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA), /* NEXT */
-	GPIO_CFG(121, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP,   GPIO_CFG_8MA), /* STOP */
-};
-
-static int usb_config_gpio(int config)
-{
-	int pin, rc;
-
-	if (config) {
-		for (pin = 0; pin < ARRAY_SIZE(usb_gpio_lpm_config); pin++) {
-			rc = gpio_tlmm_config(usb_gpio_lpm_config[pin],
-								GPIO_CFG_ENABLE);
-			if (rc) {
-				printk(KERN_ERR
-					"%s: gpio_tlmm_config(%#x)=%d\n",
-				__func__, usb_gpio_lpm_config[pin], rc);
-				return -EIO;
-			}
-		}
-	} else {
-		for (pin = 0; pin < ARRAY_SIZE(usb_gpio_lpm_unconfig); pin++) {
-			rc = gpio_tlmm_config(usb_gpio_lpm_unconfig[pin],
-								GPIO_CFG_ENABLE);
-			if (rc) {
-				printk(KERN_ERR
-					"%s: gpio_tlmm_config(%#x)=%d\n",
-				__func__, usb_gpio_lpm_config[pin], rc);
-				return -EIO;
-			}
-		}
-	}
-
-	return 0;
-}
-
-/* bit shifts for USB functions */
-static struct usb_function_map usb_functions_map[] = {
-	{"diag",		0},
-	{"adb",			1},
-	{"ethernet",		2},
-	{"modem",		3},
-	{"usb_mass_storage",	4},
-#ifdef CONFIG_EXPOSE_NMEA
-	{"nmea",		5},
-#endif
-};
-
-/* dynamic composition */
-static struct usb_composition usb_func_composition[] = {
-#ifdef CONFIG_EXPOSE_NMEA
-    {
-        .product_id     = 0x2d61,
-        .functions        = 0x3F,     /* 00111111 nmea/ums/modem/ether/adb/diag */
-        .config         = "Motorola Android Composite Device",
-
-    },
-#else
-    {
-        .product_id     = 0x2d61,
-        .functions        = 0x1F,        /* 00011111 ums/modem/ether/adb/diag */
-        .config         = "Motorola Config 38",
-
-    },
-#endif
-    {
-        .product_id     = 0x2d63,
-        .functions      = 0x1D,     /* 00011101 ums/modem/ether/diag */
-        .config         = "Motorola Config 39",
-    },
-    {
-        .product_id     = 0x2d64,
-        .functions      = 0x0F,     /* 00001111 modem/ether/adb/diag */
-        .config         = "Motorola Config 40",
-    },
-    {
-        .product_id     = 0x2d65,
-        .functions      = 0x0D,     /* 00001101 modem/ether/diag */
-        .config         = "Motorola Config 41",
-    },
-    {
-        .product_id     = 0x2d66,
-        .functions      = 0x12,     /* 00010010 ums/adb */
-        .config         = "Motorola Config 42",
-    },
-    {
-        .product_id     = 0x2d67,
-        .functions      = 0x10,     /* 00010000 ums */
-        .config         = "Motorola Config 14",
-    },
-    {
-        .product_id     = 0x2d68,
-        .functions      = 0x07,     /* 00000111 ether/adb/diag */
-        .config         = "Motorola Config 48",
-    },
-    {
-        .product_id     = 0x2d69,
-        .functions      = 0x05,     /* 00000101 ether/diag */
-        .config         = "Motorola Config 47",
-    },
-};
-#endif /* CONFIG_USB_FUNCTION */
-
-static struct msm_hsusb_platform_data msm_hsusb_pdata = {
-#ifdef CONFIG_USB_FUNCTION
-	.version	= 0x0100,
-	.phy_info	= USB_PHY_EXTERNAL,
-	.vendor_id	= 0x22b8,
-	.product_id	= 0x2d61,
-	.product_name	= "Morrison",
-	.serial_number	= "1234567890ABCDEF",
-	.manufacturer_name	= "Motorola ",
-	.compositions		= usb_func_composition,
-	.num_compositions	= ARRAY_SIZE(usb_func_composition),
-	.function_map		= usb_functions_map,
-	.num_functions		= ARRAY_SIZE(usb_functions_map),
-	.ulpi_data_1_pin	= 112,
-	.ulpi_data_3_pin	= 114,
-	.config_gpio		= usb_config_gpio,
-#endif
-};
-
-#ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
-static struct usb_mass_storage_platform_data mass_storage_pdata = {
-	.nluns = 1,
-	.buf_size = 16384,
-	.vendor = "Motorola ",
-	.product = "Morrison",
-	.release = 0x0010,
-};
-
-static struct platform_device usb_mass_storage_device = {
-	.name = "usb_mass_storage",
-	.id = -1,
-	.dev = {
-		.platform_data = &mass_storage_pdata,
-	},
-};
-#endif
-
-
-/* 
     SDCC stuff 
     ---------------------------------------------------------------- 
  */
@@ -1060,6 +871,7 @@ static struct mmc_platform_data mot_7x01_sdcc1_data = {
 	.status         = mot_7x01_sdcc_slot1_status,
 #endif
 	.status_irq	= MSM_GPIO_TO_INT(SD_DETECT_N_SIGNAL),
+	.irq_flags	= IRQF_TRIGGER_RISING|IRQF_TRIGGER_FALLING,
 };
 
 static struct mmc_platform_data mot_7x01_sdcc2_data = {
@@ -1079,7 +891,7 @@ static struct mmc_platform_data mot_7x01_sdcc2_data = {
 static void __init mot_7x01_init_mmc(void)
 {
 	/* Turn on pulldown when VREG is disabled */
-	unsigned on_off = 1;  
+	unsigned on_off = 1;
 	unsigned id = 15; /*vreg_mmc->id*/;
 	msm_add_sdcc(1, &mot_7x01_sdcc1_data);
 
@@ -1443,21 +1255,28 @@ static struct platform_device msm_bluesleep_device = {
 #define bt_power_init(x) do {} while (0)
 #endif /* CONFIG_BT */
 
-/* 
-    List of platform devices to use by init_machine 
+/*
+    List of platform devices to use by init_machine
  */
 static struct platform_device *devices[] __initdata = {
 	&msm_device_uart3,
 	&msm_device_uart_dm1,
 	&msm_device_smd,
+	&msm_device_dmov,
 	&msm_device_nand,
 	&android_pmem_device,
 	&android_pmem_adsp_device,
 	&hw3d_device,
 	&msm_device_i2c_gpio,
 	&msm_device_i2c,
-#if defined(CONFIG_USB_FUNCTION)
+#ifdef CONFIG_USB_FUNCTION
 	&msm_device_hsusb_peripheral,
+#endif
+#ifdef CONFIG_USB_MSM_OTG_72K
+	&msm_device_otg,
+#ifdef CONFIG_USB_GADGET
+	&msm_device_gadget_peripheral,
+#endif
 #endif
 #ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
 	&usb_mass_storage_device,
@@ -1539,9 +1358,11 @@ void morrison_setup(void)
     }
 
     if(!model_set) {
+#ifdef CONFIG_USB_FUNCTION
         msm_hsusb_pdata.product_name = "MB200";
 #ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
         mass_storage_pdata.product = "MB200";
+#endif
 #endif
     }
 
@@ -1551,14 +1372,14 @@ void morrison_setup(void)
     msm_camera_sensor[0].flash_type = MSM_CAMERA_FLASH_NONE;    /* no flash */
 
 	/* don't even bother with those devices on bare board */
-	if (!vendor1->bare_board)	
+	if (!vendor1->bare_board)
 	{
 	    gpio_request(QWERTY_RST_N_SIGNAL, "qwerty_rst_n");
 	    gpio_direction_output(QWERTY_RST_N_SIGNAL, 1);          /* enable keypad */
 
 	    gpio_request(TOUCH_RST_N_SIGNAL, "touch_rst_n");
 	    gpio_direction_output(TOUCH_RST_N_SIGNAL, 1);        	/* enable touchpad */
-	    
+
 	    size = ARRAY_SIZE(i2c_morrison_devices);
 	    if (mot_hw_rev < 0x2D ) size--;                         /* chop off camera on anything older than P2B */
 	    if (mot_hw_rev < 0x20 ) size -= 2;                      /* chop off e-compass & couloumb counter on anything older than P2 */
@@ -1580,7 +1401,7 @@ void motus_setup(void)
 	else if (mot_hw_rev < 0x30) 	/* P2 keyboard layout */
 	{
 		mot_adp5588_device.name = "adp5588_motus_P2";
-	}	
+	}
 	else if(mot_hw_rev < 0x0400) /* P3 keypad layout */
 	{
 		mot_adp5588_device.name = "adp5588_motus_P3";
@@ -1590,9 +1411,11 @@ void motus_setup(void)
     }
 
     if(!model_set) {
+#ifdef CONFIG_USB_FUNCTION
         msm_hsusb_pdata.product_name = "MB300";
 #ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
         mass_storage_pdata.product = "MB300";
+#endif
 #endif
     }
 
@@ -1604,14 +1427,14 @@ void motus_setup(void)
     gpio_direction_output(COMPASS_RST_N_SIGNAL, 1);            	/* enable ecompass */
 
 	/* don't even bother with those devices on bare board */
-	if (!vendor1->bare_board)	
+	if (!vendor1->bare_board)
 	{
 	    gpio_request(QWERTY_RST_N_SIGNAL, "qwerty_rst_n");
 	    gpio_direction_output(QWERTY_RST_N_SIGNAL, 1);          /* enable keypad */
 
 	    gpio_request(TOUCH_RST_N_SIGNAL, "touch_rst_n");
 	    gpio_direction_output(TOUCH_RST_N_SIGNAL, 1);           /* enable touchpad */
-	    
+
 	    i2c_register_board_info(0, i2c_motus_devices, ARRAY_SIZE(i2c_motus_devices));
 	}
 }
@@ -1631,27 +1454,29 @@ void zeppelin_setup(void)
     gpio_tlmm_config(GPIO_CFG(42, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
     gpio_tlmm_config(GPIO_CFG(94, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
     gpio_tlmm_config(GPIO_CFG(83, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);		/* Minipad interupt */
-	
+
     mot_adp5588_device.name = "adp5588_zeppelin";
 
     if(!model_set) {
-        msm_hsusb_pdata.product_name = "Zeppelin";    
+#ifdef CONFIG_USB_FUNCTION
+        msm_hsusb_pdata.product_name = "Zeppelin";
 #ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
         mass_storage_pdata.product = "Zeppelin";
+#endif
 #endif
     }
 
     mot_minipad_device.name = "minipad_zeppelin";
-    
+
     gpio_request(COMPASS_RST_N_SIGNAL, "ecompass_rst_n");
     gpio_direction_output(COMPASS_RST_N_SIGNAL, 1);            	/* enable ecompass */
 
     gpio_request(100, "fairchild_led_blinker");
     gpio_tlmm_config(GPIO_CFG(100, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
     gpio_direction_output(100, 0);
-    
+
 	/* don't even bother with those devices on bare board */
-	if (!vendor1->bare_board)	
+	if (!vendor1->bare_board)
 	{
 	    gpio_request(TOUCH_RST_N_SIGNAL, "touch_rst_n");
 	    gpio_direction_output(TOUCH_RST_N_SIGNAL, 1);           /*  enable touchpad */
@@ -1660,23 +1485,22 @@ void zeppelin_setup(void)
 	}
 }
 
-/* 
- * Called by map_io 
+/*
  * If buffers have no pre-polulated physical address, allocate them dynamically.
  */
 
-void __init msm_mot_allocate_memory_regions(void)
+void __init mot_reserve(void)
 {
-	void *addr;
+	phys_addr_t addr;
 	unsigned long size;
 	size = MSM_PMEM_MDP_SIZE;
 	if(!android_pmem_pdata.start)
 	{
-		addr = alloc_bootmem(size);
-		android_pmem_pdata.start = __pa(addr);
+		addr = memblock_alloc(size, PAGE_SIZE);
+		android_pmem_pdata.start = addr;
 		android_pmem_pdata.size = size;
-		printk(KERN_INFO "Allocating %lu bytes at %p (%lx physical)"
-			" for pmem\n", size, addr, __pa(addr));
+		printk(KERN_INFO "Allocating %lu bytes at %lx"
+			" for pmem\n", size, (long unsigned int)addr);
 	}
 
 	size = MSM_PMEM_ADSP_SIZE;
@@ -1689,42 +1513,42 @@ void __init msm_mot_allocate_memory_regions(void)
 	}
 	if(!android_pmem_adsp_pdata.start)
 	{
-		addr = alloc_bootmem(size);
-		android_pmem_adsp_pdata.start = __pa(addr);
+		addr = memblock_alloc(size, PAGE_SIZE);
+		android_pmem_adsp_pdata.start = addr;
 		android_pmem_adsp_pdata.size = size;
-		printk(KERN_INFO "Allocating %lu bytes at %p (%lx physical)"
-			" for adsp pmem\n", size, addr, __pa(addr));
+		printk(KERN_INFO "Allocating %lu bytes at %lx"
+			" for adsp pmem\n", size, (long unsigned int)addr);
 	}
 
 	size = MSM_PMEM_GPU1_SIZE;
 	if(!resources_hw3d[2].start)
 	{
-		addr = alloc_bootmem_aligned(size, 0x100000);
-		resources_hw3d[2].start = __pa(addr);
+		addr = memblock_alloc(size, 0x100000);
+		resources_hw3d[2].start = addr;
 		resources_hw3d[2].end = resources_hw3d[2].start + size -1;
-		printk(KERN_INFO "Allocating %lu bytes at %p (%lx physical)"
-			" for gpu1 pmem\n", size, addr, __pa(addr));
+		printk(KERN_INFO "Allocating %lu bytes at %lx"
+			" for gpu1 pmem\n", size, (long unsigned int)addr);
 	}
 
 	if(!msm_fb_resources[0].start)
 	{
 		size = MSM_FB_SIZE;
-		addr = alloc_bootmem(size);
-		msm_fb_resources[0].start = __pa(addr);
+		addr = memblock_alloc(size, PAGE_SIZE);
+		msm_fb_resources[0].start = addr;
 		msm_fb_resources[0].end = msm_fb_resources[0].start + size - 1;
-		printk(KERN_INFO "Allocating %lu bytes at %p (%lx physical)"
-			" for fb\n", size, addr, __pa(addr));
+		printk(KERN_INFO "Allocating %lu bytes at %lx"
+			" for fb\n", size, (long unsigned int)addr);
 	}
 
 #ifdef CONFIG_ANDROID_RAM_CONSOLE
     if (!ramconsole_resource[0].start)
     {
         size = MSM_RAMCONSOLE_SIZE;
-        addr = alloc_bootmem(size);
-        ramconsole_resource[0].start = __pa(addr);
+        addr = memblock_alloc(size, PAGE_SIZE);
+        ramconsole_resource[0].start = addr;
         ramconsole_resource[0].end = ramconsole_resource[0].start + size - 1;
-        printk(KERN_INFO "allocating %lu bytes at %p (%lx physical) for ram console\n",
-            size, addr, __pa(addr));
+        printk(KERN_INFO "allocating %lu bytes at %lx for ram console\n",
+            size, (long unsigned int)addr);
     }
 #endif
 
@@ -1753,7 +1577,7 @@ int hwrev_readproc(char* page, char** start, off_t offset, int count, int *eof, 
 
 static void __init mot_init(void)
 {
-    static char   keypad_driver_name[64]; 
+    static char   keypad_driver_name[64];
 	mot_battery_info batt_info;
 
 	if (socinfo_init() < 0)
@@ -1769,13 +1593,27 @@ static void __init mot_init(void)
                   &msm_device_uart3.dev, 1);
 #endif
 
+/*#ifdef CONFIG_USB_GADGET
+	msm_device_gadget_peripheral.dev.platform_data = &msm_gadget_pdata;
+#endif*/
+#ifdef CONFIG_USB_MSM_OTG_72K
+	msm_device_otg.dev.platform_data = &msm_otg_pdata;
+#endif
+
+#ifdef CONFIG_USB_EHCI_MSM
+	msm7x01a_init_host();
+#endif
 	vendor1 = smem_alloc(SMEM_ID_VENDOR1, sizeof(smem_mot_vendor1_type));
 	secure_hw = vendor1 ? vendor1->security_on : 1;
 
+#ifdef CONFIG_USB_FUNCTION
 	msm_hsusb_pdata.soc_version = socinfo_get_version();
+	msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_pdata;
+#elif CONFIG_USB_GADGET
+	msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_peripheral_pdata;
+#endif
 	msm_acpu_clock_init(&mot_clock_data);
 	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
-	msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_pdata;
 
 	/* Get vreg & reset for the display */
 	vreg_slide = vreg_get(0, "gp2");
@@ -1795,7 +1633,7 @@ static void __init mot_init(void)
     if (machine_is_morrison())
     {
         morrison_setup();
-    } 
+    }
     else if (machine_is_motus())
     {
         motus_setup();
@@ -1828,8 +1666,8 @@ static void __init mot_init(void)
      */
 	mot_7x01_init_mmc();
 	mot_7x01_init_wlan();
-#ifdef CONFIG_USB_FUNCTION
-	hsusb_gpio_init();
+#ifdef CONFIG_USB_EHCI_MSM_72K
+	mot_hsusb_init();
 #endif
 	bt_power_init();
 
@@ -1897,7 +1735,6 @@ static void __init mot_fixup(struct machine_desc *desc, struct tag *tags,
 
 	mi->nr_banks = 1;
 	mi->bank[0].start = PHYS_OFFSET;
-	mi->bank[0].node = PHYS_TO_NID(PHYS_OFFSET);
 	mi->bank[0].size = 256 * 1024 * 1024;
 
 	mi->bank[1].start = 0x20000000;
@@ -1930,7 +1767,6 @@ static void __init mot_map_io(void)
 	msm_shared_ram_phys = 0x01F00000;
 	msm_map_common_io();
 	msm_clock_init(msm_clocks_7x01a, msm_num_clocks_7x01a);
-	msm_mot_allocate_memory_regions();
 }
 
 static void __init mot_init_irq(void)
@@ -2073,9 +1909,11 @@ static int __init board_model_setup(char *model)
 	else
 		return -1;
 
+#ifdef CONFIG_USB_FUNCTION
 	msm_hsusb_pdata.product_name = str;
 #ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
 	mass_storage_pdata.product = str;
+#endif
 #endif
 
 	board_model = model;
@@ -2133,6 +1971,7 @@ MACHINE_START(MORRISON, "Morrison")
 	.boot_params = 0x10000100,
 	.fixup = mot_fixup,
 	.map_io = mot_map_io,
+	.reserve = mot_reserve,
 	.init_irq = mot_init_irq,
 	.init_machine = mot_init,
 	.timer = &msm_timer,
@@ -2146,6 +1985,7 @@ MACHINE_START(MOTUS, "Motus")
     .boot_params    = 0x10000100,
     .fixup            = mot_fixup,
     .map_io            = mot_map_io,
+    .reserve = mot_reserve,
     .init_irq        = mot_init_irq,
     .init_machine    = mot_init,
     .timer            = &msm_timer,
@@ -2159,6 +1999,7 @@ MACHINE_START(ZEPPELIN, "Zeppelin")
     .boot_params    = 0x10000100,
     .fixup            = mot_fixup,
     .map_io            = mot_map_io,
+    .reserve = mot_reserve,
     .init_irq        = mot_init_irq,
     .init_machine    = mot_init,
     .timer            = &msm_timer,

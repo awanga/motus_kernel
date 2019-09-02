@@ -46,6 +46,7 @@ obj-$(CONFIG_I2C_QUP)           += i2c-qup.o
 obj-$(CONFIG_I2C_SSBI)          += i2c-ssbi.o
 obj-$(CONFIG_I2C_MV64XXX)	+= i2c-mv64xxx.o
 obj-$(CONFIG_I2C_NOMADIK)	+= i2c-nomadik.o
+obj-$(CONFIG_I2C_NUC900)	+= i2c-nuc900.o
 obj-$(CONFIG_I2C_OCORES)	+= i2c-ocores.o
 obj-$(CONFIG_I2C_OMAP)		+= i2c-omap.o
 obj-$(CONFIG_I2C_PASEMI)	+= i2c-pasemi.o

@@ -1,3 +1,4 @@
+
 /* Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -101,25 +102,6 @@ struct genlock *genlock_create_lock(struct genlock_handle *handle)
 	return lock;
 }
 EXPORT_SYMBOL(genlock_create_lock);
-
-/*
- * Get a file descriptor reference to a lock suitable for sharing with
- * other processes
- */
-
-static int genlock_get_fd(struct genlock *lock)
-{
-	int ret;
-
-	if (!lock->file)
-		return -EINVAL;
-
-	ret = get_unused_fd_flags(0);
-	if (ret < 0)
-		return ret;
-	fd_install(ret, lock->file);
-	return ret;
-}
 
 /**
  * genlock_attach_lock - Attach an existing lock to a handle

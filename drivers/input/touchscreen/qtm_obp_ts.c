@@ -75,7 +75,7 @@ static int qtm_obp_ts_remove(struct i2c_client *);
 static int qtm_obp_slider_connect(struct input_handler *, struct input_dev *, const struct input_device_id*);
 static void qtm_obp_slider_disconnect(struct input_handle *);
 static  int qtm_obp_open(struct inode *inode, struct file *filp);
-static int qtm_obp_ioctl(struct inode *node, struct file *filp, unsigned int cmd, unsigned long arg);
+static long qtm_obp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 static int qtm_obp_release(struct inode *inode, struct file *filp);
 static int qtm_obp_write(struct file *flip, const char __user *buf, size_t count, loff_t *f_pos );
 static void qtm_obp_load_obp_objects(void);
@@ -174,7 +174,7 @@ struct	file_operations	qtm_obp_fops =
 {
 	.owner		= THIS_MODULE,
 	.open		= qtm_obp_open,
-	.ioctl		= qtm_obp_ioctl,
+	.unlocked_ioctl	= qtm_obp_ioctl,
 	.release	= qtm_obp_release,
 	.write		= qtm_obp_write,
 };
@@ -1569,7 +1569,7 @@ unsigned char	qtm_kernelBuffer[255];
  * @param arg Ioctl argument
  * @return 0 in success, or negative error code
  */
-static int qtm_obp_ioctl(struct inode *node, struct file *filp, unsigned int cmd, unsigned long arg)
+static long qtm_obp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	A_TOUCH_POINT_PTR	dataPoint;
 	char * 	dataPtr;

@@ -28,7 +28,6 @@
 #include <linux/mm.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
-#include <linux/smp_lock.h>
 #include <linux/swap.h>
 #include <linux/string.h>
 #include <linux/init.h>
@@ -132,7 +131,7 @@ SYSCALL_DEFINE1(uselib, const char __user *, library)
 	if (file->f_path.mnt->mnt_flags & MNT_NOEXEC)
 		goto exit;
 
-	fsnotify_open(file->f_path.dentry);
+	fsnotify_open(file);
 
 	error = -ENOEXEC;
 	if(file->f_op) {
@@ -697,6 +696,7 @@ int setup_arg_pages(struct linux_binprm *bprm,
 	else
 		stack_base = vma->vm_start - stack_expand;
 #endif
+	current->mm->start_stack = bprm->p;
 	ret = expand_stack(vma, stack_base);
 	if (ret)
 		ret = -EFAULT;
@@ -727,7 +727,7 @@ struct file *open_exec(const char *name)
 	if (file->f_path.mnt->mnt_flags & MNT_NOEXEC)
 		goto exit;
 
-	fsnotify_open(file->f_path.dentry);
+	fsnotify_open(file);
 
 	err = deny_write_access(file);
 	if (err)
@@ -1162,7 +1162,7 @@ int check_unsafe_exec(struct linux_binprm *bprm)
 	bprm->unsafe = tracehook_unsafe_exec(p);
 
 	n_fs = 1;
-	write_lock(&p->fs->lock);
+	spin_lock(&p->fs->lock);
 	rcu_read_lock();
 	for (t = next_thread(p); t != p; t = next_thread(t)) {
 		if (t->fs == p->fs)
@@ -1179,7 +1179,7 @@ int check_unsafe_exec(struct linux_binprm *bprm)
 			res = 1;
 		}
 	}
-	write_unlock(&p->fs->lock);
+	spin_unlock(&p->fs->lock);
 
 	return res;
 }
@@ -1943,13 +1943,7 @@ void do_coredump(long signr, int exit_code, struct pt_regs *regs)
 	 */
 	clear_thread_flag(TIF_SIGPENDING);
 
-	/*
-	 * lock_kernel() because format_corename() is controlled by sysctl, which
-	 * uses lock_kernel()
-	 */
- 	lock_kernel();
 	ispipe = format_corename(corename, signr);
-	unlock_kernel();
 
  	if (ispipe) {
 		int dump_count;
@@ -2057,3 +2051,43 @@ fail_creds:
 fail:
 	return;
 }
+
+/*
+ * Core dumping helper functions.  These are the only things you should
+ * do on a core-file: use only these functions to write out all the
+ * necessary info.
+ */
+int dump_write(struct file *file, const void *addr, int nr)
+{
+	return access_ok(VERIFY_READ, addr, nr) && file->f_op->write(file, addr, nr, &file->f_pos) == nr;
+}
+EXPORT_SYMBOL(dump_write);
+
+int dump_seek(struct file *file, loff_t off)
+{
+	int ret = 1;
+
+	if (file->f_op->llseek && file->f_op->llseek != no_llseek) {
+		if (file->f_op->llseek(file, off, SEEK_CUR) < 0)
+			return 0;
+	} else {
+		char *buf = (char *)get_zeroed_page(GFP_KERNEL);
+
+		if (!buf)
+			return 0;
+		while (off > 0) {
+			unsigned long n = off;
+
+			if (n > PAGE_SIZE)
+				n = PAGE_SIZE;
+			if (!dump_write(file, buf, n)) {
+				ret = 0;
+				break;
+			}
+			off -= n;
+		}
+		free_page((unsigned long)buf);
+	}
+	return ret;
+}
+EXPORT_SYMBOL(dump_seek);

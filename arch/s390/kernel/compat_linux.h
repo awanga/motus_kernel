@@ -207,7 +207,6 @@ long sys32_sendfile(int out_fd, int in_fd, compat_off_t __user *offset,
 		    size_t count);
 long sys32_sendfile64(int out_fd, int in_fd, compat_loff_t __user *offset,
 		      s32 count);
-long sys32_sysctl(struct __sysctl_args32 __user *args);
 long sys32_stat64(const char __user * filename, struct stat64_emu31 __user * statbuf);
 long sys32_lstat64(const char __user * filename,
 		   struct stat64_emu31 __user * statbuf);

@@ -489,7 +489,7 @@ static int accel_write(struct file *f, const char __user *buffer, size_t bytes, 
  * @param arg Ioctl argument
  * @return 0 in success, or negative error code
  */
-static int accel_ioctl(struct inode *node, struct file *filp, unsigned int cmd, unsigned long arg)
+static long accel_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	accel_file_private_t *priv = filp->private_data;
 	int retval = 0, err = 0;
@@ -793,7 +793,7 @@ struct file_operations accel_fops = {
 	.llseek  = no_llseek,
 	.read    = accel_read,
 	.write   = accel_write,
-	.ioctl   = accel_ioctl,
+	.unlocked_ioctl   = accel_ioctl,
 	.open    = accel_open,
 	.poll	 = accel_poll,
 	.fasync  = accel_fasync,

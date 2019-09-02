@@ -449,58 +449,6 @@ asmlinkage long sys32_sendfile(int out_fd, int in_fd,
 	return ret;
 }
 
-asmlinkage long sys32_olduname(struct oldold_utsname __user *name)
-{
-	char *arch = "x86_64";
-	int err;
-
-	if (!name)
-		return -EFAULT;
-	if (!access_ok(VERIFY_WRITE, name, sizeof(struct oldold_utsname)))
-		return -EFAULT;
-
-	down_read(&uts_sem);
-
-	err = __copy_to_user(&name->sysname, &utsname()->sysname,
-			     __OLD_UTS_LEN);
-	err |= __put_user(0, name->sysname+__OLD_UTS_LEN);
-	err |= __copy_to_user(&name->nodename, &utsname()->nodename,
-			      __OLD_UTS_LEN);
-	err |= __put_user(0, name->nodename+__OLD_UTS_LEN);
-	err |= __copy_to_user(&name->release, &utsname()->release,
-			      __OLD_UTS_LEN);
-	err |= __put_user(0, name->release+__OLD_UTS_LEN);
-	err |= __copy_to_user(&name->version, &utsname()->version,
-			      __OLD_UTS_LEN);
-	err |= __put_user(0, name->version+__OLD_UTS_LEN);
-
-	if (personality(current->personality) == PER_LINUX32)
-		arch = "i686";
-
-	err |= __copy_to_user(&name->machine, arch, strlen(arch) + 1);
-
-	up_read(&uts_sem);
-
-	err = err ? -EFAULT : 0;
-
-	return err;
-}
-
-long sys32_uname(struct old_utsname __user *name)
-{
-	int err;
-
-	if (!name)
-		return -EFAULT;
-	down_read(&uts_sem);
-	err = copy_to_user(name, utsname(), sizeof(*name));
-	up_read(&uts_sem);
-	if (personality(current->personality) == PER_LINUX32)
-		err |= copy_to_user(&name->machine, "i686", 5);
-
-	return err ? -EFAULT : 0;
-}
-
 asmlinkage long sys32_execve(const char __user *name, compat_uptr_t __user *argv,
 			     compat_uptr_t __user *envp, struct pt_regs *regs)
 {
@@ -597,4 +545,13 @@ asmlinkage long sys32_fallocate(int fd, int mode, unsigned offset_lo,
 {
 	return sys_fallocate(fd, mode, ((u64)offset_hi << 32) | offset_lo,
 			     ((u64)len_hi << 32) | len_lo);
+}
+
+asmlinkage long sys32_fanotify_mark(int fanotify_fd, unsigned int flags,
+				    u32 mask_lo, u32 mask_hi,
+				    int fd, const char  __user *pathname)
+{
+	return sys_fanotify_mark(fanotify_fd, flags,
+				 ((u64)mask_hi << 32) | mask_lo,
+				 fd, pathname);
 }

@@ -22,13 +22,13 @@
 
 static int camera_dev_open (struct inode *inode, struct file *file);
 static int camera_dev_release (struct inode *inode, struct file *file);
-static int camera_dev_ioctl (struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg);
+static long camera_dev_ioctl (struct file *file, unsigned int cmd, unsigned long arg);
 
 
 static struct file_operations camera_dev_fops = {
     .open           = camera_dev_open,
     .release        = camera_dev_release,
-    .ioctl          = camera_dev_ioctl
+    .unlocked_ioctl = camera_dev_ioctl
 };
 
 static struct miscdevice cam_misc_device0 = {
@@ -82,7 +82,7 @@ static int camera_dev_release(struct inode *inode, struct file *file)
 }
 
 
-static int camera_dev_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
+static long camera_dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 {
     int rc;

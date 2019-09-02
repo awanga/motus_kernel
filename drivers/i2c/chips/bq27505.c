@@ -323,7 +323,7 @@ static void wait_init_complete(void)
 		msleep(DELAY_AFTER_FIRMWARE_UPGRADE);
 }
 
-static int bq27505_ioctl(struct inode *inode, struct file *f,
+static long bq27505_ioctl(struct file *f,
 				 unsigned int cmd, unsigned long arg)
 {
 	int ret = 0;
@@ -355,7 +355,7 @@ static struct file_operations bq27505_fops = {
 	.owner =   THIS_MODULE,
 	.open =    bq27505_open,
 	.release = bq27505_release,
-	.ioctl =   bq27505_ioctl
+	.unlocked_ioctl =   bq27505_ioctl
 };
 
 static struct miscdevice bq27505_device = {

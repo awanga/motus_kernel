@@ -439,8 +439,15 @@ static struct resource resources_sdc1[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
+		.name	= "sdcc_dma_chnl",
 		.start	= 8,
 		.end	= 8,
+		.flags	= IORESOURCE_DMA,
+	},
+	{
+		.name	= "sdcc_dma_crci",
+		.start	= DMOV_SDC1_CRCI,
+		.end	= DMOV_SDC1_CRCI,
 		.flags	= IORESOURCE_DMA,
 	},
 };
@@ -457,8 +464,15 @@ static struct resource resources_sdc2[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
+		.name	= "sdcc_dma_chnl",
 		.start	= 8,
 		.end	= 8,
+		.flags	= IORESOURCE_DMA,
+	},
+	{
+		.name	= "sdcc_dma_crci",
+		.start	= DMOV_SDC2_CRCI,
+		.end	= DMOV_SDC2_CRCI,
 		.flags	= IORESOURCE_DMA,
 	},
 };
@@ -475,8 +489,15 @@ static struct resource resources_sdc3[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
+		.name	= "sdcc_dma_chnl",
 		.start	= 8,
 		.end	= 8,
+		.flags	= IORESOURCE_DMA,
+	},
+	{
+		.name	= "sdcc_dma_crci",
+		.start	= DMOV_SDC3_CRCI,
+		.end	= DMOV_SDC3_CRCI,
 		.flags	= IORESOURCE_DMA,
 	},
 };
@@ -493,8 +514,15 @@ static struct resource resources_sdc4[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
+		.name	= "sdcc_dma_chnl",
 		.start	= 8,
 		.end	= 8,
+		.flags	= IORESOURCE_DMA,
+	},
+	{
+		.name	= "sdcc_dma_crci",
+		.start	= DMOV_SDC4_CRCI,
+		.end	= DMOV_SDC4_CRCI,
 		.flags	= IORESOURCE_DMA,
 	},
 };
@@ -820,6 +848,7 @@ struct clk_lookup msm_clocks_7x01a[] = {
 	CLK_PCOM("uartdm_clk",	UART2DM_CLK,	"msm_serial_hs.1", 0),
 	CLK_PCOM("usb_hs_clk",	USB_HS_CLK,	"msm_otg", OFF),
 	CLK_PCOM("usb_hs_pclk",	USB_HS_P_CLK,	"msm_otg", OFF),
+	CLK_DUMMY("usb_phy_clk",USB_PHY_CLK,	NULL, OFF),
 	CLK_PCOM("usb_otg_clk",	USB_OTG_CLK,	NULL, 0),
 	CLK_PCOM("vdc_clk",	VDC_CLK,	NULL, OFF | CLK_MIN),
 	CLK_PCOM("vfe_clk",	VFE_CLK,	NULL, OFF),

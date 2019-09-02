@@ -1489,6 +1489,7 @@ static int msm_otg_phy_reset(struct msm_otg *dev)
 	unsigned temp;
 	unsigned long timeout;
 
+#ifndef CONFIG_ARCH_MSM7X01A
 	rc = clk_reset(dev->hs_clk, CLK_RESET_ASSERT);
 	if (rc) {
 		pr_err("%s: usb hs clk assert failed\n", __func__);
@@ -1502,6 +1503,7 @@ static int msm_otg_phy_reset(struct msm_otg *dev)
 		pr_err("%s: usb hs clk deassert failed\n", __func__);
 		return -1;
 	}
+#endif
 
 	/* select ULPI phy */
 	temp = (readl(USB_PORTSC) & ~PORTSC_PTS);
@@ -2521,7 +2523,6 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	}
 #endif
 
-
 	if (dev->pdata->rpc_connect) {
 		ret = dev->pdata->rpc_connect(1);
 		pr_debug("%s: rpc_connect(%d)\n", __func__, ret);
@@ -2541,7 +2542,7 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	clk_set_rate(dev->hs_clk, 60000000);
 
 	/* pm qos request to prevent apps idle power collapse */
-	dev->pdata->pm_qos_req_dma = pm_qos_add_request(PM_QOS_CPU_DMA_LATENCY,
+	pm_qos_add_request(dev->pdata->pm_qos_req_dma, PM_QOS_CPU_DMA_LATENCY,
 					PM_QOS_DEFAULT_VALUE);
 
 	/* If USB Core is running its protocol engine based on PCLK,

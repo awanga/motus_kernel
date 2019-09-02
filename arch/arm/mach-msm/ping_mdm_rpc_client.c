@@ -91,7 +91,7 @@ enum {
 };
 static int fifo_event;
 static DEFINE_MUTEX(event_fifo_lock);
-static DEFINE_KFIFO(event_fifo, sizeof(int)*16);
+static DEFINE_KFIFO(event_fifo, int, 16);
 
 static int ping_mdm_register_cb(struct msm_rpc_client *client,
 				struct msm_rpc_xdr *xdr)

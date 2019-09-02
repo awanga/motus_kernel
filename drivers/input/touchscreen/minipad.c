@@ -100,7 +100,7 @@ static int minipad_reg_read(struct i2c_client *client , int reg );
 static int minipad_reg_read16(struct i2c_client *client , int reg );
 
 static int minipad_open(struct inode *inode, struct file *filp);
-static int minipad_ioctl(struct inode *node, struct file *filp, unsigned int cmd, unsigned long arg);
+static long minipad_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 static int minipad_release(struct inode *inode, struct file *filp);
 static int minipad_write(struct file *flip, const char __user *buf, size_t count, loff_t *f_pos );
 static void minipad_log(char *fmt, ...);
@@ -167,7 +167,7 @@ struct    file_operations    minipad_fops =
 {
     .owner      = THIS_MODULE,
     .open       = minipad_open,
-    .ioctl      = minipad_ioctl,
+    .unlocked_ioctl      = minipad_ioctl,
     .release    = minipad_release,
     .write      = minipad_write,
 };
@@ -1705,7 +1705,7 @@ static int minipad_open(struct inode *inode, struct file *filp)
  * @return 0 in success, or negative error code
  */
 
-static int minipad_ioctl(struct inode *node, struct file *filp, unsigned int cmd, unsigned long arg)
+static long minipad_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
     unsigned long    bCount;
     int    regValue;

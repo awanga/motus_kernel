@@ -19,6 +19,7 @@ struct parsed_partitions {
 	int next;
 	int limit;
 	bool access_beyond_eod;
+	char *pp_buf;
 };
 
 static inline void *read_part_sector(struct parsed_partitions *state,
@@ -36,6 +37,7 @@ put_named_partition(struct parsed_partitions *p, int n, sector_t from,
 	sector_t size, const char *name, size_t name_size)
 {
 	if (n < p->limit) {
+
 		p->parts[n].from = from;
 		p->parts[n].size = size;
 		printk(" %s%d", p->name, n);

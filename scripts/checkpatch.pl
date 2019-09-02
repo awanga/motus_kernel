@@ -201,7 +201,7 @@ our $typeTypedefs = qr{(?x:
 our $logFunctions = qr{(?x:
 	printk|
 	pr_(debug|dbg|vdbg|devel|info|warning|err|notice|alert|crit|emerg|cont)|
-	dev_(printk|dbg|vdbg|info|warn|err|notice|alert|crit|emerg|WARN)|
+	(dev|netdev|netif)_(printk|dbg|vdbg|info|warn|err|notice|alert|crit|emerg|WARN)|
 	WARN|
 	panic
 )};
@@ -229,6 +229,12 @@ our @typeList = (
 our @modifierList = (
 	qr{fastcall},
 );
+
+our $allowed_asm_includes = qr{(?x:
+	irq|
+	memory
+)};
+# memory.h: ARM has a custom one
 
 sub build_types {
 	my $mods = "(?x:  \n" . join("|\n  ", @modifierList) . "\n)";
@@ -1511,8 +1517,8 @@ sub process {
 #80 column limit
 		if ($line =~ /^\+/ && $prevrawline !~ /\/\*\*/ &&
 		    $rawline !~ /^.\s*\*\s*\@$Ident\s/ &&
-		    $line !~ /^\+\s*$logFunctions\s*\(\s*(?:KERN_\S+\s*)?"[X\t]*"\s*(?:,|\)\s*;)\s*$/ &&
-		    $realfile ne "scripts/checkpatch.pl" &&
+		    !($line =~ /^\+\s*$logFunctions\s*\(\s*(?:(KERN_\S+\s*|[^"]*))?"[X\t]*"\s*(?:,|\)\s*;)\s*$/ ||
+		    $line =~ /^\+\s*"[^"]*"\s*(?:\s*|,|\)\s*;)\s*$/) &&
 		    $length > 80)
 		{
 			WARN("line over 80 characters\n" . $herecurr);
@@ -1555,6 +1561,13 @@ sub process {
 		if ($rawline =~ /^\+/ && $rawline =~ / \t/) {
 			my $herevet = "$here\n" . cat_vet($rawline) . "\n";
 			WARN("please, no space before tabs\n" . $herevet);
+		}
+
+# check for spaces at the beginning of a line.
+		if ($rawline =~ /^\+ / && $rawline !~ /\+ +\*/)  {
+			my $herevet = "$here\n" . cat_vet($rawline) . "\n";
+			WARN("please, no space for starting a line, \
+				excluding comments\n" . $herevet);
 		}
 
 # check we are in a valid C source file if not then ignore this hunk
@@ -1887,9 +1900,9 @@ sub process {
 			WARN("EXPORT_SYMBOL(foo); should immediately follow its function/variable\n" . $herecurr);
 		}
 
-# check for external initialisers.
+# check for global initialisers.
 		if ($line =~ /^.$Type\s*$Ident\s*(?:\s+$Modifier)*\s*=\s*(0|NULL|false)\s*;/) {
-			ERROR("do not initialise externals to 0 or NULL\n" .
+			ERROR("do not initialise globals to 0 or NULL\n" .
 				$herecurr);
 		}
 # check for static initialisers.
@@ -2417,7 +2430,7 @@ sub process {
 			my $checkfile = "include/linux/$file";
 			if (-f "$root/$checkfile" &&
 			    $realfile ne $checkfile &&
-			    $1 ne 'irq')
+			    $1 !~ /$allowed_asm_includes/)
 			{
 				if ($realfile =~ m{^arch/}) {
 					CHK("Consider using #include <linux/$file> instead of <asm/$file>\n" . $herecurr);
@@ -2691,9 +2704,19 @@ sub process {
 			}
 		}
 
-# check the patch for use of mdelay
-		if ($line =~ /\bmdelay\s*\(/) {
-			WARN("use of mdelay() found: msleep() is the preferred API.\n" . $line );
+# prefer usleep_range over udelay
+		if ($line =~ /\budelay\s*\(\s*(\w+)\s*\)/) {
+			# ignore udelay's < 10, however
+			if (! (($1 =~ /(\d+)/) && ($1 < 10)) ) {
+				CHK("usleep_range is preferred over udelay; see Documentation/timers/timers-howto.txt\n" . $line);
+			}
+		}
+
+# warn about unexpectedly long msleep's
+		if ($line =~ /\bmsleep\s*\((\d+)\);/) {
+			if ($1 < 20) {
+				WARN("msleep < 20ms can sleep for up to 20ms; see Documentation/timers/timers-howto.txt\n" . $line);
+			}
 		}
 
 # warn about #ifdefs in C files

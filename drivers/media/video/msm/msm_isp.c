@@ -92,7 +92,7 @@ static struct msm_isp_color_fmt msm_isp_formats[] = {
 	.depth	  = 12,
 	.bitsperpxl = 8,
 	.fourcc	 = V4L2_PIX_FMT_NV21,
-	.pxlcode	= V4L2_MBUS_FMT_YUYV8_2X8_BE, /* YUV sensor */
+	.pxlcode	= V4L2_PIX_FMT_YUYV, /* YUV sensor */
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	},
 	{

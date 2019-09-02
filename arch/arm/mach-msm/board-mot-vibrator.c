@@ -120,7 +120,7 @@ static void vibrator_start(int value)
 						ktime_set(value / 1000, (value % 1000) * 1000000),
 						HRTIMER_MODE_REL);
 	}
-	
+
 	vibrator_pwm_toggle();
 }
 
@@ -176,7 +176,7 @@ static int vibrator_probe(struct platform_device *pdev)
 		return -EBUSY;
 
 	INIT_WORK(&vib_data.work_en, vibrator_en_work_func);
-			
+
 	hrtimer_init(&vib_data.timer_en, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	vib_data.timer_en.function = vibrator_en_timer_func;
         hrtimer_init(&vib_data.timer_pwm, CLOCK_REALTIME, HRTIMER_MODE_REL);
@@ -187,6 +187,8 @@ static int vibrator_probe(struct platform_device *pdev)
 	vib_data.gpio_pwm = pdata->gpio_pwm;
 	vib_data.max_timeout = pdata->max_timeout;
 	vib_data.active_low = pdata->active_low;
+	gpio_request(vib_data.gpio_en, "vibrator_en");
+	gpio_request(vib_data.gpio_pwm, "vibrator_pwm");
 	gpio_direction_output(vib_data.gpio_en, vib_data.active_low);
 	gpio_direction_output(vib_data.gpio_pwm, 0);
 

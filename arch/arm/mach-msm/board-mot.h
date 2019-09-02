@@ -32,8 +32,8 @@
  */
 #define SMI_MEM_OFFSET				0x02000000
 
-/* 
- * Static allocations are now handled at runtime, 
+/*
+ * Static allocations are now handled at runtime,
  * but some initializers still refer to MSM_xxx_BASE.
  * They can be just 0. Keep these for now to make it
  * easier to fallback to Google's display stuff if needed.
@@ -128,3 +128,4 @@ typedef struct smem_mot_vendor1 {
 	char security_on;	// fuses modification flag (if 1 all following fuses modification is disabled - final customer SW)
 } smem_mot_vendor1_type;
 
+extern void mot_hsusb_init(void);

@@ -69,7 +69,7 @@ void radeon_ttm_placement_from_domain(struct radeon_bo *rbo, u32 domain)
 	u32 c = 0;
 
 	rbo->placement.fpfn = 0;
-	rbo->placement.lpfn = 0;
+	rbo->placement.lpfn = rbo->rdev->mc.active_vram_size >> PAGE_SHIFT;
 	rbo->placement.placement = rbo->placements;
 	rbo->placement.busy_placement = rbo->placements;
 	if (domain & RADEON_GEM_DOMAIN_VRAM)
@@ -111,6 +111,8 @@ retry:
 	bo->gobj = gobj;
 	bo->surface_reg = -1;
 	INIT_LIST_HEAD(&bo->list);
+
+retry:
 	radeon_ttm_placement_from_domain(bo, domain);
 	/* Kernel allocation are uninterruptible */
 	mutex_lock(&rdev->vram_mutex);

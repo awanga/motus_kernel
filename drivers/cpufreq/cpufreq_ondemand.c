@@ -745,9 +745,6 @@ static void dbs_refresh_callback(struct work_struct *unused)
 	struct cpufreq_policy *policy;
 	struct cpu_dbs_info_s *this_dbs_info;
 
-	if (lock_policy_rwsem_write(0) < 0)
-		return;
-
 	this_dbs_info = &per_cpu(od_cpu_dbs_info, 0);
 	policy = this_dbs_info->cur_policy;
 
@@ -759,7 +756,6 @@ static void dbs_refresh_callback(struct work_struct *unused)
 		this_dbs_info->prev_cpu_idle = get_cpu_idle_time(0,
 				&this_dbs_info->prev_cpu_wall);
 	}
-	unlock_policy_rwsem_write(0);
 }
 
 static DECLARE_WORK(dbs_refresh_work, dbs_refresh_callback);

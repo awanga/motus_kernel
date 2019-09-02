@@ -374,6 +374,18 @@ inline int prom_inst2pkg(int inst)
 	return node;
 }
 
+	p1275_cmd_direct(args);
+
+	inst = prom_devopen (path);
+	if (inst == 0)
+		return 0;
+	node = prom_inst2pkg(inst);
+	prom_devclose(inst);
+	if (node == -1)
+		return 0;
+	return node;
+}
+
 int prom_ihandle2path(int handle, char *buffer, int bufsize)
 {
 	unsigned long args[7];

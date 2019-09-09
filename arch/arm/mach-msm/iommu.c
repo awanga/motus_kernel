@@ -139,6 +139,7 @@ static void __reset_context(void __iomem *base, int ctx)
 	SET_TLBLKCR(base, ctx, 0);
 	SET_PRRR(base, ctx, 0);
 	SET_NMRR(base, ctx, 0);
+	SET_CONTEXTIDR(base, ctx, 0);
 	mb();
 }
 

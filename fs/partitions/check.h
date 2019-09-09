@@ -1,5 +1,6 @@
 #include <linux/pagemap.h>
 #include <linux/blkdev.h>
+#include <linux/genhd.h>
 
 #define PART_NAME_SIZE 128
 
@@ -15,6 +16,8 @@ struct parsed_partitions {
 		sector_t size;
 		int flags;
 		char name[PART_NAME_SIZE];
+		bool has_info;
+		struct partition_meta_info info;
 	} parts[DISK_MAX_PARTS];
 	int next;
 	int limit;

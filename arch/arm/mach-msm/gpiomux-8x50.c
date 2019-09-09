@@ -14,12 +14,15 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
  */
-#include <linux/module.h>
-#include <mach/irqs.h>
 #include "gpiomux.h"
 
-static int __init gpiomux_init(void)
-{
-	return msm_gpiomux_init(NR_GPIO_IRQS);
-}
-postcore_initcall(gpiomux_init);
+struct msm_gpiomux_config msm_gpiomux_configs[GPIOMUX_NGPIOS] = {
+	[86] = { /* UART3 RX */
+		.suspended = GPIOMUX_DRV_2MA | GPIOMUX_PULL_DOWN |
+			     GPIOMUX_FUNC_1 | GPIOMUX_VALID,
+	},
+	[87] = { /* UART3 TX */
+		.suspended = GPIOMUX_DRV_2MA | GPIOMUX_PULL_DOWN |
+			     GPIOMUX_FUNC_1 | GPIOMUX_VALID,
+	},
+};

@@ -186,6 +186,8 @@ struct msm_camera_sensor_info {
 
 struct clk;
 
+extern struct sys_timer msm_timer;
+
 struct snd_endpoint {
 	int id;
 	const char *name;
@@ -353,6 +355,7 @@ struct isp1763_platform_data {
 	int (*setup_gpio)(int enable);
 };
 #endif
+
 /* common init routines for use by arch/arm/mach-msm/board-*.c */
 
 void __init msm_add_devices(void);

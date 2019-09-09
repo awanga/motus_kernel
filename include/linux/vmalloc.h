@@ -7,8 +7,6 @@
 
 struct vm_area_struct;		/* vma defining user mapping in mm_types.h */
 
-extern bool vmap_lazy_unmap;
-
 /* bits in flags of vmalloc's vm_struct below */
 #define VM_IOREMAP	0x00000001	/* ioremap() and friends */
 #define VM_ALLOC	0x00000002	/* vmalloc() */
@@ -52,28 +50,18 @@ static inline void vmalloc_init(void)
 }
 #endif
 
-/* CONFIG_MEMLEAK_BLD is only for built-in code */
-#if !defined(CONFIG_MEMLEAK_BLD) || defined(MODULE)
 extern void *vmalloc(unsigned long size);
-#else
-extern void *memleak_vmalloc(unsigned long size);
-#define vmalloc(size) memleak_vmalloc(size)
-#endif
+extern void *vzalloc(unsigned long size);
 extern void *vmalloc_user(unsigned long size);
 extern void *vmalloc_node(unsigned long size, int node);
+extern void *vzalloc_node(unsigned long size, int node);
 extern void *vmalloc_exec(unsigned long size);
 extern void *vmalloc_32(unsigned long size);
 extern void *vmalloc_32_user(unsigned long size);
 extern void *__vmalloc(unsigned long size, gfp_t gfp_mask, pgprot_t prot);
 extern void *__vmalloc_area(struct vm_struct *area, gfp_t gfp_mask,
 				pgprot_t prot);
-/* CONFIG_MEMLEAK_BLD is only for built-in code */
-#if !defined(CONFIG_MEMLEAK_BLD) || defined(MODULE)
 extern void vfree(const void *addr);
-#else
-extern void memleak_vfree(void *addr);
-#define vfree(addr) memleak_vfree(addr)
-#endif
 
 extern void *vmap(struct page **pages, unsigned int count,
 			unsigned long flags, pgprot_t prot);
@@ -129,10 +117,12 @@ extern rwlock_t vmlist_lock;
 extern struct vm_struct *vmlist;
 extern __init void vm_area_register_early(struct vm_struct *vm, size_t align);
 
+#ifdef CONFIG_SMP
 struct vm_struct **pcpu_get_vm_areas(const unsigned long *offsets,
 				     const size_t *sizes, int nr_vms,
 				     size_t align, gfp_t gfp_mask);
 
 void pcpu_free_vm_areas(struct vm_struct **vms, int nr_vms);
+#endif
 
 #endif /* _LINUX_VMALLOC_H */

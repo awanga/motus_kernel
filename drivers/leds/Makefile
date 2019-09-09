@@ -25,7 +25,7 @@ obj-$(CONFIG_LEDS_PCA9532)		+= leds-pca9532.o
 obj-$(CONFIG_LEDS_GPIO)			+= leds-gpio.o
 obj-$(CONFIG_LEDS_LP3944)		+= leds-lp3944.o
 obj-$(CONFIG_LEDS_LP5521)		+= leds-lp5521.o
-obj-$(CONFIG_LEDS_CPLD)			+= leds-cpld.o
+obj-$(CONFIG_LEDS_LP5523)		+= leds-lp5523.o
 obj-$(CONFIG_LEDS_CLEVO_MAIL)		+= leds-clevo-mail.o
 obj-$(CONFIG_LEDS_HP6XX)		+= leds-hp6xx.o
 obj-$(CONFIG_LEDS_FSG)			+= leds-fsg.o
@@ -44,6 +44,7 @@ obj-$(CONFIG_LEDS_MC13783)		+= leds-mc13783.o
 obj-$(CONFIG_LEDS_PMIC8058)		+= leds-pmic8058.o
 obj-$(CONFIG_LEDS_QCIBL)		+= leds-qci-backlight.o
 obj-$(CONFIG_LEDS_NS2)			+= leds-ns2.o
+obj-$(CONFIG_LEDS_NETXBIG)		+= leds-netxbig.o
 
 # LED SPI Drivers
 obj-$(CONFIG_LEDS_DAC124S085)		+= leds-dac124s085.o
@@ -66,7 +67,7 @@ obj-$(CONFIG_LEDS_FAN5646)              += leds-fan5646.o
 endif
 
 ifeq ($(CONFIG_MACH_CALGARY),y)
-obj-$(CONFIG_ADP5588_LEDS_BL)           += leds-adp5588.o
+obj-$(CONFIG_LEDS_ADP5588)              += leds-adp5588.o
 endif
 
 # LED Triggers

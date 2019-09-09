@@ -341,7 +341,7 @@ static int accel_open(struct inode *inode, struct file *filp)
 
 	/* initialize read wait queue */
 	init_waitqueue_head (&priv->readq);
-	init_MUTEX (&priv->sem);
+	sema_init (&priv->sem, 1);
 
 	down (&priv->sem);
 	priv->access_flags |= ACCEL_FF_IS_CLIENT;

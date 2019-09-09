@@ -100,6 +100,7 @@ static void msm_iommu_reset(void __iomem *base, int ncb)
 	SET_GLOBAL_TLBIALL(base, 0);
 	SET_RPU_ACR(base, 0);
 	SET_TLBLKCRWE(base, 1);
+	ncb = GET_NCB(base)+1;
 
 	for (ctx = 0; ctx < ncb; ctx++) {
 		SET_BPRCOSH(base, ctx, 0);

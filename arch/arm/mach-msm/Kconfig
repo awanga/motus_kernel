@@ -10,6 +10,8 @@ config ARCH_MSM7X01A
 	select MSM_VIC
 	select CPU_V6
 	select MSM_REMOTE_SPINLOCK_SWP
+	select MSM_PROC_COMM
+	select HAS_MSM_DEBUG_UART_PHYS
 
 config ARCH_MSM7X25
 	bool "MSM7x25"
@@ -31,93 +33,32 @@ config ARCH_MSM7X27
 
 config ARCH_MSM7X30
 	bool "MSM7x30"
+	select MACH_MSM7X30_SURF # if !
 	select ARCH_MSM_SCORPION
 	select MSM_VIC
 	select CPU_V7
-	select MSM_REMOTE_SPINLOCK_DEKKERS
-	select ARCH_SPARSEMEM_ENABLE
-	select MEMORY_HOTPLUG
-	select MEMORY_HOTREMOVE
-	select MIGRATION
-	select ARCH_MEMORY_PROBE
-	select ARCH_MEMORY_REMOVE
-	select DONT_RESERVE_FROM_MOVABLE_ZONE
 	select MSM_GPIOMUX
-	select RESERVE_FIRST_PAGE
-	select MSM_DALRPC
+	select MSM_PROC_COMM
+	select HAS_MSM_DEBUG_UART_PHYS
 
 config ARCH_QSD8X50
 	bool "QSD8X50"
+	select MACH_QSD8X50_SURF if !MACH_QSD8X50A_ST1_5
 	select ARCH_MSM_SCORPION
 	select MSM_VIC
 	select CPU_V7
-	select MSM_REMOTE_SPINLOCK_LDREX
-	select EMULATE_DOMAIN_MANAGER_V7
 	select MSM_GPIOMUX
-	select MSM_DALRPC
+	select MSM_PROC_COMM
+	select HAS_MSM_DEBUG_UART_PHYS
 
 config ARCH_MSM8X60
 	bool "MSM8X60"
-	select ARCH_MSM_SCORPIONMP
-	select SMP_PARALLEL_START if SMP
-	select ARM_GIC
-	select CPU_V7
-	select MSM_REMOTE_SPINLOCK_LDREX
-	select ARCH_REQUIRE_GPIOLIB
-	select MSM_ADM3
-	select REGULATOR
-	select MSM_V2_TLMM
-	select MSM_PIL
-	select MSM_SCM
-	select ARCH_HAS_CPU_IDLE_WAIT
-	select MSM_DIRECT_SCLK_ACCESS
-	select MSM_RPM
-	select MSM_XO
-	select MSM_GPIOMUX
-	select MSM_BUS_SCALING
-	select MSM_SECURE_IO
-	select MSM_DALRPC
-	select MSM_QDSP6_APR
-	select ARCH_INLINE_SPIN_TRYLOCK
-	select ARCH_INLINE_SPIN_TRYLOCK_BH
-	select ARCH_INLINE_SPIN_LOCK
-	select ARCH_INLINE_SPIN_LOCK_BH
-	select ARCH_INLINE_SPIN_LOCK_IRQ
-	select ARCH_INLINE_SPIN_LOCK_IRQSAVE
-	select ARCH_INLINE_SPIN_UNLOCK
-	select ARCH_INLINE_SPIN_UNLOCK_BH
-	select ARCH_INLINE_SPIN_UNLOCK_IRQ
-	select ARCH_INLINE_SPIN_UNLOCK_IRQRESTORE
-	select ARCH_INLINE_READ_TRYLOCK
-	select ARCH_INLINE_READ_LOCK
-	select ARCH_INLINE_READ_LOCK_BH
-	select ARCH_INLINE_READ_LOCK_IRQ
-	select ARCH_INLINE_READ_LOCK_IRQSAVE
-	select ARCH_INLINE_READ_UNLOCK
-	select ARCH_INLINE_READ_UNLOCK_BH
-	select ARCH_INLINE_READ_UNLOCK_IRQ
-	select ARCH_INLINE_READ_UNLOCK_IRQRESTORE
-	select ARCH_INLINE_WRITE_TRYLOCK
-	select ARCH_INLINE_WRITE_LOCK
-	select ARCH_INLINE_WRITE_LOCK_BH
-	select ARCH_INLINE_WRITE_LOCK_IRQ
-	select ARCH_INLINE_WRITE_LOCK_IRQSAVE
-	select ARCH_INLINE_WRITE_UNLOCK
-	select ARCH_INLINE_WRITE_UNLOCK_BH
-	select ARCH_INLINE_WRITE_UNLOCK_IRQRESTORE
-	select MSM_SCHED_FAST_CPU_ONLINE
-
-config ARCH_MSM8960
-	bool "MSM8960"
-	select ARCH_MSM_SCORPIONMP
-	select MACH_MSM8960_SIM if (!MACH_MSM8960_RUMI3)
+	select MACH_MSM8X60_SURF if (!MACH_MSM8X60_RUMI3 && !MACH_MSM8X60_SIM \
+				  && !MACH_MSM8X60_FFA)
 	select ARM_GIC
 	select CPU_V7
 	select MSM_V2_TLMM
 	select MSM_GPIOMUX
-	select MSM_SCM if SMP
-	select MSM_DIRECT_SCLK_ACCESS
-	select REGULATOR
 
 endchoice
 
@@ -146,6 +87,9 @@ config  ARCH_MSM_CORTEX_A5
 config ARCH_QSD8X50A
 	bool
 config ARCH_MSM7X27A
+	bool
+
+config HAS_MSM_DEBUG_UART_PHYS
 	bool
 
 config  MSM_VIC
@@ -354,157 +298,29 @@ config MACH_QSD8X50A_ST1_5
 	help
 	  Support for the Qualcomm ST1.5.
 
-config MACH_MSM7X25_SURF
-	depends on ARCH_MSM7X25
-	depends on !MSM_STACKED_MEMORY
-	default y
-	bool "MSM7x25 SURF"
-	help
-	  Support for the Qualcomm MSM7x25 SURF eval board.
-
-config MACH_MSM7X25_FFA
-	depends on ARCH_MSM7X25
-	depends on !MSM_STACKED_MEMORY
-	default y
-	bool "MSM7x25 FFA"
-	help
-	  Support for the Qualcomm MSM7x25 FFA eval board.
-
-config MACH_MSM8X55_SURF
-       depends on ARCH_MSM7X30
-       depends on !MSM_STACKED_MEMORY
-       default y
-       bool "MSM8X55 SURF"
-       help
-         Support for the Qualcomm MSM8x55 SURF eval board.
-
-config MACH_MSM8X55_FFA
-       depends on ARCH_MSM7X30
-       depends on !MSM_STACKED_MEMORY
-       default y
-       bool "MSM8X55 FFA"
-       help
-         Support for the Qualcomm MSM8x55 FFA eval board.
-
-config MACH_MSM8X55_SVLTE_FFA
-       depends on ARCH_MSM7X30
-       depends on !MSM_STACKED_MEMORY
-       default y
-       bool "MSM8X55 SVLTE FFA"
-       help
-         Support for the Qualcomm MSM8x55 SVLTE FFA eval board.
-
-config MACH_MSM8X55_SVLTE_SURF
-       depends on ARCH_MSM7X30
-       depends on !MSM_STACKED_MEMORY
-       default y
-       bool "MSM8X55 SVLTE SURF"
-       help
-         Support for the Qualcomm MSM8x55 SVLTE SURF eval board.
-
 config MACH_MSM8X60_RUMI3
 	depends on ARCH_MSM8X60
-	default n
 	bool "MSM8x60 RUMI3"
 	help
 	  Support for the Qualcomm MSM8x60 RUMI3 emulator.
 
-config MACH_MSM8X60_SIM
-	depends on ARCH_MSM8X60
-	default n
-	bool "MSM8x60 Simulator"
-	help
-	  Support for the Qualcomm MSM8x60 simulator.
-
 config MACH_MSM8X60_SURF
 	depends on ARCH_MSM8X60
-	default n
 	bool "MSM8x60 SURF"
 	help
 	  Support for the Qualcomm MSM8x60 SURF eval board.
 
+config MACH_MSM8X60_SIM
+	depends on ARCH_MSM8X60
+	bool "MSM8x60 Simulator"
+	help
+	  Support for the Qualcomm MSM8x60 simulator.
+
 config MACH_MSM8X60_FFA
 	depends on ARCH_MSM8X60
-	default n
 	bool "MSM8x60 FFA"
 	help
 	  Support for the Qualcomm MSM8x60 FFA eval board.
-
-config MACH_MSM8X60_QRDC
-	depends on ARCH_MSM8X60
-	default n
-	bool "MSM8x60 QRDC"
-	help
-	  Support for the Qualcomm MSM8x60 QRDC board.
-
-config MACH_MSM8X60_FLUID
-	depends on ARCH_MSM8X60
-	default n
-	bool "MSM8x60 FLUID"
-	help
-	  Support for the Qualcomm MSM8x60 FLUID platform. The FLUID is an
-	  8x60 target which has a form factor that is much closer to that
-	  of a phone than other targets. It also has a new display and
-	  touchscreen controller.
-
-config MACH_MSM8X60_CHARM_SURF
-	depends on ARCH_MSM8X60
-	default n
-	bool "MSM8x60 CHARM SURF"
-	help
-	  Support for the Qualcomm MSM8x60 Charm SURF device.
-
-config MACH_MSM8X60_CHARM_FFA
-	depends on ARCH_MSM8X60
-	default n
-	bool "MSM8x60 CHARM FFA"
-	help
-	  Support for the Qualcomm MSM8x60 Charm FFA device.
-
-config MACH_MSM8960_SIM
-	depends on ARCH_MSM8960
-	bool "MSM8960 Simulator"
-	help
-	  Support for the Qualcomm MSM8960 simulator.
-
-config MACH_MSM8960_RUMI3
-	depends on ARCH_MSM8960
-	bool "MSM8960 RUMI3"
-	help
-	  Support for the Qualcomm MSM8960 RUMI3 emulator.
-
-config MACH_MSM8960_CDP
-	depends on ARCH_MSM8960
-	bool "MSM8960 CDP"
-	help
-	  Support for the Qualcomm MSM8960 CDP device.
-
-config MACH_MSM8960_MTP
-	depends on ARCH_MSM8960
-	bool "MSM8960 MTP"
-	help
-	  Support for the Qualcomm MSM8960 MTP device.
-
-config MACH_MSM8960_FLUID
-	depends on ARCH_MSM8960
-	bool "MSM8960 FLUID"
-	help
-	  Support for the Qualcomm MSM8960 FLUID device.
-
-config MSM_USE_TSIF1
-	depends on ARCH_MSM8X60
-	bool "MSM8x60 use TSIF1"
-	help
-	  Selects TSIF1 core to be used rather than TSIF0.
-	  The two TSIF cores share the same DM configuration
-	  so they cannot be used simultaneously.
-
-config MACH_MSM8X60_QT
-	depends on ARCH_MSM8X60
-	default n
-	bool "MSM8x60 QT"
-	help
-	  Support for the Qualcomm MSM8x60 QT board.
 
 endmenu
 
@@ -579,6 +395,7 @@ config MSM_DEBUG_UART
 	default 2 if MSM_DEBUG_UART2
 	default 3 if MSM_DEBUG_UART3
 
+if HAS_MSM_DEBUG_UART_PHYS
 choice
 	prompt "Debug UART"
 
@@ -596,6 +413,7 @@ choice
 	config MSM_DEBUG_UART3
 		bool "UART3"
 endchoice
+endif
 
 config CACHE_FLUSH_RANGE_LIMIT
 	hex "Cache flush range limit"
@@ -802,6 +620,9 @@ config MSM_PROC_COMM
 	help
 	  Enables a lightweight communications interface to the
 	  baseband processor.
+
+config MSM_PROC_COMM
+	bool
 
 config MSM_SMD
 	bool "MSM Shared Memory Driver (SMD)"
@@ -1443,6 +1264,9 @@ config MSM_DIRECT_SCLK_ACCESS
 
 config IOMMU_API
        bool
+
+config MSM_GPIOMUX
+	bool
 
 config MSM_GPIOMUX
 	bool

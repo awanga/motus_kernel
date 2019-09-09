@@ -76,8 +76,8 @@ MODULE_LICENSE("GPL");
 
 /***************************** Device Descriptor ****************************/
 
-#define MULTI_VENDOR_NUM	0x0525	/* XXX NetChip */
-#define MULTI_PRODUCT_NUM	0xa4ab	/* XXX */
+#define MULTI_VENDOR_NUM	0x1d6b	/* Linux Foundation */
+#define MULTI_PRODUCT_NUM	0x0104	/* Multifunction Composite Gadget */
 
 
 enum {
@@ -123,8 +123,6 @@ static const struct usb_descriptor_header *otg_desc[] = {
 
 
 enum {
-	MULTI_STRING_MANUFACTURER_IDX,
-	MULTI_STRING_PRODUCT_IDX,
 #ifdef CONFIG_USB_G_MULTI_RNDIS
 	MULTI_STRING_RNDIS_CONFIG_IDX,
 #endif
@@ -133,11 +131,7 @@ enum {
 #endif
 };
 
-static char manufacturer[50];
-
 static struct usb_string strings_dev[] = {
-	[MULTI_STRING_MANUFACTURER_IDX].s = manufacturer,
-	[MULTI_STRING_PRODUCT_IDX].s      = DRIVER_DESC,
 #ifdef CONFIG_USB_G_MULTI_RNDIS
 	[MULTI_STRING_RNDIS_CONFIG_IDX].s = "Multifunction with RNDIS",
 #endif
@@ -172,7 +166,7 @@ static u8 hostaddr[ETH_ALEN];
 
 #ifdef USB_ETH_RNDIS
 
-static __ref int rndis_do_config(struct usb_configuration *c)
+static __init int rndis_do_config(struct usb_configuration *c)
 {
 	int ret;
 
@@ -199,7 +193,6 @@ static __ref int rndis_do_config(struct usb_configuration *c)
 static int rndis_config_register(struct usb_composite_dev *cdev)
 {
 	static struct usb_configuration config = {
-		.bind			= rndis_do_config,
 		.bConfigurationValue	= MULTI_RNDIS_CONFIG_NUM,
 		.bmAttributes		= USB_CONFIG_ATT_SELFPOWER,
 	};
@@ -207,7 +200,7 @@ static int rndis_config_register(struct usb_composite_dev *cdev)
 	config.label          = strings_dev[MULTI_STRING_RNDIS_CONFIG_IDX].s;
 	config.iConfiguration = strings_dev[MULTI_STRING_RNDIS_CONFIG_IDX].id;
 
-	return usb_add_config(cdev, &config);
+	return usb_add_config(cdev, &config, rndis_do_config);
 }
 
 #else
@@ -224,7 +217,7 @@ static int rndis_config_register(struct usb_composite_dev *cdev)
 
 #ifdef CONFIG_USB_G_MULTI_CDC
 
-static __ref int cdc_do_config(struct usb_configuration *c)
+static __init int cdc_do_config(struct usb_configuration *c)
 {
 	int ret;
 
@@ -251,7 +244,6 @@ static __ref int cdc_do_config(struct usb_configuration *c)
 static int cdc_config_register(struct usb_composite_dev *cdev)
 {
 	static struct usb_configuration config = {
-		.bind			= cdc_do_config,
 		.bConfigurationValue	= MULTI_CDC_CONFIG_NUM,
 		.bmAttributes		= USB_CONFIG_ATT_SELFPOWER,
 	};
@@ -259,7 +251,7 @@ static int cdc_config_register(struct usb_composite_dev *cdev)
 	config.label          = strings_dev[MULTI_STRING_CDC_CONFIG_IDX].s;
 	config.iConfiguration = strings_dev[MULTI_STRING_CDC_CONFIG_IDX].id;
 
-	return usb_add_config(cdev, &config);
+	return usb_add_config(cdev, &config, cdc_do_config);
 }
 
 #else
@@ -316,19 +308,10 @@ static int __ref multi_bind(struct usb_composite_dev *cdev)
 		device_desc.bcdDevice = cpu_to_le16(0x0300 | 0x0099);
 	}
 
-	/* allocate string descriptor numbers */
-	snprintf(manufacturer, sizeof manufacturer, "%s %s with %s",
-	         init_utsname()->sysname, init_utsname()->release,
-	         gadget->name);
-
+	/* allocate string IDs */
 	status = usb_string_ids_tab(cdev, strings_dev);
 	if (unlikely(status < 0))
 		goto fail2;
-
-	device_desc.iManufacturer =
-		strings_dev[MULTI_STRING_MANUFACTURER_IDX].id;
-	device_desc.iProduct      =
-		strings_dev[MULTI_STRING_PRODUCT_IDX].id;
 
 	/* register configurations */
 	status = rndis_config_register(cdev);
@@ -370,14 +353,15 @@ static struct usb_composite_driver multi_driver = {
 	.name		= "g_multi",
 	.dev		= &device_desc,
 	.strings	= dev_strings,
-	.bind		= multi_bind,
 	.unbind		= __exit_p(multi_unbind),
+	.iProduct	= DRIVER_DESC,
+	.needs_serial	= 1,
 };
 
 
 static int __init multi_init(void)
 {
-	return usb_composite_register(&multi_driver);
+	return usb_composite_probe(&multi_driver, multi_bind);
 }
 module_init(multi_init);
 

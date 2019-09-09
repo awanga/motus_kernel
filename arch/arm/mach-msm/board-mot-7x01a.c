@@ -1964,10 +1964,6 @@ __setup("keypad=", board_keypad_setup);
  */
 
 MACHINE_START(MORRISON, "Morrison")
-#ifdef CONFIG_MSM_DEBUG_UART
-	.phys_io = MSM_DEBUG_UART_PHYS,
-	.io_pg_offst = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
-#endif
 	.boot_params = 0x10000100,
 	.fixup = mot_fixup,
 	.map_io = mot_map_io,
@@ -1978,10 +1974,6 @@ MACHINE_START(MORRISON, "Morrison")
 MACHINE_END
 
 MACHINE_START(MOTUS, "Motus")
-#ifdef CONFIG_MSM_DEBUG_UART
-    .phys_io        = MSM_DEBUG_UART_PHYS,
-    .io_pg_offst    = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
-#endif
     .boot_params    = 0x10000100,
     .fixup            = mot_fixup,
     .map_io            = mot_map_io,
@@ -1992,10 +1984,6 @@ MACHINE_START(MOTUS, "Motus")
 MACHINE_END
 
 MACHINE_START(ZEPPELIN, "Zeppelin")
-#ifdef CONFIG_MSM_DEBUG_UART
-    .phys_io        = MSM_DEBUG_UART_PHYS,
-    .io_pg_offst    = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
-#endif
     .boot_params    = 0x10000100,
     .fixup            = mot_fixup,
     .map_io            = mot_map_io,

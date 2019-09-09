@@ -55,11 +55,7 @@
 						   9-0 =int # */
 
 	bic     \irqnr, \irqstat, #0x1c00	@mask src
-#ifdef CONFIG_REQUEST_IPI
-	cmp     \irqnr, #0
-#else
 	cmp     \irqnr, #15
-#endif
 	ldr		\tmp, =1021
 	cmpcc	\irqnr, \irqnr
 	cmpne	\irqnr, \tmp
@@ -74,23 +70,19 @@
 	 * we won't easily be able to recreate later.
 	 */
 	.macro test_for_ipi, irqnr, irqstat, base, tmp
-#ifndef CONFIG_REQUEST_IPI
     bic \irqnr, \irqstat, #0x1c00
     cmp \irqnr, #16
     strcc   \irqstat, [\base, #GIC_CPU_EOI]
     cmpcs   \irqnr, \irqnr
-#endif
 	.endm
 
 	/* As above, this assumes that irqstat and base are preserved.. */
 
 	.macro test_for_ltirq, irqnr, irqstat, base, tmp
-#ifndef CONFIG_REQUEST_IPI
     bic \irqnr, \irqstat, #0x1c00
     mov     \tmp, #0
     cmp \irqnr, #16
     moveq   \tmp, #1
     streq   \irqstat, [\base, #GIC_CPU_EOI]
     cmp \tmp, #0
-#endif
 	.endm

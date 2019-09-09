@@ -49,7 +49,7 @@ struct radix_tree_node {
 	unsigned int	height;		/* Height from the bottom */
 	unsigned int	count;
 	struct rcu_head	rcu_head;
-	void		*slots[RADIX_TREE_MAP_SIZE];
+	void __rcu	*slots[RADIX_TREE_MAP_SIZE];
 	unsigned long	tags[RADIX_TREE_MAX_TAGS][RADIX_TREE_TAG_LONGS];
 };
 
@@ -675,7 +675,7 @@ unsigned long radix_tree_range_tag_if_tagged(struct radix_tree_root *root,
 	}
 
 	shift = (height - 1) * RADIX_TREE_MAP_SHIFT;
-	slot = radix_tree_indirect_to_ptr(root->rnode);
+	slot = indirect_to_ptr(root->rnode);
 
 	/*
 	 * we fill the path from (root->height - 2) to 0, leaving the index at
@@ -925,7 +925,8 @@ radix_tree_gang_lookup(struct radix_tree_root *root, void **results,
 			slot = *(((void ***)results)[ret + i]);
 			if (!slot)
 				continue;
-			results[ret + nr_found] = rcu_dereference_raw(slot);
+			results[ret + nr_found] =
+				indirect_to_ptr(rcu_dereference_raw(slot));
 			nr_found++;
 		}
 		ret += nr_found;

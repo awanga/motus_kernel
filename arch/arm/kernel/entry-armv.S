@@ -47,7 +47,8 @@
 	 * this macro assumes that irqstat (r6) and base (r5) are
 	 * preserved from get_irqnr_and_base above
 	 */
-	test_for_ipi r0, r6, r5, lr
+	ALT_SMP(test_for_ipi r0, r6, r5, lr)
+	ALT_UP_B(9997f)
 	movne	r0, sp
 	adrne	lr, BSYM(1b)
 	bne	do_IPI
@@ -58,6 +59,7 @@
 	adrne	lr, BSYM(1b)
 	bne	do_local_timer
 #endif
+9997:
 #endif
 
 	.endm
@@ -1010,7 +1012,7 @@ __kuser_cmpxchg:				@ 0xffff0fc0
 	 * A special ghost syscall is used for that (see traps.c).
 	 */
 	stmfd	sp!, {r7, lr}
-	ldr	r7, =1f			@ it's 20 bits
+	ldr	r7, 1f			@ it's 20 bits
 	swi	__ARM_NR_cmpxchg
 	ldmfd	sp!, {r7, pc}
 1:	.word	__ARM_NR_cmpxchg
@@ -1066,11 +1068,8 @@ kuser_cmpxchg32_fixup:
 	beq	1b
 	rsbs	r0, r3, #0
 	/* beware -- each __kuser slot must be 8 instructions max */
-#ifdef CONFIG_SMP
-	b	__kuser_memory_barrier
-#else
-	usr_ret	lr
-#endif
+	ALT_SMP(b	__kuser_memory_barrier)
+	ALT_UP(usr_ret	lr)
 
 #endif
 

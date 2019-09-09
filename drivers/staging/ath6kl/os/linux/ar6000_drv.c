@@ -1126,7 +1126,7 @@ ar6000_transfer_bin_file(AR_SOFTC_T *ar, AR6K_BIN_FILE file, A_UINT32 address, A
         if ((board_ext_address) && (fw_entry->size == (board_data_size + board_ext_data_size))) {
             A_UINT32 param;
 
-            status = BMIWriteMemory(ar->arHifDevice, board_ext_address, (A_UCHAR *)(((A_UINT32)fw_entry->data) + board_data_size), board_ext_data_size);
+            status = BMIWriteMemory(ar->arHifDevice, board_ext_address, (A_UCHAR *)(fw_entry->data + board_data_size), board_ext_data_size);
 
             if (status != A_OK) {
                 AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("BMI operation failed: %d\n", __LINE__));
@@ -1608,15 +1608,6 @@ ar6000_avail_ev(void *context, void *hif_handle)
     struct wireless_dev *wdev;
 #endif /* ATH6K_CONFIG_CFG80211 */
     A_STATUS init_status = A_OK;
-    HIF_DEVICE_OS_DEVICE_INFO osDevInfo;
-
-    A_MEMZERO(&osDevInfo, sizeof(osDevInfo));
-    if ( A_FAILED( HIFConfigureDevice(hif_handle, HIF_DEVICE_GET_OS_DEVICE,
-                    &osDevInfo, sizeof(osDevInfo))) )
-    {
-        AR_DEBUG_PRINTF(ATH_DEBUG_ERR,("%s: Failed to get OS device instance\n", __func__));
-        return A_ERROR;
-    }
 
     AR_DEBUG_PRINTF(ATH_DEBUG_INFO,("ar6000_available\n"));
 
@@ -1636,8 +1627,7 @@ ar6000_avail_ev(void *context, void *hif_handle)
     device_index = i;
 
 #ifdef ATH6K_CONFIG_CFG80211
-    wdev = ar6k_cfg80211_init(osDevInfo.pOSDevice);
-
+    wdev = ar6k_cfg80211_init(NULL);
     if (IS_ERR(wdev)) {
         AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("%s: ar6k_cfg80211_init failed\n", __func__));
         return A_ERROR;
@@ -1682,7 +1672,12 @@ ar6000_avail_ev(void *context, void *hif_handle)
 
 #ifdef SET_NETDEV_DEV
     if (ar_netif) { 
-        SET_NETDEV_DEV(dev, osDevInfo.pOSDevice);
+        HIF_DEVICE_OS_DEVICE_INFO osDevInfo;
+        A_MEMZERO(&osDevInfo, sizeof(osDevInfo));
+        if ( A_SUCCESS( HIFConfigureDevice(hif_handle, HIF_DEVICE_GET_OS_DEVICE,
+                        &osDevInfo, sizeof(osDevInfo))) ) {
+            SET_NETDEV_DEV(dev, osDevInfo.pOSDevice);
+        }
     }
 #endif 
 
@@ -2148,11 +2143,7 @@ ar6000_destroy(struct net_device *dev, unsigned int unregister)
         unregister_netdev(dev);
         is_netdev_registered = 0;
     }
-#ifndef free_netdev
-    kfree(dev);
-#else
     free_netdev(dev);
-#endif
 
 #ifdef ATH6K_CONFIG_CFG80211
     ar6k_cfg80211_deinit(ar);
@@ -3039,7 +3030,8 @@ ar6000_data_tx(struct sk_buff *skb, struct net_device *dev)
         A_UINT8 csumDest=0;
         A_UINT8 csum=skb->ip_summed;
         if(csumOffload && (csum==CHECKSUM_PARTIAL)){
-            csumStart=skb->csum_start-(skb->network_header-skb->head)+sizeof(ATH_LLC_SNAP_HDR);
+            csumStart = (skb->head + skb->csum_start - skb_network_header(skb) +
+			 sizeof(ATH_LLC_SNAP_HDR));
             csumDest=skb->csum_offset+csumStart;
         }
 #endif
@@ -6434,11 +6426,7 @@ A_STATUS ar6000_remove_ap_interface(AR_SOFTC_T *ar)
         ar6000_stop_ap_interface(ar);
 
         unregister_netdev(arApNetDev);
-#ifndef free_netdev
-        kfree(arApNetDev);
-#else
         free_netdev(apApNetDev);
-#endif
 
         A_PRINTF("Remove AP interface\n");
     }

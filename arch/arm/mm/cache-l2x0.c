@@ -144,6 +144,30 @@ static void l2x0_clean_all(void)
 	spin_unlock_irqrestore(&l2x0_lock, flags);
 }
 
+static void l2x0_flush_all(void)
+{
+	unsigned long flags;
+
+	/* clean all ways */
+	spin_lock_irqsave(&l2x0_lock, flags);
+	writel_relaxed(l2x0_way_mask, l2x0_base + L2X0_CLEAN_INV_WAY);
+	cache_wait_way(l2x0_base + L2X0_CLEAN_INV_WAY, l2x0_way_mask);
+	cache_sync();
+	spin_unlock_irqrestore(&l2x0_lock, flags);
+}
+
+static void l2x0_clean_all(void)
+{
+	unsigned long flags;
+
+	/* clean all ways */
+	spin_lock_irqsave(&l2x0_lock, flags);
+	writel_relaxed(l2x0_way_mask, l2x0_base + L2X0_CLEAN_WAY);
+	cache_wait_way(l2x0_base + L2X0_CLEAN_WAY, l2x0_way_mask);
+	cache_sync();
+	spin_unlock_irqrestore(&l2x0_lock, flags);
+}
+
 static void l2x0_inv_all(void)
 {
 	unsigned long flags;
@@ -360,12 +384,21 @@ void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask)
 	way_size = 1 << (way_size + 3);
 	l2x0_size = ways * way_size * SZ_1K;
 
-	l2x0_inv_all();
+	/*
+	 * Check if l2x0 controller is already enabled.
+	 * If you are booting from non-secure mode
+	 * accessing the below registers will fault.
+	 */
+	if (!(readl_relaxed(l2x0_base + L2X0_CTRL) & 1)) {
 
-	/* enable L2X0 */
-	bits = readl_relaxed(l2x0_base + L2X0_CTRL);
-	bits |= 0x01;	/* set bit 0 */
-	writel_relaxed(bits, l2x0_base + L2X0_CTRL);
+		/* l2x0 controller is disabled */
+		writel_relaxed(aux, l2x0_base + L2X0_AUX_CTRL);
+
+		l2x0_inv_all();
+
+		/* enable L2X0 */
+		writel_relaxed(1, l2x0_base + L2X0_CTRL);
+	}
 
 	switch (cache_id & L2X0_CACHE_ID_PART_MASK) {
 	case L2X0_CACHE_ID_PART_L220:
@@ -390,6 +423,9 @@ void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask)
 	}
 
 	outer_cache.sync = l2x0_cache_sync;
+	outer_cache.flush_all = l2x0_flush_all;
+	outer_cache.inv_all = l2x0_inv_all;
+	outer_cache.disable = l2x0_disable;
 
 	outer_cache.flush_all = l2x0_flush_all;
 	outer_cache.inv_all = l2x0_inv_all;

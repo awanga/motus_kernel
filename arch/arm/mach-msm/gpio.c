@@ -524,7 +524,6 @@ int msm_gpios_request_enable(const struct msm_gpio *table, int size)
 		msm_gpios_free(table, size);
 	return rc;
 }
-EXPORT_SYMBOL(msm_gpios_request_enable);
 
 void msm_gpios_disable_free(const struct msm_gpio *table, int size)
 {

@@ -554,76 +554,43 @@ struct l2cap_pinfo {
 #define L2CAP_CONF_MAX_CONF_REQ 2
 #define L2CAP_CONF_MAX_CONF_RSP 2
 
-#define L2CAP_RECONF_NONE          0x00
-#define L2CAP_RECONF_INT           0x01
-#define L2CAP_RECONF_ACC           0x02
+#define L2CAP_CONN_SAR_SDU         0x0001
+#define L2CAP_CONN_SREJ_SENT       0x0002
+#define L2CAP_CONN_WAIT_F          0x0004
+#define L2CAP_CONN_SREJ_ACT        0x0008
+#define L2CAP_CONN_SEND_PBIT       0x0010
+#define L2CAP_CONN_REMOTE_BUSY     0x0020
+#define L2CAP_CONN_LOCAL_BUSY      0x0040
+#define L2CAP_CONN_REJ_ACT         0x0080
+#define L2CAP_CONN_SEND_FBIT       0x0100
+#define L2CAP_CONN_RNR_SENT        0x0200
+#define L2CAP_CONN_SAR_RETRY       0x0400
 
-#define L2CAP_CONN_SREJ_ACT        0x01
-#define L2CAP_CONN_REJ_ACT         0x02
-#define L2CAP_CONN_REMOTE_BUSY     0x04
-#define L2CAP_CONN_LOCAL_BUSY      0x08
-#define L2CAP_CONN_SEND_FBIT       0x10
-#define L2CAP_CONN_SENT_RNR        0x20
-#define L2CAP_CONN_MOVE_PENDING   0x40
+#define __mod_retrans_timer() mod_timer(&l2cap_pi(sk)->retrans_timer, \
+		jiffies +  msecs_to_jiffies(L2CAP_DEFAULT_RETRANS_TO));
+#define __mod_monitor_timer() mod_timer(&l2cap_pi(sk)->monitor_timer, \
+		jiffies + msecs_to_jiffies(L2CAP_DEFAULT_MONITOR_TO));
+#define __mod_ack_timer() mod_timer(&l2cap_pi(sk)->ack_timer, \
+		jiffies + msecs_to_jiffies(L2CAP_DEFAULT_ACK_TO));
 
-#define L2CAP_SEQ_LIST_CLEAR       0xFFFF
-#define L2CAP_SEQ_LIST_TAIL        0x8000
+static inline int l2cap_tx_window_full(struct sock *sk)
+{
+	struct l2cap_pinfo *pi = l2cap_pi(sk);
+	int sub;
 
-#define L2CAP_ERTM_TX_STATE_XMIT          0x01
-#define L2CAP_ERTM_TX_STATE_WAIT_F        0x02
+	sub = (pi->next_tx_seq - pi->expected_ack_seq) % 64;
 
-#define L2CAP_ERTM_RX_STATE_RECV                    0x01
-#define L2CAP_ERTM_RX_STATE_SREJ_SENT               0x02
-#define L2CAP_ERTM_RX_STATE_AMP_MOVE                0x03
-#define L2CAP_ERTM_RX_STATE_WAIT_P_FLAG             0x04
-#define L2CAP_ERTM_RX_STATE_WAIT_P_FLAG_RECONFIGURE 0x05
-#define L2CAP_ERTM_RX_STATE_WAIT_F_FLAG             0x06
+	if (sub < 0)
+		sub += 64;
 
-#define L2CAP_ERTM_TXSEQ_EXPECTED        0x00
-#define L2CAP_ERTM_TXSEQ_EXPECTED_SREJ   0x01
-#define L2CAP_ERTM_TXSEQ_UNEXPECTED      0x02
-#define L2CAP_ERTM_TXSEQ_UNEXPECTED_SREJ 0x03
-#define L2CAP_ERTM_TXSEQ_DUPLICATE       0x04
-#define L2CAP_ERTM_TXSEQ_DUPLICATE_SREJ  0x05
-#define L2CAP_ERTM_TXSEQ_INVALID         0x06
-#define L2CAP_ERTM_TXSEQ_INVALID_IGNORE  0x07
+	return sub == pi->remote_tx_win;
+}
 
-#define L2CAP_ERTM_EVENT_DATA_REQUEST          0x01
-#define L2CAP_ERTM_EVENT_LOCAL_BUSY_DETECTED   0x02
-#define L2CAP_ERTM_EVENT_LOCAL_BUSY_CLEAR      0x03
-#define L2CAP_ERTM_EVENT_RECV_REQSEQ_AND_FBIT  0x04
-#define L2CAP_ERTM_EVENT_RECV_FBIT             0x05
-#define L2CAP_ERTM_EVENT_RETRANS_TIMER_EXPIRES 0x06
-#define L2CAP_ERTM_EVENT_MONITOR_TIMER_EXPIRES 0x07
-#define L2CAP_ERTM_EVENT_EXPLICIT_POLL         0x08
-#define L2CAP_ERTM_EVENT_RECV_IFRAME           0x09
-#define L2CAP_ERTM_EVENT_RECV_RR               0x0a
-#define L2CAP_ERTM_EVENT_RECV_REJ              0x0b
-#define L2CAP_ERTM_EVENT_RECV_RNR              0x0c
-#define L2CAP_ERTM_EVENT_RECV_SREJ             0x0d
-#define L2CAP_ERTM_EVENT_RECV_FRAME            0x0e
-
-#define L2CAP_AMP_MOVE_NONE      0
-#define L2CAP_AMP_MOVE_INITIATOR 1
-#define L2CAP_AMP_MOVE_RESPONDER 2
-
-#define L2CAP_AMP_STATE_STABLE			0
-#define L2CAP_AMP_STATE_WAIT_CREATE		1
-#define L2CAP_AMP_STATE_WAIT_CREATE_RSP		2
-#define L2CAP_AMP_STATE_WAIT_MOVE		3
-#define L2CAP_AMP_STATE_WAIT_MOVE_RSP		4
-#define L2CAP_AMP_STATE_WAIT_MOVE_RSP_SUCCESS	5
-#define L2CAP_AMP_STATE_WAIT_MOVE_CONFIRM	6
-#define L2CAP_AMP_STATE_WAIT_MOVE_CONFIRM_RSP	7
-#define L2CAP_AMP_STATE_WAIT_LOGICAL_COMPLETE	8
-#define L2CAP_AMP_STATE_WAIT_LOGICAL_CONFIRM	9
-#define L2CAP_AMP_STATE_WAIT_LOCAL_BUSY		10
-#define L2CAP_AMP_STATE_WAIT_PREPARE		11
-#define L2CAP_AMP_STATE_RESEGMENT		12
-
-#define __delta_seq(x, y, pi) ((x) >= (y) ? (x) - (y) : \
-				(pi)->tx_win_max + 1 - (y) + (x))
-#define __next_seq(x, pi) ((x + 1) & ((pi)->tx_win_max))
+#define __get_txseq(ctrl) ((ctrl) & L2CAP_CTRL_TXSEQ) >> 1
+#define __get_reqseq(ctrl) ((ctrl) & L2CAP_CTRL_REQSEQ) >> 8
+#define __is_iframe(ctrl) !((ctrl) & L2CAP_CTRL_FRAME_TYPE)
+#define __is_sframe(ctrl) (ctrl) & L2CAP_CTRL_FRAME_TYPE
+#define __is_sar_start(ctrl) ((ctrl) & L2CAP_CTRL_SAR) == L2CAP_SDU_START
 
 void l2cap_load(void);
 

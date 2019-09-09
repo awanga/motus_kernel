@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
+#include <linux/highmem.h>
 
 #include <asm/cacheflush.h>
 #include <asm/cachetype.h>
@@ -38,6 +39,18 @@ static void flush_pfn_alias(unsigned long pfn, unsigned long vaddr)
 	    :
 	    : "r" (to), "r" (to + PAGE_SIZE - L1_CACHE_BYTES), "r" (zero)
 	    : "cc");
+}
+
+static void flush_icache_alias(unsigned long pfn, unsigned long vaddr, unsigned long len)
+{
+	unsigned long colour = CACHE_COLOUR(vaddr);
+	unsigned long offset = vaddr & (PAGE_SIZE - 1);
+	unsigned long to;
+
+	set_pte_ext(TOP_PTE(ALIAS_FLUSH_START) + colour, pfn_pte(pfn, PAGE_KERNEL), 0);
+	to = ALIAS_FLUSH_START + (colour << PAGE_SHIFT) + offset;
+	flush_tlb_kernel_page(to);
+	flush_icache_range(to, to + len);
 }
 
 void flush_cache_mm(struct mm_struct *mm)
@@ -90,8 +103,10 @@ void flush_cache_page(struct vm_area_struct *vma, unsigned long user_addr, unsig
 	if (vma->vm_flags & VM_EXEC && icache_is_vivt_asid_tagged())
 		__flush_icache_all();
 }
+
 #else
-#define flush_pfn_alias(pfn,vaddr)	do { } while (0)
+#define flush_pfn_alias(pfn,vaddr)		do { } while (0)
+#define flush_icache_alias(pfn,vaddr,len)	do { } while (0)
 #endif
 
 static void flush_ptrace_access_other(void *args)
@@ -117,10 +132,13 @@ void flush_ptrace_access(struct vm_area_struct *vma, struct page *page,
 		return;
 	}
 
-	/* VIPT non-aliasing cache */
+	/* VIPT non-aliasing D-cache */
 	if (vma->vm_flags & VM_EXEC) {
 		unsigned long addr = (unsigned long)kaddr;
-		__cpuc_coherent_kern_range(addr, addr + len);
+		if (icache_is_vipt_aliasing())
+			flush_icache_alias(page_to_pfn(page), uaddr, len);
+		else
+			__cpuc_coherent_kern_range(addr, addr + len);
 		if (cache_ops_need_broadcast())
 			smp_call_function(flush_ptrace_access_other,
 					  NULL, 1);
@@ -163,10 +181,10 @@ void __flush_dcache_page(struct address_space *mapping, struct page *page)
 			__cpuc_flush_dcache_area(addr, PAGE_SIZE);
 			kunmap_high(page);
 		} else if (cache_is_vipt()) {
-			pte_t saved_pte;
-			addr = kmap_high_l1_vipt(page, &saved_pte);
+			/* unmapped pages might still be cached */
+			addr = kmap_atomic(page);
 			__cpuc_flush_dcache_area(addr, PAGE_SIZE);
-			kunmap_high_l1_vipt(page, saved_pte);
+			kunmap_atomic(addr);
 		}
 	}
 
@@ -234,7 +252,7 @@ void __sync_icache_dcache(pte_t pteval)
 	else
 		mapping = NULL;
 
-	if (test_and_clear_bit(PG_dcache_dirty, &page->flags))
+	if (!test_and_set_bit(PG_dcache_clean, &page->flags))
 		__flush_dcache_page(mapping, page);
 	/* pte_exec() already checked above for non-aliasing VIPT cache */
 	if (cache_is_vipt_nonaliasing() || pte_exec(pteval))
@@ -275,13 +293,14 @@ void flush_dcache_page(struct page *page)
 
 	if (!cache_ops_need_broadcast() &&
 	    mapping && !mapping_mapped(mapping))
-		set_bit(PG_dcache_dirty, &page->flags);
+		clear_bit(PG_dcache_clean, &page->flags);
 	else {
 		__flush_dcache_page(mapping, page);
 		if (mapping && cache_is_vivt())
 			__flush_dcache_aliases(mapping, page);
 		else if (mapping)
 			__flush_icache_all();
+		set_bit(PG_dcache_clean, &page->flags);
 	}
 }
 EXPORT_SYMBOL(flush_dcache_page);

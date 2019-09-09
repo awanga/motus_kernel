@@ -5,10 +5,12 @@ obj-$(CONFIG_CPU_FREQ_MSM) += cpufreq.o
 obj-$(CONFIG_DEBUG_FS) += nohlt.o clock-debug.o
 obj-$(CONFIG_KEXEC) += msm_kexec.o
 
-obj-$(CONFIG_MSM_PROC_COMM) += proc_comm.o
+obj-$(CONFIG_ARCH_MSM8X60) += clock-dummy.o iommu.o iommu_dev.o devices-msm8x60-iommu.o
+obj-$(CONFIG_MSM_PROC_COMM) += proc_comm.o clock-pcom.o vreg.o
+obj-$(CONFIG_MSM_PROC_COMM) += clock.o
+
 ifndef CONFIG_ARCH_MSM8X60
-	obj-$(CONFIG_MSM_PROC_COMM) += clock-pcom.o internal_power_rail.o
-	obj-$(CONFIG_MSM_PROC_COMM) += vboost.o vreg.o mpp.o
+	obj-$(CONFIG_MSM_PROC_COMM) += internal_power_rail.o vboost.o vreg.o mpp.o
 	ifdef CONFIG_MSM_PROC_COMM
 		obj-$(CONFIG_DEBUG_FS) += pmic_debugfs.o
 	endif
@@ -125,6 +127,7 @@ obj-$(CONFIG_MACH_TROUT) += board-trout.o board-trout-gpio.o board-trout-mmc.o d
 obj-$(CONFIG_MACH_HALIBUT) += board-halibut.o devices-msm7x00.o
 obj-$(CONFIG_ARCH_MSM7X30) += board-msm7x30.o devices-msm7x30.o
 obj-$(CONFIG_ARCH_QSD8X50) += board-qsd8x50.o devices-qsd8x50.o
+obj-$(CONFIG_ARCH_MSM8X60) += board-msm8x60.o
 
 obj-$(CONFIG_MACH_MOT) += board-mot-7x01a.o board-mot-battery.o board-mot-keypad.o board-mot-switch.o board-mot-vibrator.o board-mot-akm.o board-mot-misc.o board-mot-pmic.o board-mot-usbhost.o
 ifdef CONFIG_MACH_MOT

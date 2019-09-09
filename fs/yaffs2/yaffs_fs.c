@@ -2263,7 +2263,7 @@ static struct super_block *yaffs_internal_read_super(int yaffsVersion,
         YINIT_LIST_HEAD(&dev->searchContexts);
         dev->removeObjectCallback = yaffs_RemoveObjectCallback;
 
-	init_MUTEX(&dev->grossLock);
+	sema_init(&dev->grossLock, 1);
 
 	yaffs_GrossLock(dev);
 

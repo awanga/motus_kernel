@@ -46,7 +46,7 @@ struct esd_poll
                               LOCAL VARIABLES
 =============================================================================*/
 static LIST_HEAD(esd_poll_list);
-static DECLARE_MUTEX(esd_poll_list_lock);
+static DEFINE_SEMAPHORE(esd_poll_list_lock);
 static DECLARE_DELAYED_WORK(esd_poll_workqueue, esd_poll_work);
 static ulong poll_freq = 6;
 

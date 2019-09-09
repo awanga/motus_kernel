@@ -200,8 +200,19 @@ otg_shutdown(struct otg_transceiver *otg)
 extern int otg_send_event(enum usb_otg_event event);
 
 /* for usb host and peripheral controller drivers */
+#ifdef CONFIG_USB_OTG_UTILS
 extern struct otg_transceiver *otg_get_transceiver(void);
 extern void otg_put_transceiver(struct otg_transceiver *);
+#else
+static inline struct otg_transceiver *otg_get_transceiver(void)
+{
+	return NULL;
+}
+
+static inline void otg_put_transceiver(struct otg_transceiver *x)
+{
+}
+#endif
 
 /* Context: can sleep */
 static inline int

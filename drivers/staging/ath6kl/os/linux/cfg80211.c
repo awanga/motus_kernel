@@ -808,7 +808,7 @@ ar6k_cfg80211_scanComplete_event(AR_SOFTC_T *ar, A_STATUS status)
 
 static int
 ar6k_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
-                      A_UINT8 key_index, const A_UINT8 *mac_addr,
+                      A_UINT8 key_index, bool pairwise, const A_UINT8 *mac_addr,
                       struct key_params *params)
 {
     AR_SOFTC_T *ar = (AR_SOFTC_T *)ar6k_priv(ndev);
@@ -901,7 +901,7 @@ ar6k_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 
 static int
 ar6k_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
-                      A_UINT8 key_index, const A_UINT8 *mac_addr)
+                      A_UINT8 key_index, bool pairwise, const A_UINT8 *mac_addr)
 {
     AR_SOFTC_T *ar = (AR_SOFTC_T *)ar6k_priv(ndev);
 
@@ -936,7 +936,8 @@ ar6k_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
 
 static int
 ar6k_cfg80211_get_key(struct wiphy *wiphy, struct net_device *ndev,
-                      A_UINT8 key_index, const A_UINT8 *mac_addr, void *cookie,
+                      A_UINT8 key_index, bool pairwise, const A_UINT8 *mac_addr,
+                      void *cookie,
                       void (*callback)(void *cookie, struct key_params*))
 {
     AR_SOFTC_T *ar = (AR_SOFTC_T *)ar6k_priv(ndev);
@@ -1092,7 +1093,7 @@ ar6k_cfg80211_set_bitrate_mask(struct wiphy *wiphy, struct net_device *dev,
 
 /* The type nl80211_tx_power_setting replaces the following data type from 2.6.36 onwards */
 static int
-ar6k_cfg80211_set_txpower(struct wiphy *wiphy, enum tx_power_setting type, int dbm)
+ar6k_cfg80211_set_txpower(struct wiphy *wiphy, enum nl80211_tx_power_setting type, int dbm)
 {
     AR_SOFTC_T *ar = (AR_SOFTC_T *)wiphy_priv(wiphy);
     A_UINT8 ar_dbm;
@@ -1111,9 +1112,9 @@ ar6k_cfg80211_set_txpower(struct wiphy *wiphy, enum tx_power_setting type, int d
 
     ar->arTxPwrSet = FALSE;
     switch(type) {
-    case TX_POWER_AUTOMATIC:
+    case NL80211_TX_POWER_AUTOMATIC:
         return 0;
-    case TX_POWER_LIMITED:
+    case NL80211_TX_POWER_LIMITED:
         ar->arTxPwr = ar_dbm = dbm;
         ar->arTxPwrSet = TRUE;
         break;

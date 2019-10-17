@@ -558,7 +558,7 @@ struct platform_device msm_device_touchscreen = {
 	.resource = resources_tssc,
 };
 
-struct clk_lookup msm_clocks_7x01a[] = {
+struct clk msm_clocks_7x01a[] = {
 	CLK_PCOM("adm_clk",	ADM_CLK,	NULL, 0),
 	CLK_PCOM("adsp_clk",	ADSP_CLK,	NULL, 0),
 	CLK_PCOM("ebi1_clk",	EBI1_CLK,	NULL, CLK_MIN),

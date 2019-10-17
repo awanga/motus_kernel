@@ -199,6 +199,7 @@ enum {
  */
 
 int meta_proc(unsigned cmd, unsigned *data);
+void __init proc_comm_boot_wait(void);
 
 #endif
 

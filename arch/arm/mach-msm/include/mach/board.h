@@ -185,6 +185,7 @@ struct msm_camera_sensor_info {
 };
 
 struct clk;
+struct clk_lookup;
 
 extern struct sys_timer msm_timer;
 

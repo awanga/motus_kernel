@@ -114,6 +114,7 @@ static int __flush_iotlb(struct iommu_domain *domain)
 		__disable_clocks(iommu_drvdata);
 	}
 fail:
+
 	return ret;
 }
 
@@ -585,9 +586,10 @@ static phys_addr_t msm_iommu_iova_to_phys(struct iommu_domain *domain,
 	/* Invalidate context TLB */
 	SET_CTX_TLBIALL(base, ctx, 0);
 	mb();
-	SET_V2PPR(base, ctx, va & V2Pxx_VA);
+	SET_V2PPR_VA(base, ctx, va >> V2Pxx_VA_SHIFT);
 
 	mb();
+
 	par = GET_PAR(base, ctx);
 
 	/* We are dealing with a supersection */
@@ -643,7 +645,7 @@ irqreturn_t msm_iommu_fault_handler(int irq, void *dev_id)
 	struct msm_iommu_drvdata *drvdata = dev_id;
 	void __iomem *base;
 	unsigned int fsr;
-	int i, ret;
+	int ncb, i, ret;
 
 	spin_lock(&msm_iommu_lock);
 

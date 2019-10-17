@@ -94,6 +94,15 @@ do { \
 #define CP_WT			2
 #define CP_WB_NWA		3
 
+/* Memory type and cache policy attributes */
+#define MT_SO			0
+#define MT_DEV			1
+#define MT_NORMAL		2
+#define CP_NONCACHED		0
+#define CP_WB_WA		1
+#define CP_WT			2
+#define CP_WB_NWA		3
+
 /* Global register setters / getters */
 #define SET_M2VCBR_N(b, N, v)	 SET_GLOBAL_REG_N(M2VCBR_N, N, (b), (v))
 #define SET_CBACR_N(b, N, v)	 SET_GLOBAL_REG_N(CBACR_N, N, (b), (v))

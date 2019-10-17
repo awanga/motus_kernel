@@ -176,6 +176,29 @@
  */
 #define MSM_MMC_REQ_TIMEOUT	10000 /* msecs */
 
+/*
+ * Controller HW limitations
+ */
+#define MCI_DATALENGTH_BITS	25
+#define MMC_MAX_REQ_SIZE	((1 << MCI_DATALENGTH_BITS) - 1)
+/* MCI_DATA_CTL BLOCKSIZE up to 4096 */
+#define MMC_MAX_BLK_SIZE	4096
+#define MMC_MIN_BLK_SIZE	512
+#define MMC_MAX_BLK_CNT		(MMC_MAX_REQ_SIZE / MMC_MIN_BLK_SIZE)
+
+/* 64KiB */
+#define MAX_SG_SIZE		(64 * 1024)
+#define MAX_NR_SG_DMA_PIO	(MMC_MAX_REQ_SIZE / MAX_SG_SIZE)
+
+/*
+ * DMA limitations
+ */
+/* upto 16 bits (64K - 1) */
+#define MMC_MAX_DMA_ROWS (64 * 1024 - 1)
+#define MMC_MAX_DMA_BOX_LENGTH (MMC_MAX_DMA_ROWS * MCI_FIFOSIZE)
+#define MMC_MAX_DMA_CMDS (MAX_NR_SG_DMA_PIO * (MMC_MAX_REQ_SIZE / \
+		MMC_MAX_DMA_BOX_LENGTH))
+
 struct clk;
 
 struct msmsdcc_nc_dmadata {
@@ -199,7 +222,8 @@ struct msmsdcc_dma_data {
 	int				crci;
 	struct msmsdcc_host		*host;
 	int				busy; /* Set if DM is busy */
-	unsigned int 			result;
+	int				active;
+	unsigned int			result;
 	struct msm_dmov_errdata		err;
 };
 
@@ -300,6 +324,8 @@ struct msmsdcc_host {
 #if defined(CONFIG_MACH_MOT)
 	struct work_struct 	power_cycle_task;
 #endif
+
+	bool prog_scan;
 };
 
 int msmsdcc_set_pwrsave(struct mmc_host *mmc, int pwrsave);

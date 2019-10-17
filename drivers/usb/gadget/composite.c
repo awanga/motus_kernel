@@ -1054,26 +1054,9 @@ unknown:
 		 */
 		switch (ctrl->bRequestType & USB_RECIP_MASK) {
 		case USB_RECIP_INTERFACE:
-
-			if (cdev->config == NULL)
-				return value;
-
-			if (w_index >= cdev->config->next_interface_id)
-				return value;
-			/* Find correct function */
-			for (id = 0; id < MAX_CONFIG_INTERFACES; id++) {
-				f = cdev->config->interface[id];
-				if (!f)
-					break;
-				if (f->disabled)
-					continue;
-				if (!tmp)
-					break;
-				tmp--;
-			}
-
-			if (tmp)
-				f = NULL;
+			if (!cdev->config || w_index >= MAX_CONFIG_INTERFACES)
+				break;
+			f = cdev->config->interface[intf];
 			break;
 
 		case USB_RECIP_ENDPOINT:
@@ -1334,18 +1317,24 @@ static int composite_bind(struct usb_gadget *gadget)
 	if (bcdDevice)
 		cdev->desc.bcdDevice = cpu_to_le16(bcdDevice);
 
-	/* strings can't be assigned before bind() allocates the
-	 * releavnt identifiers
-	 */
-	if (cdev->desc.iManufacturer && iManufacturer)
-		string_override(composite->strings,
-			cdev->desc.iManufacturer, iManufacturer);
-	if (cdev->desc.iProduct && iProduct)
-		string_override(composite->strings,
-			cdev->desc.iProduct, iProduct);
-	if (cdev->desc.iSerialNumber && iSerialNumber)
-		string_override(composite->strings,
-			cdev->desc.iSerialNumber, iSerialNumber);
+	/* string overrides */
+	if (iManufacturer || !cdev->desc.iManufacturer) {
+		if (!iManufacturer && !composite->iManufacturer &&
+		    !*composite_manufacturer)
+			snprintf(composite_manufacturer,
+				 sizeof composite_manufacturer,
+				 "%s %s with %s",
+				 init_utsname()->sysname,
+				 init_utsname()->release,
+				 gadget->name);
+
+		cdev->manufacturer_override =
+			override_id(cdev, &cdev->desc.iManufacturer);
+	}
+
+	if (iProduct || (!cdev->desc.iProduct && composite->iProduct))
+		cdev->product_override =
+			override_id(cdev, &cdev->desc.iProduct);
 
 	if (iSerialNumber)
 		cdev->serial_override =
@@ -1390,6 +1379,8 @@ composite_suspend(struct usb_gadget *gadget)
 		composite->suspend(cdev);
 
 	cdev->suspended = 1;
+
+	usb_gadget_vbus_draw(gadget, 2);
 }
 
 static void
@@ -1397,6 +1388,7 @@ composite_resume(struct usb_gadget *gadget)
 {
 	struct usb_composite_dev	*cdev = get_gadget_data(gadget);
 	struct usb_function		*f;
+	u8				maxpower;
 
 	/* REVISIT:  should we have config level
 	 * suspend/resume callbacks?
@@ -1409,6 +1401,11 @@ composite_resume(struct usb_gadget *gadget)
 			if (f->resume)
 				f->resume(f);
 		}
+
+		maxpower = cdev->config->bMaxPower;
+
+		usb_gadget_vbus_draw(gadget, maxpower ?
+			(2 * maxpower) : CONFIG_USB_GADGET_VBUS_DRAW);
 	}
 
 	cdev->suspended = 0;

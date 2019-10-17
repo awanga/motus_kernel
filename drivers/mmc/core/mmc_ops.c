@@ -463,20 +463,40 @@ int mmc_send_status(struct mmc_card *card, u32 *status)
 	return 0;
 }
 
-static int mmc_bustest_write(struct mmc_host *host,
-				 struct mmc_card *card, int buswidth)
+static int
+mmc_send_bus_test(struct mmc_card *card, struct mmc_host *host, u8 opcode,
+		  u8 len)
 {
 	struct mmc_request mrq;
 	struct mmc_command cmd;
 	struct mmc_data data;
 	struct scatterlist sg;
-	int bustest_send_pat[4] = { 0x80, 0x0, 0x5A, 0x55AA };
-	u32 *test_pat;
-	int err = 0;
+	u8 *data_buf;
+	u8 *test_buf;
+	int i, err;
+	static u8 testdata_8bit[8] = { 0x55, 0xaa, 0, 0, 0, 0, 0, 0 };
+	static u8 testdata_4bit[4] = { 0x5a, 0, 0, 0 };
 
-	test_pat = kmalloc(512, GFP_KERNEL);
-	if (test_pat == NULL)
+	/* dma onto stack is unsafe/nonportable, but callers to this
+	 * routine normally provide temporary on-stack buffers ...
+	 */
+	data_buf = kmalloc(len, GFP_KERNEL);
+	if (!data_buf)
 		return -ENOMEM;
+
+	if (len == 8)
+		test_buf = testdata_8bit;
+	else if (len == 4)
+		test_buf = testdata_4bit;
+	else {
+		printk(KERN_ERR "%s: Invalid bus_width %d\n",
+		       mmc_hostname(host), len);
+		kfree(data_buf);
+		return -EINVAL;
+	}
+
+	if (opcode == MMC_BUS_TEST_W)
+		memcpy(data_buf, test_buf, len);
 
 	memset(&mrq, 0, sizeof(struct mmc_request));
 	memset(&cmd, 0, sizeof(struct mmc_command));
@@ -484,121 +504,63 @@ static int mmc_bustest_write(struct mmc_host *host,
 
 	mrq.cmd = &cmd;
 	mrq.data = &data;
-
-	cmd.opcode = MMC_BUSTEST_W;
+	cmd.opcode = opcode;
 	cmd.arg = 0;
-	cmd.flags = MMC_RSP_R1 | MMC_CMD_ADTC;
 
-	data.blksz = 4; /* Generic blksz that works for 8 / 4 / 1 bit modes */
+	/* NOTE HACK:  the MMC_RSP_SPI_R1 is always correct here, but we
+	 * rely on callers to never use this with "native" calls for reading
+	 * CSD or CID.  Native versions of those commands use the R2 type,
+	 * not R1 plus a data block.
+	 */
+	cmd.flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC;
+
+	data.blksz = len;
 	data.blocks = 1;
-	data.flags = MMC_DATA_WRITE;
-	data.sg = &sg;
-	data.sg_len = 1;
-
-	/* The mmc bus test timeout is primarily dependent on mmc clock and
-	*  the host controller since the card acts as a loopback device as
-	*  there is no data is being written to/read from the card's memory.
-	*  Since the test will be conducted at the frequency of operation
-	*  (20 MHz or higher), 1ms timeout is more than adequate. The same
-	*  timeout values are used for read bustest as well.
-	*/
-	data.timeout_ns = 1000000;
-	data.timeout_clks = 0;
-
-	test_pat[0] = bustest_send_pat[buswidth];
-	mmc_set_bus_width(card->host, buswidth);
-	sg_init_one(&sg, test_pat, 4);
-
-	mmc_wait_for_req(host, &mrq);
-
-	pr_debug("%s: Test Pattern sent: 0x%x\n", __func__, test_pat[0]);
-	if (cmd.error || data.error) {
-		pr_err("%s: cmd.error : %d data.error: %d\n",
-			__func__, cmd.error, data.error);
-		err = -1;
-	}
-	kfree(test_pat);
-	return err;
-}
-
-static int mmc_bustest_read(struct mmc_host *host,
-				 struct mmc_card *card, int buswidth)
-{
-	struct mmc_request mrq;
-	struct mmc_command cmd;
-	struct mmc_data data;
-	struct scatterlist sg;
-	int bustest_recv_pat[4] = { 0x40, 0x0, 0xA5, 0xAA55 };
-	u32 *test_pat;
-	int err = 0;
-
-	test_pat = kmalloc(512, GFP_KERNEL);
-	if (test_pat == NULL)
-		return -ENOMEM;
-
-	memset(test_pat, 0, 512);
-	memset(&mrq, 0, sizeof(struct mmc_request));
-	memset(&cmd, 0, sizeof(struct mmc_command));
-	memset(&data, 0, sizeof(struct mmc_data));
-
-	mrq.cmd = &cmd;
-	mrq.data = &data;
-
-	cmd.opcode = MMC_BUSTEST_R;
-	cmd.arg = 0;
-	cmd.flags = MMC_RSP_R1 | MMC_CMD_ADTC;
-
-	data.blocks = 1;
-	data.flags = MMC_DATA_READ;
-	data.sg = &sg;
-	data.sg_len = 1;
-	data.timeout_ns = 1000000;
-	data.timeout_clks = 0;
-
-	if (buswidth == MMC_BUS_WIDTH_8) {
-		data.blksz = 8;
-		sg_init_one(&sg, test_pat, 8);
-	} else if (buswidth == MMC_BUS_WIDTH_4) {
-		data.blksz = 4;
-		sg_init_one(&sg, test_pat, 4);
-	} else {
-		data.blksz = 1;
-		sg_init_one(&sg, test_pat, 1);
-	}
-
-	mmc_wait_for_req(host, &mrq);
-
-	pr_debug("%s: Test pattern received: 0x%x\n", __func__, test_pat[0]);
-	if (cmd.error || data.error) {
-		pr_err("%s: cmd.error: %d  data.error: %d\n",
-			__func__, cmd.error, data.error);
-		err = -1;
-		goto cmderr;
-	}
-
-	if (test_pat[0] == bustest_recv_pat[buswidth])
-		pr_debug("%s: Bus test pass for buswidth:%d\n",
-						 __func__, buswidth);
+	if (opcode == MMC_BUS_TEST_R)
+		data.flags = MMC_DATA_READ;
 	else
-		err = -1;
-cmderr:
-	kfree(test_pat);
+		data.flags = MMC_DATA_WRITE;
+
+	data.sg = &sg;
+	data.sg_len = 1;
+	sg_init_one(&sg, data_buf, len);
+	mmc_wait_for_req(host, &mrq);
+	err = 0;
+	if (opcode == MMC_BUS_TEST_R) {
+		for (i = 0; i < len / 4; i++)
+			if ((test_buf[i] ^ data_buf[i]) != 0xff) {
+				err = -EIO;
+				break;
+			}
+	}
+	kfree(data_buf);
+
+	if (cmd.error)
+		return cmd.error;
+	if (data.error)
+		return data.error;
+
 	return err;
 }
 
-int mmc_bustest(struct mmc_host *host, struct mmc_card *card, int buswidth)
+int mmc_bus_test(struct mmc_card *card, u8 bus_width)
 {
-	int rc = 0;
+	int err, width;
 
-	rc = mmc_bustest_write(host, card, buswidth);
-	if (rc) {
-		pr_err("%s Bus test write Failed for buswidth: %d\n",
-							 __func__, buswidth);
-		return rc;
-	}
-	rc = mmc_bustest_read(host, card, buswidth);
-	if (rc)
-		pr_err("%s Bus test Read failed for buswidth: %d\n",
-							 __func__, buswidth);
-	return rc;
+	if (bus_width == MMC_BUS_WIDTH_8)
+		width = 8;
+	else if (bus_width == MMC_BUS_WIDTH_4)
+		width = 4;
+	else if (bus_width == MMC_BUS_WIDTH_1)
+		return 0; /* no need for test */
+	else
+		return -EINVAL;
+
+	/*
+	 * Ignore errors from BUS_TEST_W.  BUS_TEST_R will fail if there
+	 * is a problem.  This improves chances that the test will work.
+	 */
+	mmc_send_bus_test(card, card->host, MMC_BUS_TEST_W, width);
+	err = mmc_send_bus_test(card, card->host, MMC_BUS_TEST_R, width);
+	return err;
 }

@@ -27,7 +27,7 @@ obj-$(CONFIG_XEN)		+= xen/
 # regulators early, since some subsystems rely on them to initialize
 obj-$(CONFIG_REGULATOR)		+= regulator/
 
-# char/ comes before serial/ etc so that the VT console is the boot-time
+# tty/ comes before char/ so that the VT console is the boot-time
 # default.
 obj-y				+= tty/
 obj-y				+= char/
@@ -41,20 +41,14 @@ obj-$(CONFIG_CONNECTOR)		+= connector/
 obj-$(CONFIG_FB_I810)           += video/i810/
 obj-$(CONFIG_FB_INTEL)          += video/intelfb/
 
-ifdef CONFIG_MACH_MAPPHONE
-# we also need input/serio early so serio bus is initialized by the time
-# serial drivers start registering their serio ports
-obj-$(CONFIG_SERIO)		+= input/serio/
-endif
-
-obj-y				+= serial/
 obj-$(CONFIG_PARPORT)		+= parport/
-obj-y				+= base/ block/ misc/ mfd/
+obj-y				+= base/ block/ misc/ mfd/ nfc/
 obj-$(CONFIG_NUBUS)		+= nubus/
 obj-y				+= macintosh/
 obj-$(CONFIG_IDE)		+= ide/
 obj-$(CONFIG_SCSI)		+= scsi/
 obj-$(CONFIG_ATA)		+= ata/
+obj-$(CONFIG_TARGET_CORE)	+= target/
 obj-$(CONFIG_MTD)		+= mtd/
 obj-$(CONFIG_SPI)		+= spi/
 obj-y				+= net/
@@ -132,3 +126,6 @@ obj-$(CONFIG_MACH_CALGARY)      += mot/
 obj-$(CONFIG_MACH_MOT)		+= mot/
 onj-$(CONFIG_MACH_MOT)		+= forcepanic/
 obj-$(CONFIG_MACH_MOT)		+= motversion/
+
+#common clk code
+obj-y				+= clk/

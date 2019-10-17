@@ -22,8 +22,7 @@
 #include <linux/string.h>
 #include <linux/module.h>
 #include <linux/clk.h>
-
-#include <asm/clkdev.h>
+#include <linux/clkdev.h>
 
 #include <mach/socinfo.h>
 
@@ -69,6 +68,21 @@ EXPORT_SYMBOL(clk_get_rate);
 
 int clk_set_rate(struct clk *clk, unsigned long rate)
 {
+	int ret;
+	if (clk->flags & CLKFLAG_MAX) {
+		ret = clk->ops->set_max_rate(clk->id, rate);
+		if (ret)
+			return ret;
+	}
+	if (clk->flags & CLKFLAG_MIN) {
+		ret = clk->ops->set_min_rate(clk->id, rate);
+		if (ret)
+			return ret;
+	}
+
+	if (clk->flags & CLKFLAG_MAX || clk->flags & CLKFLAG_MIN)
+		return ret;
+
 	return clk->ops->set_rate(clk->id, rate);
 }
 EXPORT_SYMBOL(clk_set_rate);

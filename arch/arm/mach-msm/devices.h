@@ -17,6 +17,8 @@
 #ifndef __ARCH_ARM_MACH_MSM_DEVICES_H
 #define __ARCH_ARM_MACH_MSM_DEVICES_H
 
+#include <linux/clkdev.h>
+#include <linux/platform_device.h>
 #include "clock.h"
 
 extern struct platform_device msm_ebi0_thermal;
@@ -43,6 +45,7 @@ extern struct platform_device msm_device_sdc2;
 extern struct platform_device msm_device_sdc3;
 extern struct platform_device msm_device_sdc4;
 
+extern struct platform_device msm_device_hsusb;
 extern struct platform_device msm_device_hsusb_otg;
 extern struct platform_device msm_device_hsusb_peripheral;
 extern struct platform_device msm_device_gadget_peripheral;
@@ -102,6 +105,10 @@ extern struct platform_device msm_device_vidc_720p;
 
 extern struct platform_device *msm_footswitch_devices[];
 extern unsigned msm_num_footswitch_devices;
+
+extern struct platform_device msm_device_mddi0;
+extern struct platform_device msm_device_mddi1;
+extern struct platform_device msm_device_mdp;
 
 extern struct clk_lookup msm_clocks_7x01a[];
 extern unsigned msm_num_clocks_7x01a;

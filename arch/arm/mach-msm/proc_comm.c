@@ -151,6 +151,21 @@ again:
 }
 EXPORT_SYMBOL(msm_proc_comm);
 
+/*
+ * We need to wait for the ARM9 to at least partially boot
+ * up before we can continue. Since the ARM9 does resource
+ * allocation, if we dont' wait we could end up crashing or in
+ * and unknown state. This function should be called early to
+ * wait on the ARM9.
+ */
+void __init proc_comm_boot_wait(void)
+{
+	void __iomem *base = MSM_SHARED_RAM_BASE;
+
+	proc_comm_wait_for((unsigned)(base + MDM_STATUS), PCOM_READY);
+
+}
+
 #if defined(CONFIG_MACH_MOT)
 int meta_proc(unsigned cmd, unsigned *data)
 {

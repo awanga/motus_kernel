@@ -23,6 +23,7 @@
 #include <linux/log2.h>
 #include <linux/regulator/consumer.h>
 #include <linux/wakelock.h>
+#include <linux/pm_runtime.h>
 
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
@@ -151,6 +152,8 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 
 		if (mrq->done)
 			mrq->done(mrq);
+
+		mmc_host_clk_gate(host);
 	}
 }
 
@@ -215,6 +218,7 @@ mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 		host->perf.start = ktime_get();
 #endif
 	}
+	mmc_host_clk_ungate(host);
 	host->ops->request(host, mrq);
 }
 
@@ -320,8 +324,9 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 		unsigned int timeout_us, limit_us;
 
 		timeout_us = data->timeout_ns / 1000;
-		timeout_us += data->timeout_clks * 1000 /
-			(card->host->ios.clock / 1000);
+		if (mmc_host_clk_rate(card->host))
+			timeout_us += data->timeout_clks * 1000 /
+				(mmc_host_clk_rate(card->host) / 1000);
 
 		if (data->flags & MMC_DATA_WRITE)
 			/*
@@ -658,6 +663,8 @@ static inline void mmc_set_ios(struct mmc_host *host)
 		 ios->power_mode, ios->chip_select, ios->vdd,
 		 ios->bus_width, ios->timing);
 
+	if (ios->clock > 0)
+		mmc_set_ungated(host);
 	host->ops->set_ios(host, ios);
 }
 
@@ -684,6 +691,61 @@ void mmc_set_clock(struct mmc_host *host, unsigned int hz)
 	host->ios.clock = hz;
 	mmc_set_ios(host);
 }
+
+#ifdef CONFIG_MMC_CLKGATE
+/*
+ * This gates the clock by setting it to 0 Hz.
+ */
+void mmc_gate_clock(struct mmc_host *host)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->clk_lock, flags);
+	host->clk_old = host->ios.clock;
+	host->ios.clock = 0;
+	host->clk_gated = true;
+	spin_unlock_irqrestore(&host->clk_lock, flags);
+	mmc_set_ios(host);
+}
+
+/*
+ * This restores the clock from gating by using the cached
+ * clock value.
+ */
+void mmc_ungate_clock(struct mmc_host *host)
+{
+	/*
+	 * We should previously have gated the clock, so the clock shall
+	 * be 0 here! The clock may however be 0 during initialization,
+	 * when some request operations are performed before setting
+	 * the frequency. When ungate is requested in that situation
+	 * we just ignore the call.
+	 */
+	if (host->clk_old) {
+		BUG_ON(host->ios.clock);
+		/* This call will also set host->clk_gated to false */
+		mmc_set_clock(host, host->clk_old);
+	}
+}
+
+void mmc_set_ungated(struct mmc_host *host)
+{
+	unsigned long flags;
+
+	/*
+	 * We've been given a new frequency while the clock is gated,
+	 * so make sure we regard this as ungating it.
+	 */
+	spin_lock_irqsave(&host->clk_lock, flags);
+	host->clk_gated = false;
+	spin_unlock_irqrestore(&host->clk_lock, flags);
+}
+
+#else
+void mmc_set_ungated(struct mmc_host *host)
+{
+}
+#endif
 
 /*
  * Change the bus mode (open drain/push-pull) of a host.
@@ -1498,25 +1560,45 @@ int mmc_set_blocklen(struct mmc_card *card, unsigned int blocklen)
 }
 EXPORT_SYMBOL(mmc_set_blocklen);
 
+static int mmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
+{
+	host->f_init = freq;
+
+#ifdef CONFIG_MMC_DEBUG
+	pr_info("%s: %s: trying to init card at %u Hz\n",
+		mmc_hostname(host), __func__, host->f_init);
+#endif
+	mmc_power_up(host);
+	sdio_reset(host);
+	mmc_go_idle(host);
+
+	mmc_send_if_cond(host, host->ocr_avail);
+
+	/* Order's important: probe SDIO, then SD, then MMC */
+	if (!mmc_attach_sdio(host))
+		return 0;
+	if (!mmc_attach_sd(host))
+		return 0;
+	if (!mmc_attach_mmc(host))
+		return 0;
+
+	mmc_power_off(host);
+	return -EIO;
+}
+
 void mmc_rescan(struct work_struct *work)
 {
+	//static const unsigned freqs[] = { 400000, 300000, 200000, 100000 };
 	struct mmc_host *host =
 		container_of(work, struct mmc_host, detect.work);
-	u32 ocr;
-	int err;
 	int extend_wakelock = 0;
 	unsigned long flags;
-	int i;
-	const unsigned freqs[] = { 400000, 300000, 200000, 100000 };
 
 	spin_lock_irqsave(&host->lock, flags);
 	if (host->rescan_disable) {
 		spin_unlock_irqrestore(&host->lock, flags);
 		return;
 	}
-
-	spin_unlock_irqrestore(&host->lock, flags);
-
 
 	mmc_bus_get(host);
 
@@ -1534,9 +1616,11 @@ void mmc_rescan(struct work_struct *work)
 			extend_wakelock = 1;
 	}
 
+	/*
+	 * Let mmc_bus_put() free the bus/bus_ops if we've found that
+	 * the card is no longer present.
+	 */
 	mmc_bus_put(host);
-
-
 	mmc_bus_get(host);
 
 	/* if there still is a card present, stop here */
@@ -1544,8 +1628,6 @@ void mmc_rescan(struct work_struct *work)
 		mmc_bus_put(host);
 		goto out;
 	}
-
-	/* detect a newly inserted card */
 
 	/*
 	 * Only we can add a new handler, so it's safe to
@@ -1556,72 +1638,11 @@ void mmc_rescan(struct work_struct *work)
 	if (host->ops->get_cd && host->ops->get_cd(host) == 0)
 		goto out;
 
-	for (i = 0; i < ARRAY_SIZE(freqs); i++) {
-		mmc_claim_host(host);
+	mmc_claim_host(host);
+	if (!mmc_rescan_try_freq(host, host->f_min))
+		extend_wakelock = true;
+	mmc_release_host(host);
 
-		if (freqs[i] >= host->f_min)
-			host->f_init = freqs[i];
-		else if (!i || freqs[i-1] > host->f_min)
-			host->f_init = host->f_min;
-		else {
-			mmc_release_host(host);
-			goto out;
-		}
-#ifdef CONFIG_MMC_DEBUG
-		pr_info("%s: %s: trying to init card at %u Hz\n",
-			mmc_hostname(host), __func__, host->f_init);
-#endif
-		mmc_power_up(host);
-		sdio_reset(host);
-		mmc_go_idle(host);
-
-		mmc_send_if_cond(host, host->ocr_avail);
-
-		/*
-		 * First we search for SDIO...
-		 */
-		err = mmc_send_io_op_cond(host, 0, &ocr);
-		if (!err) {
-			if (mmc_attach_sdio(host, ocr)) {
-				mmc_claim_host(host);
-				/*
-				 * Try SDMEM (but not MMC) even if SDIO
-				 * is broken.
-				 */
-				if (mmc_send_app_op_cond(host, 0, &ocr))
-					goto out_fail;
-
-				if (mmc_attach_sd(host, ocr))
-					mmc_power_off(host);
-			}
-			goto out;
-		}
-
-		/*
-		 * ...then normal SD...
-		 */
-		err = mmc_send_app_op_cond(host, 0, &ocr);
-		if (!err) {
-			if (mmc_attach_sd(host, ocr))
-				mmc_power_off(host);
-			extend_wakelock = 1;
-			goto out;
-		}
-
-		/*
-		 * ...and finally MMC.
-		 */
-		err = mmc_send_op_cond(host, 0, &ocr);
-		if (!err) {
-			if (mmc_attach_mmc(host, ocr))
-				mmc_power_off(host);
-			goto out;
-		}
-
-out_fail:
-		mmc_release_host(host);
-		mmc_power_off(host);
-	}
 out:
 	if (extend_wakelock)
 		wake_lock_timeout(&mmc_delayed_work_wake_lock, HZ / 2);
@@ -1841,6 +1862,18 @@ int mmc_resume_host(struct mmc_host *host)
 		if (!(host->pm_flags & MMC_PM_KEEP_POWER)) {
 			mmc_power_up(host);
 			mmc_select_voltage(host, host->ocr);
+			/*
+			 * Tell runtime PM core we just powered up the card,
+			 * since it still believes the card is powered off.
+			 * Note that currently runtime PM is only enabled
+			 * for SDIO cards that are MMC_CAP_POWER_OFF_CARD
+			 */
+			if (mmc_card_sdio(host->card) &&
+			    (host->caps & MMC_CAP_POWER_OFF_CARD)) {
+				pm_runtime_disable(&host->card->dev);
+				pm_runtime_set_active(&host->card->dev);
+				pm_runtime_enable(&host->card->dev);
+			}
 		}
 		BUG_ON(!host->bus_ops->resume);
 		err = host->bus_ops->resume(host);
@@ -1936,7 +1969,7 @@ static int __init mmc_init(void)
 
 	wake_lock_init(&mmc_delayed_work_wake_lock, WAKE_LOCK_SUSPEND, "mmc_delayed_work");
 
-	workqueue = create_freezeable_workqueue("kmmcd");
+	workqueue = alloc_ordered_workqueue("kmmcd", 0);
 	if (!workqueue)
 		return -ENOMEM;
 

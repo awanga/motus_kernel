@@ -1580,8 +1580,6 @@ static void __init mot_init(void)
     static char   keypad_driver_name[64];
 	mot_battery_info batt_info;
 
-	if (socinfo_init() < 0)
-		BUG();
     /* All 7x01 2.0 based boards are expected to have RAM chips capable
      * of 160 MHz. */
 	if (cpu_is_msm7x01() &&
@@ -1766,6 +1764,10 @@ static void __init mot_map_io(void)
 {
 	msm_shared_ram_phys = 0x01F00000;
 	msm_map_common_io();
+
+	if (socinfo_init() < 0)
+		BUG();
+
 	msm_clock_init(msm_clocks_7x01a, msm_num_clocks_7x01a);
 }
 

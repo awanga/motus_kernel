@@ -15,6 +15,8 @@
  *
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -239,14 +241,14 @@ void smd_diag(void)
 
 	x = smem_find(ID_DIAG_ERR_MSG, SZ_DIAG_ERR_MSG);
 
-	if (x != 0) 
+	if (x != 0)
 	{
 		oops_enter();
 		x[SZ_DIAG_ERR_MSG - 1] = 0;
-		SMD_INFO("smem: DIAG '%s'\n", x);
+		pr_debug("DIAG '%s'\n", x);
+		oops_exit();
 	}
 	panic("BP panic");
-	oops_exit();
 }
 
 
@@ -767,7 +769,7 @@ static void smd_state_change(struct smd_channel *ch,
 {
 	ch->last_state = next;
 
-	SMD_INFO("SMD: ch %d %d -> %d\n", ch->n, last, next);
+	pr_debug("ch %d %d -> %d\n", ch->n, last, next);
 
 	switch (next) {
 	case SMD_SS_OPENING:
@@ -1218,8 +1220,8 @@ static int smd_alloc_channel(struct smd_alloc_elm *alloc_elm)
 	ch->pdev.name = ch->name;
 	ch->pdev.id = ch->type;
 
-	SMD_INFO("smd_alloc_channel() '%s' cid=%d\n",
-		 ch->name, ch->n);
+	pr_debug("smd_alloc_channel() cid=%02d size=%05d '%s'\n",
+		ch->n, ch->fifo_size, ch->name);
 
 	mutex_lock(&smd_creation_mutex);
 	list_add(&ch->ch_list, &smd_ch_closed_list);
@@ -1733,6 +1735,24 @@ void *smem_get_entry(unsigned id, unsigned *size)
 	return 0;
 }
 
+void *smem_item(unsigned id, unsigned *size)
+{
+	struct smem_shared *shared = (void *) MSM_SHARED_RAM_BASE;
+	struct smem_heap_entry *toc = shared->heap_toc;
+
+	if (id >= SMEM_NUM_ITEMS)
+		return 0;
+
+	if (toc[id].allocated) {
+		*size = toc[id].size;
+		return (void *) (MSM_SHARED_RAM_BASE + toc[id].offset);
+	} else {
+		*size = 0;
+	}
+
+	return 0;
+}
+
 void *smem_find(unsigned id, unsigned size_in)
 {
 	unsigned size;
@@ -2012,6 +2032,20 @@ int smd_core_init(void)
 	unsigned long flags = IRQF_TRIGGER_RISING;
 	SMD_INFO("smd_core_init()\n");
 
+#if 0
+	/* wait for essential items to be initialized */
+	for (;;) {
+		unsigned size;
+		void *state;
+		state = smem_item(SMEM_SMSM_SHARED_STATE, &size);
+		if (size == SMSM_V1_SIZE || size == SMSM_V2_SIZE) {
+			smd_info.state = (unsigned)state;
+			break;
+		}
+	}
+	smd_info.ready = 1;
+#endif
+
 	r = request_irq(INT_A9_M2A_0, smd_modem_irq_handler,
 			flags, "smd_dev", 0);
 	if (r < 0)
@@ -2115,7 +2149,12 @@ int smd_core_init(void)
 
 static int __devinit msm_smd_probe(struct platform_device *pdev)
 {
-	SMD_INFO("smd probe\n");
+	/*
+	 * If we haven't waited for the ARM9 to boot up till now,
+	 * then we need to wait here. Otherwise this should just
+	 * return immediately.
+	 */
+	proc_comm_boot_wait();
 
 	INIT_WORK(&probe_work, smd_channel_probe_worker);
 

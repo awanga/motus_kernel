@@ -48,6 +48,13 @@
 #include "mdp.h"
 #include "mdp4.h"
 
+#define pgprot_writethroughcache(prot) \
+	__pgprot((pgprot_val(prot) & ~L_PTE_MT_MASK) | L_PTE_MT_WRITETHROUGH)
+#define pgprot_writebackcache(prot) \
+	__pgprot((pgprot_val(prot) & ~L_PTE_MT_MASK) | L_PTE_MT_WRITEBACK)
+#define pgprot_writebackwacache(prot) \
+	__pgprot((pgprot_val(prot) & ~L_PTE_MT_MASK) | L_PTE_MT_WRITEALLOC)
+
 #ifdef CONFIG_FB_MSM_LOGO
 #define INIT_IMAGE_FILE "/initlogo.rle"
 extern int load_565rle_image(char *filename);

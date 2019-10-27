@@ -81,7 +81,11 @@ DEFINE_PER_CPU(struct hrtimer_cpu_base, hrtimer_bases) =
 	}
 };
 
-static int hrtimer_clock_to_base_table[MAX_CLOCKS];
+static int hrtimer_clock_to_base_table[MAX_CLOCKS] = {
+	[CLOCK_REALTIME]	= HRTIMER_BASE_REALTIME,
+	[CLOCK_MONOTONIC]	= HRTIMER_BASE_MONOTONIC,
+	[CLOCK_BOOTTIME]	= HRTIMER_BASE_BOOTTIME,
+};
 
 static inline int hrtimer_clockid_to_base(clockid_t clock_id)
 {
@@ -97,13 +101,8 @@ static void hrtimer_get_softirq_time(struct hrtimer_cpu_base *base)
 {
 	ktime_t xtim, mono, boot;
 	struct timespec xts, tom, slp;
-	unsigned long seq;
 
-	do {
-		seq = read_seqbegin(&xtime_lock);
-		xts = __current_kernel_time();
-		tom = __get_wall_to_monotonic();
-	} while (read_seqretry(&xtime_lock, seq));
+	get_xtime_and_monotonic_and_sleep_offset(&xts, &tom, &slp);
 
 	xtim = timespec_to_ktime(xts);
 	mono = ktime_add(xtim, timespec_to_ktime(tom));
@@ -348,6 +347,11 @@ EXPORT_SYMBOL_GPL(ktime_add_safe);
 
 static struct debug_obj_descr hrtimer_debug_descr;
 
+static void *hrtimer_debug_hint(void *addr)
+{
+	return ((struct hrtimer *) addr)->function;
+}
+
 /*
  * fixup_init is called when:
  * - an active object is initialized
@@ -407,6 +411,7 @@ static int hrtimer_fixup_free(void *addr, enum debug_obj_state state)
 
 static struct debug_obj_descr hrtimer_debug_descr = {
 	.name		= "hrtimer",
+	.debug_hint	= hrtimer_debug_hint,
 	.fixup_init	= hrtimer_fixup_init,
 	.fixup_activate	= hrtimer_fixup_activate,
 	.fixup_free	= hrtimer_fixup_free,
@@ -631,24 +636,23 @@ static inline ktime_t hrtimer_update_base(struct hrtimer_cpu_base *base)
 static void retrigger_next_event(void *arg)
 {
 	struct hrtimer_cpu_base *base;
-	struct timespec realtime_offset, wtm;
-	unsigned long seq;
+	struct timespec realtime_offset, wtm, sleep;
 
 	if (!hrtimer_hres_active())
 		return;
 
-	do {
-		seq = read_seqbegin(&xtime_lock);
-		wtm = __get_wall_to_monotonic();
-	} while (read_seqretry(&xtime_lock, seq));
+	get_xtime_and_monotonic_and_sleep_offset(&realtime_offset, &wtm,
+							&sleep);
 	set_normalized_timespec(&realtime_offset, -wtm.tv_sec, -wtm.tv_nsec);
 
 	base = &__get_cpu_var(hrtimer_bases);
 
 	/* Adjust CLOCK_REALTIME offset */
 	raw_spin_lock(&base->lock);
-	base->clock_base[CLOCK_REALTIME].offset =
+	base->clock_base[HRTIMER_BASE_REALTIME].offset =
 		timespec_to_ktime(realtime_offset);
+	base->clock_base[HRTIMER_BASE_BOOTTIME].offset =
+		timespec_to_ktime(sleep);
 
 	hrtimer_force_reprogram(base, 0);
 	raw_spin_unlock(&base->lock);
@@ -691,14 +695,6 @@ static inline void hrtimer_init_hres(struct hrtimer_cpu_base *base)
 	base->expires_next.tv64 = KTIME_MAX;
 	base->hres_active = 0;
 }
-
-/*
- * Initialize the high resolution related parts of a hrtimer
- */
-static inline void hrtimer_init_timer_hres(struct hrtimer *timer)
-{
-}
-
 
 /*
  * When High resolution timers are active, try to reprogram. Note, that in case
@@ -771,7 +767,6 @@ static inline int hrtimer_enqueue_reprogram(struct hrtimer *timer,
 	return 0;
 }
 static inline void hrtimer_init_hres(struct hrtimer_cpu_base *base) { }
-static inline void hrtimer_init_timer_hres(struct hrtimer *timer) { }
 
 #endif /* CONFIG_HIGH_RES_TIMERS */
 
@@ -1153,7 +1148,6 @@ static void __hrtimer_init(struct hrtimer *timer, clockid_t clock_id,
 
 	base = hrtimer_clockid_to_base(clock_id);
 	timer->base = &cpu_base->clock_base[base];
-	hrtimer_init_timer_hres(timer);
 	timerqueue_init(&timer->node);
 
 #ifdef CONFIG_TIMER_STATS

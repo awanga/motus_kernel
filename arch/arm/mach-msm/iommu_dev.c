@@ -100,7 +100,6 @@ static void msm_iommu_reset(void __iomem *base, int ncb)
 	SET_GLOBAL_TLBIALL(base, 0);
 	SET_RPU_ACR(base, 0);
 	SET_TLBLKCRWE(base, 1);
-	ncb = GET_NCB(base)+1;
 
 	for (ctx = 0; ctx < ncb; ctx++) {
 		SET_BPRCOSH(base, ctx, 0);
@@ -125,14 +124,13 @@ static void msm_iommu_reset(void __iomem *base, int ncb)
 		SET_NMRR(base, ctx, 0);
 		SET_CONTEXTIDR(base, ctx, 0);
 	}
-	mb();
 }
 
 static int msm_iommu_probe(struct platform_device *pdev)
 {
 	struct resource *r, *r2;
-	struct clk *iommu_clk = NULL;
-	struct clk *iommu_pclk = NULL;
+	struct clk *iommu_clk;
+	struct clk *iommu_pclk;
 	struct msm_iommu_drvdata *drvdata;
 	struct msm_iommu_dev *iommu_dev = pdev->dev.platform_data;
 	void __iomem *regs_base;
@@ -187,7 +185,7 @@ static int msm_iommu_probe(struct platform_device *pdev)
 		goto fail_clk;
 	}
 
-	len = r->end - r->start + 1;
+	len = resource_size(r);
 
 	r2 = request_mem_region(r->start, len, r->name);
 	if (!r2) {
@@ -218,11 +216,9 @@ static int msm_iommu_probe(struct platform_device *pdev)
 	SET_PAR(regs_base, 0, 0);
 	SET_V2PCFG(regs_base, 0, 1);
 	SET_V2PPR(regs_base, 0, 0);
-	mb();
 	par = GET_PAR(regs_base, 0);
 	SET_V2PCFG(regs_base, 0, 0);
 	SET_M(regs_base, 0, 0);
-	mb();
 
 	if (!par) {
 		pr_err("%s: Invalid PAR value detected\n", iommu_dev->name);
@@ -354,7 +350,6 @@ static int msm_iommu_ctx_probe(struct platform_device *pdev)
 		/* Set security bit override to be Non-secure */
 		SET_NSCFG(drvdata->base, mid, 3);
 	}
-	mb();
 
 	if (drvdata->clk)
 		clk_disable(drvdata->clk);

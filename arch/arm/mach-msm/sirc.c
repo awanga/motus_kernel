@@ -112,10 +112,10 @@ static int sirc_irq_set_type(struct irq_data *d, unsigned int flow_type)
 	val = readl(sirc_regs.int_type);
 	if (flow_type & (IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING)) {
 		val |= mask;
-		irq_desc[d->irq].handle_irq = handle_edge_irq;
+		__irq_set_handler_locked(d->irq, handle_edge_irq);
 	} else {
 		val &= ~mask;
-		irq_desc[d->irq].handle_irq = handle_level_irq;
+		__irq_set_handler_locked(d->irq, handle_level_irq);
 	}
 
 	writel(val, sirc_regs.int_type);
@@ -208,20 +208,15 @@ void __init msm_init_sirc(void)
 	int_enable = 0;
 	wake_enable = 0;
 
-	for (i = FIRST_SIRC_IRQ; i < FIRST_SIRC_IRQ + NR_SIRC_IRQS; i++) {
-		set_irq_chip(i, &sirc_irq_chip);
-		set_irq_handler(i, handle_edge_irq);
+	for (i = FIRST_SIRC_IRQ; i < LAST_SIRC_IRQ; i++) {
+		irq_set_chip_and_handler(i, &sirc_irq_chip, handle_edge_irq);
 		set_irq_flags(i, IRQF_VALID);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(sirc_reg_table); i++) {
-		set_irq_chained_handler(sirc_reg_table[i].cascade_irq,
+		irq_set_chained_handler(sirc_reg_table[i].cascade_irq,
 					sirc_irq_handler);
-		set_irq_wake(sirc_reg_table[i].cascade_irq, 1);
-#if defined(CONFIG_MSM_FIQ_SUPPORT)
-		msm_fiq_select(sirc_reg_table[i].cascade_fiq);
-		msm_fiq_enable(sirc_reg_table[i].cascade_fiq);
-#endif
+		irq_set_irq_wake(sirc_reg_table[i].cascade_irq, 1);
 	}
 	return;
 }

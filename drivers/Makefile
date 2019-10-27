@@ -129,3 +129,5 @@ obj-$(CONFIG_MACH_MOT)		+= motversion/
 
 #common clk code
 obj-y				+= clk/
+
+obj-$(CONFIG_HWSPINLOCK)	+= hwspinlock/

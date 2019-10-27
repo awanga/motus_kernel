@@ -1,10 +1,10 @@
-#ifndef __ARCH_ARM_MACH_OMAP3_SMARTREFLEX_H
-#define __ARCH_ARM_MACH_OMAP3_SMARTREFLEX_H
 /*
- * linux/arch/arm/mach-omap2/smartreflex.h
+ * OMAP Smartreflex Defines and Routines
  *
- * Copyright (C) 2009 Texas Instruments, Inc.
- * Nishanth Menon
+ * Author: Thara Gopinath	<thara@ti.com>
+ *
+ * Copyright (C) 2010 Texas Instruments, Inc.
+ * Thara Gopinath <thara@ti.com>
  *
  * Copyright (C) 2008 Nokia Corporation
  * Kalle Jokiniemi
@@ -17,6 +17,21 @@
  * published by the Free Software Foundation.
  */
 
+#ifndef __ASM_ARM_OMAP_SMARTREFLEX_H
+#define __ASM_ARM_OMAP_SMARTREFLEX_H
+
+#include <linux/platform_device.h>
+
+#include "voltage.h"
+
+/*
+ * Different Smartreflex IPs version. The v1 is the 65nm version used in
+ * OMAP3430. The v2 is the update for the 45nm version of the IP
+ * used in OMAP3630 and OMAP4430
+ */
+#define SR_TYPE_V1	1
+#define SR_TYPE_V2	2
+
 /* SMART REFLEX REG ADDRESS OFFSET */
 #define SRCONFIG		0x00
 #define SRSTATUS		0x04
@@ -25,242 +40,207 @@
 #define SENMAX			0x10
 #define SENAVG			0x14
 #define AVGWEIGHT		0x18
-#define NVALUERECIPROCAL	0x1C
-#define SENERROR		0x20
-#define ERRCONFIG		0x24
+#define NVALUERECIPROCAL	0x1c
+#define SENERROR_V1		0x20
+#define ERRCONFIG_V1		0x24
+#define IRQ_EOI			0x20
+#define IRQSTATUS_RAW		0x24
+#define IRQSTATUS		0x28
+#define IRQENABLE_SET		0x2C
+#define IRQENABLE_CLR		0x30
+#define SENERROR_V2		0x34
+#define ERRCONFIG_V2		0x38
 
-/* SR Modules */
-#define SR1	1
-#define SR2	2
-
-#define VP1_IRQMASK_TRANSDONE	(0x1 << 15)
-#define VP2_IRQMASK_TRANSDONE	(0x1 << 21)
-
-/* PRM_VP1_CONFIG */
-#define PRM_VP1_CONFIG_ERROROFFSET	(0x00 << 24)
-#define SR_ERRGAIN_LOWOPP		(0x0C)
-#define SR_ERRGAIN_HIGHOPP		(0x18)
-#define SR_ERRMINLIMIT_LOWOPP		(0xF4)
-#define SR_ERRMINLIMIT_HIGHOPP		(0xF2)
-#define PRM_VP_STATUS_VPINIDLE		(0x1)
-
-#define PRM_VP1_CONFIG_TIMEOUTEN	(0x1 << 3)
-#define PRM_VP1_CONFIG_VPENABLE		(0x1)
-
-/* PRM_VP1_VSTEPMIN */
-#define PRM_VP1_VSTEPMIN_SMPSWAITTIMEMIN	(0x001E << 8)
-#define PRM_VP1_VSTEPMIN_VSTEPMIN		(0x01)
-
-/* PRM_VP1_VSTEPMAX */
-#define PRM_VP1_VSTEPMAX_SMPSWAITTIMEMAX	(0x001E << 8)
-#define PRM_VP1_VSTEPMAX_VSTEPMAX		(0x08)
-
-/* PRM_VP1_VLIMITTO */
-#define PRM_VP1_VLIMITTO_VDDMAX			(0x44 << 24)
-#define PRM_VP1_VLIMITTO_VDDMIN			(0x14 << 16)
-#define PRM_VP1_VLIMITTO_TIMEOUT_US		(200)
-#define PRM_VP1_VLIMITTO_TIMEOUT_SHIFT		(0)
-
-/* PRM_VP2_CONFIG */
-#define PRM_VP2_CONFIG_ERROROFFSET		(0x00 << 24)
-#define PRM_VP2_CONFIG_TIMEOUTEN		(0x1 << 3)
-#define PRM_VP2_CONFIG_VPENABLE			(0x1)
-
-/* PRM_VP2_VSTEPMIN */
-#define PRM_VP2_VSTEPMIN_SMPSWAITTIMEMIN	(0x001E << 8)
-#define PRM_VP2_VSTEPMIN_VSTEPMIN		(0x01)
-
-/* PRM_VP2_VSTEPMAX */
-#define PRM_VP2_VSTEPMAX_SMPSWAITTIMEMAX	(0x001E << 8)
-#define PRM_VP2_VSTEPMAX_VSTEPMAX		(0x08)
-
-/* PRM_VP2_VLIMITTO */
-#define PRM_VP2_VLIMITTO_VDDMAX			(0x42 << 24)
-#define PRM_VP2_VLIMITTO_VDDMIN			(0x18 << 16)
-#define PRM_VP2_VLIMITTO_TIMEOUT_US		(200)
-#define PRM_VP2_VLIMITTO_TIMEOUT_SHIFT		(0)
-
+/* Bit/Shift Positions */
 
 /* SRCONFIG */
-#define SRCLKLENGTH_12MHZ_SYSCLK	0x3C
+#define SRCONFIG_ACCUMDATA_SHIFT	22
+#define SRCONFIG_SRCLKLENGTH_SHIFT	12
+#define SRCONFIG_SENNENABLE_V1_SHIFT	5
+#define SRCONFIG_SENPENABLE_V1_SHIFT	3
+#define SRCONFIG_SENNENABLE_V2_SHIFT	1
+#define SRCONFIG_SENPENABLE_V2_SHIFT	0
+#define SRCONFIG_CLKCTRL_SHIFT		0
+
+#define SRCONFIG_ACCUMDATA_MASK		(0x3ff << 22)
+
+#define SRCONFIG_SRENABLE		BIT(11)
+#define SRCONFIG_SENENABLE		BIT(10)
+#define SRCONFIG_ERRGEN_EN		BIT(9)
+#define SRCONFIG_MINMAXAVG_EN		BIT(8)
+#define SRCONFIG_DELAYCTRL		BIT(2)
+
+/* AVGWEIGHT */
+#define AVGWEIGHT_SENPAVGWEIGHT_SHIFT	2
+#define AVGWEIGHT_SENNAVGWEIGHT_SHIFT	0
+
+/* NVALUERECIPROCAL */
+#define NVALUERECIPROCAL_SENPGAIN_SHIFT	20
+#define NVALUERECIPROCAL_SENNGAIN_SHIFT	16
+#define NVALUERECIPROCAL_RNSENP_SHIFT	8
+#define NVALUERECIPROCAL_RNSENN_SHIFT	0
+
+/* ERRCONFIG */
+#define ERRCONFIG_ERRWEIGHT_SHIFT	16
+#define ERRCONFIG_ERRMAXLIMIT_SHIFT	8
+#define ERRCONFIG_ERRMINLIMIT_SHIFT	0
+
+#define SR_ERRWEIGHT_MASK		(0x07 << 16)
+#define SR_ERRMAXLIMIT_MASK		(0xff << 8)
+#define SR_ERRMINLIMIT_MASK		(0xff << 0)
+
+#define ERRCONFIG_VPBOUNDINTEN_V1	BIT(31)
+#define ERRCONFIG_VPBOUNDINTST_V1	BIT(30)
+#define	ERRCONFIG_MCUACCUMINTEN		BIT(29)
+#define ERRCONFIG_MCUACCUMINTST		BIT(28)
+#define	ERRCONFIG_MCUVALIDINTEN		BIT(27)
+#define ERRCONFIG_MCUVALIDINTST		BIT(26)
+#define ERRCONFIG_MCUBOUNDINTEN		BIT(25)
+#define	ERRCONFIG_MCUBOUNDINTST		BIT(24)
+#define	ERRCONFIG_MCUDISACKINTEN	BIT(23)
+#define ERRCONFIG_VPBOUNDINTST_V2	BIT(23)
+#define ERRCONFIG_MCUDISACKINTST	BIT(22)
+#define ERRCONFIG_VPBOUNDINTEN_V2	BIT(22)
+
+#define ERRCONFIG_STATUS_V1_MASK	(ERRCONFIG_VPBOUNDINTST_V1 | \
+					ERRCONFIG_MCUACCUMINTST | \
+					ERRCONFIG_MCUVALIDINTST | \
+					ERRCONFIG_MCUBOUNDINTST | \
+					ERRCONFIG_MCUDISACKINTST)
+/* IRQSTATUS */
+#define IRQSTATUS_MCUACCUMINT		BIT(3)
+#define IRQSTATUS_MCVALIDINT		BIT(2)
+#define IRQSTATUS_MCBOUNDSINT		BIT(1)
+#define IRQSTATUS_MCUDISABLEACKINT	BIT(0)
+
+/* IRQENABLE_SET and IRQENABLE_CLEAR */
+#define IRQENABLE_MCUACCUMINT		BIT(3)
+#define IRQENABLE_MCUVALIDINT		BIT(2)
+#define IRQENABLE_MCUBOUNDSINT		BIT(1)
+#define IRQENABLE_MCUDISABLEACKINT	BIT(0)
+
+/* Common Bit values */
+
+#define SRCLKLENGTH_12MHZ_SYSCLK	0x3c
 #define SRCLKLENGTH_13MHZ_SYSCLK	0x41
 #define SRCLKLENGTH_19MHZ_SYSCLK	0x60
 #define SRCLKLENGTH_26MHZ_SYSCLK	0x82
 #define SRCLKLENGTH_38MHZ_SYSCLK	0xC0
 
-#define SRCONFIG_SRCLKLENGTH_SHIFT	12
-#define SRCONFIG_SENNENABLE_SHIFT	5
-#define SRCONFIG_SENPENABLE_SHIFT	3
-
-#define SRCONFIG_SRENABLE		(0x01 << 11)
-#define SRCONFIG_SENENABLE		(0x01 << 10)
-#define SRCONFIG_ERRGEN_EN		(0x01 << 9)
-#define SRCONFIG_MINMAXAVG_EN		(0x01 << 8)
-
-#define SRCONFIG_DELAYCTRL		(0x01 << 2)
-#define SRCONFIG_CLKCTRL		(0x00)
-
-/* NVALUERECIPROCAL */
-#define NVALUERECIPROCAL_SENPGAIN_SHIFT		20
-#define NVALUERECIPROCAL_SENNGAIN_SHIFT		16
-#define NVALUERECIPROCAL_RNSENP_SHIFT		8
-#define NVALUERECIPROCAL_RNSENN_SHIFT		0
-
-/* ERRCONFIG */
-#define SR_CLKACTIVITY_MASK		(0x03 << 20)
-#define SR_ERRWEIGHT_MASK		(0x07 << 16)
-#define SR_ERRMAXLIMIT_MASK		(0xFF << 8)
-#define SR_ERRMINLIMIT_MASK		(0xFF)
-
-#define SR_CLKACTIVITY_IOFF_FOFF	(0x00 << 20)
-#define SR_CLKACTIVITY_IOFF_FON		(0x02 << 20)
-
-#define ERRCONFIG_VPBOUNDINTEN		(0x1 << 31)
-#define ERRCONFIG_MCUDISACKINTEN	(0x1 << 23)
-
-/* Status Bits */
-#define ERRCONFIG_VPBOUNDINTST		(0x1 << 30)
-#define ERRCONFIG_MCUACCUMINTST		(0x1 << 28)
-#define ERRCONFIG_MCUVALIDINTST		(0x1 << 26)
-#define ERRCONFIG_MCUBOUNDINTST		(0x1 << 24)
-#define ERRCONFIG_MCUDISACKINTST	(0x1 << 22)
-
-/* WARNING: Ensure all access to errconfig register skips
- * clearing intst bits to ensure that we dont clear status
- * bits unwantedly.. esp vpbound
- */
-#define ERRCONFIG_INTERRUPT_STATUS_MASK (ERRCONFIG_VPBOUNDINTST |\
-					ERRCONFIG_MCUACCUMINTST |\
-					ERRCONFIG_MCUVALIDINTST |\
-					ERRCONFIG_MCUBOUNDINTST |\
-					ERRCONFIG_MCUDISACKINTST | (0X1<<19))
-
-#define SR1_ERRWEIGHT			(0x04 << 16)
-#define SR1_ERRMAXLIMIT			(0x02 << 8)
-#define SR1_ERRMINLIMIT			(0xFA)
-
-#define SR2_ERRWEIGHT			(0x04 << 16)
-#define SR2_ERRMAXLIMIT			(0x02 << 8)
-#define SR2_ERRMINLIMIT			(0xFA0)
-
-/* T2 SMART REFLEX */
-#define R_SRI2C_SLAVE_ADDR		0x12
-#define R_VDD1_SR_CONTROL		0x00
-#define R_VDD2_SR_CONTROL		0x01
-
-/* VDDs*/
-#define PRCM_VDD1	1
-#define PRCM_VDD2	2
-
 /*
- * XXX: These should be removed/moved from here once we have a working DVFS
- * implementation in place
+ * 3430 specific values. Maybe these should be passed from board file or
+ * pmic structures.
  */
-#define PHY_TO_OFF_PM_MASTER(p)		(p - 0x36)
-#define PHY_TO_OFF_PM_RECIEVER(p)	(p - 0x5b)
-#define PHY_TO_OFF_PM_INT(p)		(p - 0x2e)
+#define OMAP3430_SR_ACCUMDATA		0x1f4
 
-/* Vmode control */
-#define R_DCDC_GLOBAL_CFG		PHY_TO_OFF_PM_RECIEVER(0x61)
-/* R_DCDC_GLOBAL_CFG register, SMARTREFLEX_ENABLE values */
-#define DCDC_GLOBAL_CFG_ENABLE_SRFLX	0x08
+#define OMAP3430_SR1_SENPAVGWEIGHT	0x03
+#define OMAP3430_SR1_SENNAVGWEIGHT	0x03
 
-/* DEVICE ID/DPLL ID/CLOCK ID: bits 28-31 for OMAP type */
-#define OMAP_TYPE_SHIFT			28
-#define OMAP_TYPE_MASK			0xF
-/* OPP ID: bits: 0-4 for OPP number */
-#define OPP_NO_POS			0
-#define OPP_NO_MASK			0x1F
-/* OPP ID: bits: 5-6 for VDD */
-#define VDD_NO_POS			5
-#define VDD_NO_MASK			0x3
-/* Other IDs: bits 20-27 for ID type */
-/* These IDs have bits 25,26,27 as 1 */
-#define OTHER_ID_TYPE_SHIFT		20
-#define OTHER_ID_TYPE_MASK		0xFF
+#define OMAP3430_SR2_SENPAVGWEIGHT	0x01
+#define OMAP3430_SR2_SENNAVGWEIGHT	0x01
 
-#define OTHER_ID_TYPE(X) ((X & OTHER_ID_TYPE_MASK) << OTHER_ID_TYPE_SHIFT)
-#define ID_OPP_NO(X)	 ((X & OPP_NO_MASK) << OPP_NO_POS)
-#define ID_VDD(X)	 ((X & VDD_NO_MASK) << VDD_NO_POS)
-#define OMAP(X)		 ((X >> OMAP_TYPE_SHIFT) & OMAP_TYPE_MASK)
-#define get_opp_no(X)	 ((X >> OPP_NO_POS) & OPP_NO_MASK)
-#define get_vdd(X)	 ((X >> VDD_NO_POS) & VDD_NO_MASK)
+#define OMAP3430_SR_ERRWEIGHT		0x04
+#define OMAP3430_SR_ERRMAXLIMIT		0x02
 
-/* XXX: end remove/move */
-
-/* XXX: find more appropriate place for these once DVFS is in place */
-extern u32 current_vdd1_opp;
-extern u32 current_vdd2_opp;
-
-/*
- * Smartreflex module enable/disable interface.
- * NOTE: if smartreflex is not enabled from sysfs, these functions will not
- * do anything.
+/**
+ * struct omap_sr_pmic_data - Strucutre to be populated by pmic code to pass
+ *				pmic specific info to smartreflex driver
+ *
+ * @sr_pmic_init:	API to initialize smartreflex on the PMIC side.
  */
+struct omap_sr_pmic_data {
+	void (*sr_pmic_init) (void);
+};
+
 #ifdef CONFIG_OMAP_SMARTREFLEX
-void enable_smartreflex(u8 srid);
-void disable_smartreflex(u8 srid);
-int sr_voltage_set(u32 target_opp, u32 current_opp,
-		    u8 target_vsel, u8 current_vsel);
-int sr_vp_disable_both(u32 target_opp, u32 current_opp);
-int sr_vp_enable_both(u32 target_opp, u32 current_opp);
-int vc_send_command(u8 slave_addr, u8 reg_addr, u8 data, u16 *timeout_us);
-int omap_pmic_srinit(void);
-u32 omap_pmic_voltage_ramp_delay(u8 srid, u8 target_vsel, u8 current_vsel);
-#ifdef CONFIG_OMAP_VC_BYPASS_UPDATE
-int omap_pmic_voltage_cmds(u8 srid, u8 target_vsel);
-#endif
+/*
+ * The smart reflex driver supports CLASS1 CLASS2 and CLASS3 SR.
+ * The smartreflex class driver should pass the class type.
+ * Should be used to populate the class_type field of the
+ * omap_smartreflex_class_data structure.
+ */
+#define SR_CLASS1	0x1
+#define SR_CLASS2	0x2
+#define SR_CLASS3	0x3
 
-#ifdef CONFIG_PM_DEBUG
-#define __SR_DEBUG
-#endif
+/**
+ * struct omap_sr_class_data - Smartreflex class driver info
+ *
+ * @enable:		API to enable a particular class smaartreflex.
+ * @disable:		API to disable a particular class smartreflex.
+ * @configure:		API to configure a particular class smartreflex.
+ * @notify:		API to notify the class driver about an event in SR.
+ *			Not needed for class3.
+ * @notify_flags:	specify the events to be notified to the class driver
+ * @class_type:		specify which smartreflex class.
+ *			Can be used by the SR driver to take any class
+ *			based decisions.
+ */
+struct omap_sr_class_data {
+	int (*enable)(struct voltagedomain *voltdm);
+	int (*disable)(struct voltagedomain *voltdm, int is_volt_reset);
+	int (*configure)(struct voltagedomain *voltdm);
+	int (*notify)(struct voltagedomain *voltdm, u32 status);
+	u8 notify_flags;
+	u8 class_type;
+};
 
+/**
+ * struct omap_sr_nvalue_table	- Smartreflex n-target value info
+ *
+ * @efuse_offs:	The offset of the efuse where n-target values are stored.
+ * @nvalue:	The n-target value.
+ */
+struct omap_sr_nvalue_table {
+	u32 efuse_offs;
+	u32 nvalue;
+};
+
+/**
+ * struct omap_sr_data - Smartreflex platform data.
+ *
+ * @ip_type:		Smartreflex IP type.
+ * @senp_mod:		SENPENABLE value for the sr
+ * @senn_mod:		SENNENABLE value for sr
+ * @nvalue_count:	Number of distinct nvalues in the nvalue table
+ * @enable_on_init:	whether this sr module needs to enabled at
+ *			boot up or not.
+ * @nvalue_table:	table containing the  efuse offsets and nvalues
+ *			corresponding to them.
+ * @voltdm:		Pointer to the voltage domain associated with the SR
+ */
+struct omap_sr_data {
+	int				ip_type;
+	u32				senp_mod;
+	u32				senn_mod;
+	int				nvalue_count;
+	bool				enable_on_init;
+	struct omap_sr_nvalue_table	*nvalue_table;
+	struct voltagedomain		*voltdm;
+};
+
+/* Smartreflex module enable/disable interface */
+void omap_sr_enable(struct voltagedomain *voltdm);
+void omap_sr_disable(struct voltagedomain *voltdm);
+void omap_sr_disable_reset_volt(struct voltagedomain *voltdm);
+
+/* API to register the pmic specific data with the smartreflex driver. */
+void omap_sr_register_pmic(struct omap_sr_pmic_data *pmic_data);
+
+/* Smartreflex driver hooks to be called from Smartreflex class driver */
+int sr_enable(struct voltagedomain *voltdm, unsigned long volt);
+void sr_disable(struct voltagedomain *voltdm);
+int sr_configure_errgen(struct voltagedomain *voltdm);
+int sr_configure_minmax(struct voltagedomain *voltdm);
+
+/* API to register the smartreflex class driver with the smartreflex driver */
+int sr_register_class(struct omap_sr_class_data *class_data);
 #else
-static inline void enable_smartreflex(u8 srid)
-{
-}
-
-static inline void disable_smartreflex(u8 srid)
-{
-}
-
-static inline int sr_voltage_set(u32 target_opp, u32 current_opp,
-				  u8 target_vsel, u8 current_vsel)
-{
-	return -EINVAL;
-}
-
-static inline int sr_vp_disable_both(u32 target_opp, u32 current_opp)
-{
-	return -EINVAL;
-}
-
-static inline int sr_vp_enable_both(u32 target_opp, u32 current_opp)
-{
-	return -EINVAL;
-}
-
-static inline int vc_send_command(u8 slave_addr, u8 reg_addr, u8 data,
-				  u16 *timeout_us)
-{
-	return -EINVAL;
-}
-
-#ifdef CONFIG_OMAP_VC_BYPASS_UPDATE
-static inline int omap_pmic_voltage_cmds(u8 srid, u8 target_vsel)
-{
-	return -EINVAL;
-}
+static inline void omap_sr_enable(struct voltagedomain *voltdm) {}
+static inline void omap_sr_disable(struct voltagedomain *voltdm) {}
+static inline void omap_sr_disable_reset_volt(
+		struct voltagedomain *voltdm) {}
+static inline void omap_sr_register_pmic(
+		struct omap_sr_pmic_data *pmic_data) {}
 #endif
 #endif
-
-#ifdef __SR_DEBUG
-int sr_debugfs_create_entries(struct dentry *d);
-#else
-static inline int sr_debugfs_create_entries(struct dentry *d)
-{
-	return -EINVAL;
-}
-#endif
-
-#endif				/* __ARCH_ARM_MACH_OMAP3_SMARTREFLEX_H */

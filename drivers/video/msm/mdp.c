@@ -808,6 +808,7 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 
 		/* DMA2 LCD-Out Complete */
 		if (mdp_interrupt & MDP_DMA_P_DONE) {
+#if 0
 			struct timeval now;
 			ktime_t now_k;
 
@@ -822,7 +823,7 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 				mdp_dma2_timeval.tv_usec =
 				    now.tv_usec - mdp_dma2_timeval.tv_usec;
 			}
-
+#endif
 			dma = &dma2_data;
 			dma->busy = FALSE;
 			mdp_pipe_ctrl(MDP_DMA2_BLOCK, MDP_BLOCK_POWER_OFF,

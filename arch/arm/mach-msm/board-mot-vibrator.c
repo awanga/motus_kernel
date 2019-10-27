@@ -96,7 +96,7 @@ static ssize_t vibrator_enable_show(struct device *dev, struct device_attribute 
 
 	if (hrtimer_active(&vib_data.timer_en)) {
 		ktime_t r = hrtimer_get_remaining(&vib_data.timer_en);
-		remaining = r.tv.sec * 1000 + r.tv.nsec / 1000000;
+		remaining = ktime_to_ms(r);
 	} else
 		remaining = 0;
 

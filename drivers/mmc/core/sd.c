@@ -21,6 +21,7 @@
 #include "core.h"
 #include "bus.h"
 #include "mmc_ops.h"
+#include "sd.h"
 #include "sd_ops.h"
 #if defined(CONFIG_MACH_CALGARY)
 #define DEBUG_SD

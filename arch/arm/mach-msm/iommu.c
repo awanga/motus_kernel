@@ -97,14 +97,12 @@ static int __flush_iotlb(struct iommu_domain *domain)
 	}
 #endif
 
-	mb();
 	list_for_each_entry(ctx_drvdata, &priv->list_attached, attached_elm) {
 		if (!ctx_drvdata->pdev || !ctx_drvdata->pdev->dev.parent)
 			BUG();
 
 		iommu_drvdata = dev_get_drvdata(ctx_drvdata->pdev->dev.parent);
-		if (!iommu_drvdata)
-			BUG();
+		BUG_ON(!iommu_drvdata);
 
 		ret = __enable_clocks(iommu_drvdata);
 		if (ret)
@@ -114,7 +112,6 @@ static int __flush_iotlb(struct iommu_domain *domain)
 		__disable_clocks(iommu_drvdata);
 	}
 fail:
-
 	return ret;
 }
 
@@ -140,8 +137,6 @@ static void __reset_context(void __iomem *base, int ctx)
 	SET_TLBLKCR(base, ctx, 0);
 	SET_PRRR(base, ctx, 0);
 	SET_NMRR(base, ctx, 0);
-	SET_CONTEXTIDR(base, ctx, 0);
-	mb();
 }
 
 static void __program_context(void __iomem *base, int ctx, phys_addr_t pgtable)
@@ -210,7 +205,6 @@ static void __program_context(void __iomem *base, int ctx, phys_addr_t pgtable)
 
 	/* Enable the MMU */
 	SET_M(base, ctx, 1);
-	mb();
 }
 
 static int msm_iommu_domain_init(struct iommu_domain *domain)
@@ -585,10 +579,7 @@ static phys_addr_t msm_iommu_iova_to_phys(struct iommu_domain *domain,
 
 	/* Invalidate context TLB */
 	SET_CTX_TLBIALL(base, ctx, 0);
-	mb();
-	SET_V2PPR_VA(base, ctx, va >> V2Pxx_VA_SHIFT);
-
-	mb();
+	SET_V2PPR(base, ctx, va & V2Pxx_VA);
 
 	par = GET_PAR(base, ctx);
 
@@ -645,7 +636,7 @@ irqreturn_t msm_iommu_fault_handler(int irq, void *dev_id)
 	struct msm_iommu_drvdata *drvdata = dev_id;
 	void __iomem *base;
 	unsigned int fsr;
-	int ncb, i, ret;
+	int i, ret;
 
 	spin_lock(&msm_iommu_lock);
 

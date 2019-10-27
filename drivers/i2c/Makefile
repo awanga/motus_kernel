@@ -11,3 +11,4 @@ obj-y				+= algos/ busses/ muxes/
 obj-y				+= chips/
 
 ccflags-$(CONFIG_I2C_DEBUG_CORE) := -DDEBUG
+CFLAGS_i2c-core.o := -Wno-deprecated-declarations

@@ -23,6 +23,7 @@
 #include <linux/delay.h>
 #include <linux/wakelock.h>
 #include <linux/platform_device.h>
+#include <linux/sched.h>
 
 #include <linux/tty.h>
 #include <linux/tty_driver.h>
@@ -367,7 +368,7 @@ static void smd_tty_unthrottle(struct tty_struct *tty)
  *      TIOCM_OUT1 - reset state (1=in reset)
  *      TIOCM_OUT2 - reset state updated (1=updated)
  */
-static int smd_tty_tiocmget(struct tty_struct *tty, struct file *file)
+static int smd_tty_tiocmget(struct tty_struct *tty)
 {
 	struct smd_tty_info *info = tty->driver_data;
 	unsigned long flags;
@@ -386,7 +387,7 @@ static int smd_tty_tiocmget(struct tty_struct *tty, struct file *file)
 	return tiocm;
 }
 
-static int smd_tty_tiocmset(struct tty_struct *tty, struct file *file,
+static int smd_tty_tiocmset(struct tty_struct *tty,
 				unsigned int set, unsigned int clear)
 {
 	struct smd_tty_info *info = tty->driver_data;

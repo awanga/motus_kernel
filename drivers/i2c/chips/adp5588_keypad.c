@@ -768,7 +768,7 @@ adp5588_probe(struct i2c_client *client, const struct i2c_device_id *id)
 				ADP5588NAME, &adp5588_data);
 		if (err == 0) {
 			adp5588_data.use_irq = 1;
-			err = set_irq_wake(client->irq, 1);
+			err = irq_set_irq_wake(client->irq, 1);
 		} else {
 			dev_err(&client->dev,
 				" %s(%s):request irq  %d  failed\n", __FILE__,

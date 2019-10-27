@@ -413,7 +413,7 @@ msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		/* If other processor did some transactions, we may have
 		 * interrupt pending. Clear it
 		 */
-		get_irq_chip(dev->irq)->ack(dev->irq);
+		irq_get_chip(dev->irq)->irq_ack(irq_get_irq_data(dev->irq));
 	}
 
 #ifndef CONFIG_MACH_MOT
@@ -441,7 +441,7 @@ msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		dev->cnt = msgs->len;
 		dev->complete = &complete;
 		spin_unlock_irqrestore(&dev->lock, flags);
-		
+
 		if (check_busy) {
 			ret = msm_i2c_poll_notbusy(dev);
 			if (ret)

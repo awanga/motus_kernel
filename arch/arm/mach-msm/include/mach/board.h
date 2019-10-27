@@ -35,6 +35,9 @@ struct msm_acpu_clock_platform_data {
 	uint32_t acpu_switch_time_us;
 	uint32_t max_speed_delta_khz;
 	uint32_t vdd_switch_time_us;
+	unsigned long mpll_khz;
+	unsigned long power_collapse_khz;
+	unsigned long wait_for_irq_khz;
 	unsigned int max_axi_khz;
 	unsigned int max_vdd;
 	int (*acpu_set_vdd) (int mvolts);
@@ -367,6 +370,7 @@ void __init msm_map_msm8960_io(void);
 void __init msm_map_msm7x30_io(void);
 void __init msm_map_comet_io(void);
 void __init msm_init_irq(void);
+void __init msm_init_gpio(void);
 void __init msm_clock_init(struct clk_lookup *clock_tbl, unsigned num_clocks);
 void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *);
 

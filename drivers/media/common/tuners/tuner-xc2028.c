@@ -693,7 +693,7 @@ static int check_firmware(struct dvb_frontend *fe, unsigned int type,
 {
 	struct xc2028_data         *priv = fe->tuner_priv;
 	struct firmware_properties new_fw;
-	int			   rc = 0, is_retry = 0;
+	int			   rc = 0, retry_count = 0;
 	u16			   version, hwmodel;
 	v4l2_std_id		   std0;
 
@@ -863,9 +863,9 @@ read_not_reliable:
 
 fail:
 	memset(&priv->cur_fw, 0, sizeof(priv->cur_fw));
-	if (!is_retry) {
+	if (retry_count < 8) {
 		msleep(50);
-		is_retry = 1;
+		retry_count++;
 		tuner_dbg("Retrying firmware load\n");
 		goto retry;
 	}
@@ -915,7 +915,7 @@ ret:
 #define DIV 15625
 
 static int generic_set_freq(struct dvb_frontend *fe, u32 freq /* in HZ */,
-			    enum tuner_mode new_mode,
+			    enum v4l2_tuner_type new_type,
 			    unsigned int type,
 			    v4l2_std_id std,
 			    u16 int_freq)
@@ -941,7 +941,7 @@ static int generic_set_freq(struct dvb_frontend *fe, u32 freq /* in HZ */,
 	 * that xc2028 will be in a safe state.
 	 * Maybe this might also be needed for DTV.
 	 */
-	if (new_mode == T_ANALOG_TV) {
+	if (new_type == V4L2_TUNER_ANALOG_TV) {
 		rc = send_seq(priv, {0x00, 0x00});
 
 		/* Analog modes require offset = 0 */
@@ -1062,7 +1062,7 @@ static int xc2028_set_analog_freq(struct dvb_frontend *fe,
 		if (priv->ctrl.input1)
 			type |= INPUT1;
 		return generic_set_freq(fe, (625l * p->frequency) / 10,
-				T_RADIO, type, 0, 0);
+				V4L2_TUNER_RADIO, type, 0, 0);
 	}
 
 	/* if std is not defined, choose one */
@@ -1077,7 +1077,7 @@ static int xc2028_set_analog_freq(struct dvb_frontend *fe,
 	p->std |= parse_audio_std_option();
 
 	return generic_set_freq(fe, 62500l * p->frequency,
-				T_ANALOG_TV, type, p->std, 0);
+				V4L2_TUNER_ANALOG_TV, type, p->std, 0);
 }
 
 static int xc2028_set_params(struct dvb_frontend *fe,
@@ -1182,7 +1182,7 @@ static int xc2028_set_params(struct dvb_frontend *fe,
 	}
 
 	return generic_set_freq(fe, p->frequency,
-				T_DIGITAL_TV, type, 0, demod);
+				V4L2_TUNER_DIGITAL_TV, type, 0, demod);
 }
 
 static int xc2028_sleep(struct dvb_frontend *fe)

@@ -20,6 +20,16 @@ struct embedded_sdio_data {
 	int num_funcs;
 };
 
+struct msm_mmc_gpio {
+	unsigned no;
+	const char *name;
+};
+
+struct msm_mmc_gpio_data {
+	struct msm_mmc_gpio *gpio;
+	u8 size;
+};
+
 struct msm_mmc_platform_data {
 	unsigned int ocr_mask;			/* available voltages */
 	int built_in;				/* built-in device flag */
@@ -50,6 +60,8 @@ struct msm_mmc_platform_data {
 
 	int is_sdio_al_client;
 #endif
+
+	struct msm_mmc_gpio_data *gpio_data;
 };
 
 #endif

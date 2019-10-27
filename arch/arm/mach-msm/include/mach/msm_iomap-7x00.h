@@ -1,6 +1,7 @@
 /* arch/arm/mach-msm/include/mach/msm_iomap.h
  *
  * Copyright (C) 2007 Google, Inc.
+ * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -54,6 +55,9 @@
 #define MSM_TMR_PHYS          MSM_CSR_PHYS
 #define MSM_TMR_BASE          MSM_CSR_BASE
 #define MSM_TMR_SIZE          SZ_4K
+
+#define MSM7X00_CSR_PHYS      0xC0100000
+#define MSM7X00_CSR_SIZE      SZ_4K
 
 #define MSM_GPT_BASE          MSM_TMR_BASE
 #define MSM_DGT_BASE          (MSM_TMR_BASE + 0x10)
@@ -148,11 +152,5 @@
 
 #define MSM_TSSC_PHYS         0xAA300000
 #define MSM_TSSC_SIZE         SZ_4K
-
-#if defined(CONFIG_ARCH_MSM7X30)
-#define MSM_GCC_BASE          IOMEM(0xF8009000)
-#define MSM_GCC_PHYS          0xC0182000
-#define MSM_GCC_SIZE          SZ_4K
-#endif
 
 #endif

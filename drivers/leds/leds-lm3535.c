@@ -961,7 +961,7 @@ static int lm3535_probe (struct i2c_client *client,
 
             if (ret == 0) {
                 lm3535_data.use_irq = 1;
-                ret = set_irq_wake (client->irq, 1);
+                ret = irq_set_irq_wake (client->irq, 1);
             } else {
                 printk (KERN_ERR "request_irq %d for lm3535 failed: %d\n", 
                     client->irq, ret);

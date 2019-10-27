@@ -507,28 +507,27 @@ static int __init hs_probe(struct platform_device *pdev)
 
  	hrtimer_init(&the_hs->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	the_hs->timer.function = hs_detect_event_timer_func;
- 
+
  	hrtimer_init(&the_hs->btn_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	the_hs->btn_timer.function = hs_btn_event_timer_func;
 
- 
-        local_irq_save(irq_flags); 
+        local_irq_save(irq_flags);
 
 	rc = request_irq(the_hs->irq, hs_irq_handler,request_flags, "hs_detect", the_hs);
 
 	if (rc < 0)
 		goto err_request_detect_irq;
 
-	rc = set_irq_wake(the_hs->irq, 1);
+	rc = irq_set_irq_wake(the_hs->irq, 1);
 	if (rc < 0)
 		goto err_request_detect_irq;
-		
+
 
 	rc = request_irq(the_hs->irq_btn_0, hs_button_irq_handler, request_flags, "hs_btn_0", the_hs);
 	if (rc < 0)
 		goto err_request_detect_irq;
 
-	rc = set_irq_wake(the_hs->irq_btn_0, 1);
+	rc = irq_set_irq_wake(the_hs->irq_btn_0, 1);
 	if (rc < 0)
 		goto err_request_detect_irq;
 
@@ -537,7 +536,7 @@ static int __init hs_probe(struct platform_device *pdev)
 	if (rc < 0)
 		goto err_request_detect_irq;
 
-	rc = set_irq_wake(the_hs->irq_btn_1, 1);
+	rc = irq_set_irq_wake(the_hs->irq_btn_1, 1);
 	if (rc < 0)
 		goto err_request_detect_irq;
 

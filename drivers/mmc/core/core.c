@@ -188,8 +188,6 @@ mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 
 	WARN_ON(!host->claimed);
 
-	led_trigger_event(host->led, LED_FULL);
-
 	mrq->cmd->error = 0;
 	mrq->cmd->mrq = mrq;
 	if (mrq->data) {
@@ -219,6 +217,7 @@ mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 #endif
 	}
 	mmc_host_clk_ungate(host);
+	led_trigger_event(host->led, LED_FULL);
 	host->ops->request(host, mrq);
 }
 
@@ -1046,6 +1045,13 @@ static void mmc_power_off(struct mmc_host *host)
 {
 	host->ios.clock = 0;
 	host->ios.vdd = 0;
+
+	/*
+	 * Reset ocr mask to be the highest possible voltage supported for
+	 * this mmc host. This value will be used at next power up.
+	 */
+	host->ocr = 1 << (fls(host->ocr_avail) - 1);
+
 	if (!mmc_host_is_spi(host)) {
 		host->ios.bus_mode = MMC_BUSMODE_OPENDRAIN;
 		host->ios.chip_select = MMC_CS_DONTCARE;
@@ -1569,6 +1575,12 @@ static int mmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
 		mmc_hostname(host), __func__, host->f_init);
 #endif
 	mmc_power_up(host);
+
+	/*
+	 * sdio_reset sends CMD52 to reset card.  Since we do not know
+	 * if the card is being re-initialized, just send it.  CMD52
+	 * should be ignored by SD/eMMC cards.
+	 */
 	sdio_reset(host);
 	mmc_go_idle(host);
 

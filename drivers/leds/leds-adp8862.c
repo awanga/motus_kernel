@@ -482,7 +482,7 @@ static int adp8862_probe (struct i2c_client *client,
 
         if (ret == 0) {
             adp8862_data.use_irq = 1;
-            ret = set_irq_wake (client->irq, 1);
+            ret = irq_set_irq_wake (client->irq, 1);
         } else {
             printk (KERN_ERR "request_irq %d for adp8862 failed: %d\n",
                 client->irq, ret);

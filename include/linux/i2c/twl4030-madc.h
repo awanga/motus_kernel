@@ -1,10 +1,8 @@
 /*
- * include/linux/i2c/twl4030-madc.h
+ * twl4030_madc.h - Header for TWL4030 MADC
  *
- * TWL4030 MADC module driver header
- *
- * Copyright (C) 2008 Nokia Corporation
- * Mikko Ylinen <mikko.k.ylinen@nokia.com>
+ * Copyright (C) 2011 Texas Instruments Incorporated - http://www.ti.com/
+ * J Keerthy <j-keerthy@ti.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -34,13 +32,22 @@ struct twl4030_madc_conversion_method {
 
 #define TWL4030_MADC_MAX_CHANNELS 16
 
+
+/*
+ * twl4030_madc_request- madc request packet for channel conversion
+ * @channels:	16 bit bitmap for individual channels
+ * @do_avgP:	sample the input channel for 4 consecutive cycles
+ * @method:	RT, SW1, SW2
+ * @type:	Polling or interrupt based method
+ */
+
 struct twl4030_madc_request {
-	u16 channels;
+	unsigned long channels;
 	u16 do_avg;
 	u16 method;
 	u16 type;
-	int active;
-	int result_pending;
+	bool active;
+	bool result_pending;
 	int rbuf[TWL4030_MADC_MAX_CHANNELS];
 	void (*func_cb)(int len, int channels, int *buf);
 };
@@ -75,44 +82,52 @@ enum sample_type {
 #define TWL4030_MADC_RTCH0_LSB		0x17
 #define TWL4030_MADC_GPCH0_LSB		0x37
 
-#define TWL4030_MADC_MADCON		(1<<0)	/* MADC power on */
-#define TWL4030_MADC_BUSY		(1<<0)	/* MADC busy */
-#define TWL4030_MADC_EOC_SW		(1<<1)	/* MADC conversion completion */
-#define TWL4030_MADC_SW_START		(1<<5)  /* MADC SWx start conversion */
-
-#define	TWL4030_MADC_ADCIN0		(1<<0)
-#define	TWL4030_MADC_ADCIN1		(1<<1)
-#define	TWL4030_MADC_ADCIN2		(1<<2)
-#define	TWL4030_MADC_ADCIN3		(1<<3)
-#define	TWL4030_MADC_ADCIN4		(1<<4)
-#define	TWL4030_MADC_ADCIN5		(1<<5)
-#define	TWL4030_MADC_ADCIN6		(1<<6)
-#define	TWL4030_MADC_ADCIN7		(1<<7)
-#define	TWL4030_MADC_ADCIN8		(1<<8)
-#define	TWL4030_MADC_ADCIN9		(1<<9)
-#define	TWL4030_MADC_ADCIN10		(1<<10)
-#define	TWL4030_MADC_ADCIN11		(1<<11)
-#define	TWL4030_MADC_ADCIN12		(1<<12)
-#define	TWL4030_MADC_ADCIN13		(1<<13)
-#define	TWL4030_MADC_ADCIN14		(1<<14)
-#define	TWL4030_MADC_ADCIN15		(1<<15)
+#define TWL4030_MADC_MADCON	(1 << 0)	/* MADC power on */
+#define TWL4030_MADC_BUSY	(1 << 0)	/* MADC busy */
+/* MADC conversion completion */
+#define TWL4030_MADC_EOC_SW	(1 << 1)
+/* MADC SWx start conversion */
+#define TWL4030_MADC_SW_START	(1 << 5)
+#define TWL4030_MADC_ADCIN0	(1 << 0)
+#define TWL4030_MADC_ADCIN1	(1 << 1)
+#define TWL4030_MADC_ADCIN2	(1 << 2)
+#define TWL4030_MADC_ADCIN3	(1 << 3)
+#define TWL4030_MADC_ADCIN4	(1 << 4)
+#define TWL4030_MADC_ADCIN5	(1 << 5)
+#define TWL4030_MADC_ADCIN6	(1 << 6)
+#define TWL4030_MADC_ADCIN7	(1 << 7)
+#define TWL4030_MADC_ADCIN8	(1 << 8)
+#define TWL4030_MADC_ADCIN9	(1 << 9)
+#define TWL4030_MADC_ADCIN10	(1 << 10)
+#define TWL4030_MADC_ADCIN11	(1 << 11)
+#define TWL4030_MADC_ADCIN12	(1 << 12)
+#define TWL4030_MADC_ADCIN13	(1 << 13)
+#define TWL4030_MADC_ADCIN14	(1 << 14)
+#define TWL4030_MADC_ADCIN15	(1 << 15)
 
 /* Fixed channels */
-#define TWL4030_MADC_BTEMP		TWL4030_MADC_ADCIN1
-#define TWL4030_MADC_VBUS		TWL4030_MADC_ADCIN8
-#define TWL4030_MADC_VBKB		TWL4030_MADC_ADCIN9
-#define	TWL4030_MADC_ICHG		TWL4030_MADC_ADCIN10
-#define TWL4030_MADC_VCHG		TWL4030_MADC_ADCIN11
-#define	TWL4030_MADC_VBAT		TWL4030_MADC_ADCIN12
+#define TWL4030_MADC_BTEMP	TWL4030_MADC_ADCIN1
+#define TWL4030_MADC_VBUS	TWL4030_MADC_ADCIN8
+#define TWL4030_MADC_VBKB	TWL4030_MADC_ADCIN9
+#define TWL4030_MADC_ICHG	TWL4030_MADC_ADCIN10
+#define TWL4030_MADC_VCHG	TWL4030_MADC_ADCIN11
+#define TWL4030_MADC_VBAT	TWL4030_MADC_ADCIN12
 
-/* BCI related - XXX To be moved elsewhere */
-#define TWL4030_BCI_BCICTL1		0x23
-#define	TWL4030_BCI_MESBAT		(1<<1)
-#define	TWL4030_BCI_TYPEN		(1<<4)
-#define	TWL4030_BCI_ITHEN		(1<<3)
+/* Step size and prescaler ratio */
+#define TEMP_STEP_SIZE          147
+#define TEMP_PSR_R              100
+#define CURR_STEP_SIZE		147
+#define CURR_PSR_R1		44
+#define CURR_PSR_R2		88
 
-#define TWL4030_MADC_IOC_MAGIC '`'
-#define TWL4030_MADC_IOCX_ADC_RAW_READ		_IO(TWL4030_MADC_IOC_MAGIC, 0)
+#define TWL4030_BCI_BCICTL1	0x23
+#define TWL4030_BCI_CGAIN	0x020
+#define TWL4030_BCI_MESBAT	(1 << 1)
+#define TWL4030_BCI_TYPEN	(1 << 4)
+#define TWL4030_BCI_ITHEN	(1 << 3)
+
+#define REG_BCICTL2             0x024
+#define TWL4030_BCI_ITHSENS	0x007
 
 struct twl4030_madc_user_parms {
 	int channel;
@@ -122,5 +137,5 @@ struct twl4030_madc_user_parms {
 };
 
 int twl4030_madc_conversion(struct twl4030_madc_request *conv);
-
+int twl4030_get_madc_conversion(int channel_no);
 #endif

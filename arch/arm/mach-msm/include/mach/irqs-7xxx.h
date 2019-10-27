@@ -83,7 +83,11 @@
 #define NR_GPIO_IRQS 133
 #define NR_MSM_IRQS 64
 #define NR_BOARD_IRQS 64
+#define NR_SIRC_IRQS 0
 #define NR_MSM_GPIOS NR_GPIO_IRQS
+
+/* unused, but needs to be defined */
+#define FIRST_SIRC_IRQ (NR_MSM_IRQS + NR_GPIO_IRQS)
 
 #define INT_ADSP_A11_SMSM    INT_ADSP_A11
 #endif

@@ -18,10 +18,11 @@
 #include <linux/list.h>
 #include <linux/err.h>
 #include <linux/spinlock.h>
+#include <linux/pm_qos_params.h>
 #include <linux/mutex.h>
+#include <linux/clk.h>
 #include <linux/string.h>
 #include <linux/module.h>
-#include <linux/clk.h>
 #include <linux/clkdev.h>
 
 #include <mach/socinfo.h>

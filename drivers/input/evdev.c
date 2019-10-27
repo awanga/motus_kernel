@@ -40,13 +40,13 @@ struct evdev {
 };
 
 struct evdev_client {
-	int head;
-	int tail;
+	unsigned int head;
+	unsigned int tail;
 	spinlock_t buffer_lock; /* protects access to buffer, head and tail */
 	struct fasync_struct *fasync;
 	struct evdev *evdev;
 	struct list_head node;
-	int bufsize;
+	unsigned int bufsize;
 	struct wake_lock wake_lock;
 	char name[28];
 	struct input_event buffer[];
@@ -58,11 +58,7 @@ static DEFINE_MUTEX(evdev_table_mutex);
 static void evdev_pass_event(struct evdev_client *client,
 			     struct input_event *event)
 {
-	/*
-	 * Interrupts are disabled, just acquire the lock.
-	 * Make sure we don't leave with the client buffer
-	 * "empty" by having client->head == client->tail.
-	 */
+	/* Interrupts are disabled, just acquire the lock. */
 	spin_lock(&client->buffer_lock);
 	wake_lock_timeout(&client->wake_lock, 5 * HZ);
 	do {
@@ -333,6 +329,9 @@ static ssize_t evdev_write(struct file *file, const char __user *buffer,
 	struct input_event event;
 	int retval;
 
+	if (count < input_event_size())
+		return -EINVAL;
+
 	retval = mutex_lock_interruptible(&evdev->mutex);
 	if (retval)
 		return retval;
@@ -342,17 +341,16 @@ static ssize_t evdev_write(struct file *file, const char __user *buffer,
 		goto out;
 	}
 
-	while (retval < count) {
-
+	do {
 		if (input_event_from_user(buffer + retval, &event)) {
 			retval = -EFAULT;
 			goto out;
 		}
+		retval += input_event_size();
 
 		input_inject_event(&evdev->handle,
 				   event.type, event.code, event.value);
-		retval += input_event_size();
-	}
+	} while (retval + input_event_size() <= count);
 
  out:
 	mutex_unlock(&evdev->mutex);

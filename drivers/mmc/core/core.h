@@ -48,6 +48,8 @@ static inline void mmc_delay(unsigned int ms)
 	if (ms < 1000 / HZ) {
 		cond_resched();
 		mdelay(ms);
+	} else if (ms < jiffies_to_msecs(2)) {
+		usleep_range(ms * 1000, (ms + 1) * 1000);
 	} else {
 		msleep(ms);
 	}
@@ -60,6 +62,8 @@ void mmc_stop_host(struct mmc_host *host);
 int mmc_attach_mmc(struct mmc_host *host);
 int mmc_attach_sd(struct mmc_host *host);
 int mmc_attach_sdio(struct mmc_host *host);
+
+void mmc_fixup_device(struct mmc_card *card);
 
 /* Module parameters */
 extern int use_spi_crc;

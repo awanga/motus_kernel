@@ -275,9 +275,9 @@ static int gpio_keypad_request_irqs(struct gpio_kp *kp)
 				"irq %d\n", mi->input_gpios[i], irq);
 			goto err_request_irq_failed;
 		}
-		err = set_irq_wake(irq, 1);
+		err = irq_set_irq_wake(irq, 1);
 		if (err) {
-			pr_err("gpiomatrix: set_irq_wake failed for input %d, "
+			pr_err("gpiomatrix: irq_set_irq_wake failed for input %d, "
 				"irq %d\n", mi->input_gpios[i], irq);
 		}
 		disable_irq(irq);

@@ -338,7 +338,7 @@ static struct msm_iommu_dev gfx2d1_iommu = {
 	.ncb = 2,
 };
 
-struct platform_device msm_device_iommu_jpegd = {
+static struct platform_device msm_device_iommu_jpegd = {
 	.name = "msm_iommu",
 	.id = 0,
 	.dev = {
@@ -398,7 +398,7 @@ static struct platform_device msm_device_iommu_ijpeg = {
 	.resource = msm_iommu_ijpeg_resources,
 };
 
-struct platform_device msm_device_iommu_vfe = {
+static struct platform_device msm_device_iommu_vfe = {
 	.name = "msm_iommu",
 	.id = 6,
 	.dev = {
@@ -408,7 +408,7 @@ struct platform_device msm_device_iommu_vfe = {
 	.resource = msm_iommu_vfe_resources,
 };
 
-struct platform_device msm_device_iommu_vcodec_a = {
+static struct platform_device msm_device_iommu_vcodec_a = {
 	.name = "msm_iommu",
 	.id = 7,
 	.dev = {
@@ -418,7 +418,7 @@ struct platform_device msm_device_iommu_vcodec_a = {
 	.resource = msm_iommu_vcodec_a_resources,
 };
 
-struct platform_device msm_device_iommu_vcodec_b = {
+static struct platform_device msm_device_iommu_vcodec_b = {
 	.name = "msm_iommu",
 	.id = 8,
 	.dev = {
@@ -428,7 +428,7 @@ struct platform_device msm_device_iommu_vcodec_b = {
 	.resource = msm_iommu_vcodec_b_resources,
 };
 
-struct platform_device msm_device_iommu_gfx3d = {
+static struct platform_device msm_device_iommu_gfx3d = {
 	.name = "msm_iommu",
 	.id = 9,
 	.dev = {
@@ -438,7 +438,7 @@ struct platform_device msm_device_iommu_gfx3d = {
 	.resource = msm_iommu_gfx3d_resources,
 };
 
-struct platform_device msm_device_iommu_gfx2d0 = {
+static struct platform_device msm_device_iommu_gfx2d0 = {
 	.name = "msm_iommu",
 	.id = 10,
 	.dev = {

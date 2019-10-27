@@ -262,8 +262,8 @@ void mdp_config_vsync(struct msm_fb_data_type *mfd)
 		mfd->lcd_ref_usec_time =
 		    100000000 / mfd->panel_info.lcd.refx100;
 		mfd->vsync_handler_pending = FALSE;
-		mfd->last_vsync_timetick.tv.sec = 0;
-		mfd->last_vsync_timetick.tv.nsec = 0;
+
+		mfd->last_vsync_timetick.tv64 = 0;
 
 #ifdef MDP_HW_VSYNC
 		if (mdp_vsync_clk == NULL)
@@ -473,9 +473,8 @@ uint32 mdp_get_lcd_line_counter(struct msm_fb_data_type *mfd)
 	spin_unlock_irqrestore(&mdp_spin_lock, flag);
 
 	curr_time = ktime_get_real();
-	elapsed_usec_time =
-	    ((curr_time.tv.sec - last_vsync_timetick_local.tv.sec) * 1000000) +
-	    ((curr_time.tv.nsec - last_vsync_timetick_local.tv.nsec) / 1000);
+	elapsed_usec_time = ktime_to_us(ktime_sub(curr_time,
+						last_vsync_timetick_local));
 
 	elapsed_usec_time = elapsed_usec_time % mfd->lcd_ref_usec_time;
 

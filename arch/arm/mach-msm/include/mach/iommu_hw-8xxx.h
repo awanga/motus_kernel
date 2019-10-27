@@ -20,14 +20,14 @@
 
 #define CTX_SHIFT 12
 
-#define GET_GLOBAL_REG(reg, base) (readl_relaxed((base) + (reg)))
+#define GET_GLOBAL_REG(reg, base) (readl((base) + (reg)))
 #define GET_CTX_REG(reg, base, ctx) \
-			(readl_relaxed((base) + (reg) + ((ctx) << CTX_SHIFT)))
+				(readl((base) + (reg) + ((ctx) << CTX_SHIFT)))
 
-#define SET_GLOBAL_REG(reg, base, val)	writel_relaxed((val), ((base) + (reg)))
+#define SET_GLOBAL_REG(reg, base, val)	writel((val), ((base) + (reg)))
 
 #define SET_CTX_REG(reg, base, ctx, val) \
-		writel_relaxed((val), ((base) + (reg) + ((ctx) << CTX_SHIFT)))
+			writel((val), ((base) + (reg) + ((ctx) << CTX_SHIFT)))
 
 /* Wrappers for numbered registers */
 #define SET_GLOBAL_REG_N(b, n, r, v) SET_GLOBAL_REG(b, ((r) + (n << 2)), (v))
@@ -43,13 +43,12 @@
 #define SET_CONTEXT_FIELD(b, c, r, F, v)	\
 	SET_FIELD(((b) + (r) + ((c) << CTX_SHIFT)), F##_MASK, F##_SHIFT, (v))
 
-#define GET_FIELD(addr, mask, shift) ((readl_relaxed(addr) >> (shift)) & (mask))
+#define GET_FIELD(addr, mask, shift)  ((readl(addr) >> (shift)) & (mask))
 
 #define SET_FIELD(addr, mask, shift, v) \
 do { \
-	int t = readl_relaxed(addr); \
-	writel_relaxed((t & ~((mask) << (shift))) + (((v) & \
-		       (mask)) << (shift)), addr);\
+	int t = readl(addr); \
+	writel((t & ~((mask) << (shift))) + (((v) & (mask)) << (shift)), addr);\
 } while (0)
 
 
@@ -84,15 +83,6 @@ do { \
 #define SL_TEX0			(1 << 6)
 #define SL_OFFSET(va)		(((va) & 0xFF000) >> 12)
 #define SL_NG			(1 << 11)
-
-/* Memory type and cache policy attributes */
-#define MT_SO			0
-#define MT_DEV			1
-#define MT_NORMAL		2
-#define CP_NONCACHED		0
-#define CP_WB_WA		1
-#define CP_WT			2
-#define CP_WB_NWA		3
 
 /* Memory type and cache policy attributes */
 #define MT_SO			0
@@ -635,20 +625,6 @@ do { \
 #define SET_INDEX(b, c, v)	 SET_CONTEXT_FIELD(b, c, V2PSR, INDEX, v)
 
 
-/* V2Pxx UW UR PW PR */
-#define SET_V2PUW_INDEX(b, c, v) SET_CONTEXT_FIELD(b, c, V2PUW, V2Pxx_INDEX, v)
-#define SET_V2PUW_VA(b, c, v)	 SET_CONTEXT_FIELD(b, c, V2PUW, V2Pxx_VA, v)
-
-#define SET_V2PUR_INDEX(b, c, v) SET_CONTEXT_FIELD(b, c, V2PUR, V2Pxx_INDEX, v)
-#define SET_V2PUR_VA(b, c, v)	 SET_CONTEXT_FIELD(b, c, V2PUR, V2Pxx_VA, v)
-
-#define SET_V2PPW_INDEX(b, c, v) SET_CONTEXT_FIELD(b, c, V2PPW, V2Pxx_INDEX, v)
-#define SET_V2PPW_VA(b, c, v)	 SET_CONTEXT_FIELD(b, c, V2PPW, V2Pxx_VA, v)
-
-#define SET_V2PPR_INDEX(b, c, v) SET_CONTEXT_FIELD(b, c, V2PPR, V2Pxx_INDEX, v)
-#define SET_V2PPR_VA(b, c, v)	 SET_CONTEXT_FIELD(b, c, V2PPR, V2Pxx_VA, v)
-
-
 /* Context Register getters */
 /* ACTLR */
 #define GET_CFERE(b, c)	        GET_CONTEXT_FIELD(b, c, ACTLR, CFERE)
@@ -834,20 +810,6 @@ do { \
 /* V2PSR */
 #define GET_HIT(b, c)		GET_CONTEXT_FIELD(b, c, V2PSR, HIT)
 #define GET_INDEX(b, c)		GET_CONTEXT_FIELD(b, c, V2PSR, INDEX)
-
-
-/* V2Pxx UW UR PW PR */
-#define GET_V2PUW_INDEX(b, c)	GET_CONTEXT_FIELD(b, c, V2PUW, V2Pxx_INDEX)
-#define GET_V2PUW_VA(b, c)	GET_CONTEXT_FIELD(b, c, V2PUW, V2Pxx_VA)
-
-#define GET_V2PUR_INDEX(b, c)	GET_CONTEXT_FIELD(b, c, V2PUR, V2Pxx_INDEX)
-#define GET_V2PUR_VA(b, c)	GET_CONTEXT_FIELD(b, c, V2PUR, V2Pxx_VA)
-
-#define GET_V2PPW_INDEX(b, c)	GET_CONTEXT_FIELD(b, c, V2PPW, V2Pxx_INDEX)
-#define GET_V2PPW_VA(b, c)	GET_CONTEXT_FIELD(b, c, V2PPW, V2Pxx_VA)
-
-#define GET_V2PPR_INDEX(b, c)	GET_CONTEXT_FIELD(b, c, V2PPR, V2Pxx_INDEX)
-#define GET_V2PPR_VA(b, c)	GET_CONTEXT_FIELD(b, c, V2PPR, V2Pxx_VA)
 
 
 /* Global Registers */

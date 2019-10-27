@@ -1,13 +1,17 @@
 obj-y += io.o dma.o memory.o
-obj-y += clock.o clock-voter.o clock-dummy.o
+obj-y += timer.o
 obj-y += modem_notifier.o
 obj-$(CONFIG_CPU_FREQ_MSM) += cpufreq.o
-obj-$(CONFIG_DEBUG_FS) += nohlt.o clock-debug.o
+obj-$(CONFIG_DEBUG_FS) += clock-debug.o
 obj-$(CONFIG_KEXEC) += msm_kexec.o
 
-obj-$(CONFIG_ARCH_MSM8X60) += clock-dummy.o iommu.o iommu_dev.o devices-msm8x60-iommu.o
+obj-$(CONFIG_MSM_VIC) += irq-vic.o
+obj-$(CONFIG_MSM_IOMMU) += iommu.o iommu_dev.o devices-iommu.o
+
+obj-$(CONFIG_ARCH_QSD8X50) += sirc.o
+
 obj-$(CONFIG_MSM_PROC_COMM) += proc_comm.o clock-pcom.o vreg.o
-obj-$(CONFIG_MSM_PROC_COMM) += clock.o
+obj-$(CONFIG_MSM_PROC_COMM) += clock.o clock-voter.o clock-dummy.o
 
 ifndef CONFIG_ARCH_MSM8X60
 	obj-$(CONFIG_MSM_PROC_COMM) += internal_power_rail.o vboost.o vreg.o mpp.o
@@ -16,7 +20,8 @@ ifndef CONFIG_ARCH_MSM8X60
 	endif
 endif
 
-obj-$(CONFIG_ARCH_MSM_ARM11) += acpuclock.o timer.o
+obj-$(CONFIG_ARCH_MSM_ARM11) += acpuclock-arm11.o
+
 obj-$(CONFIG_ARCH_MSM_SCORPION) += timer.o
 obj-$(CONFIG_ARCH_MSM_SCORPION) += pmu.o
 obj-$(CONFIG_ARCH_MSM_SCORPIONMP) += timer.o
@@ -132,6 +137,7 @@ obj-$(CONFIG_MACH_HALIBUT) += board-halibut.o devices-msm7x00.o
 obj-$(CONFIG_ARCH_MSM7X30) += board-msm7x30.o devices-msm7x30.o
 obj-$(CONFIG_ARCH_QSD8X50) += board-qsd8x50.o devices-qsd8x50.o
 obj-$(CONFIG_ARCH_MSM8X60) += board-msm8x60.o
+obj-$(CONFIG_ARCH_MSM8960) += board-msm8960.o devices-msm8960.o
 
 obj-$(CONFIG_MACH_MOT) += board-mot-7x01a.o board-mot-battery.o board-mot-keypad.o board-mot-switch.o board-mot-vibrator.o board-mot-akm.o board-mot-misc.o board-mot-pmic.o board-mot-usbhost.o
 ifdef CONFIG_MACH_MOT
@@ -225,7 +231,10 @@ obj-$(CONFIG_ARCH_QSD8X50) += gpiomux-8x50.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM8X60) += gpiomux-8x60.o gpiomux-v2.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM8960) += gpiomux-v2.o gpiomux.o
 ifdef CONFIG_MSM_V2_TLMM
+ifndef CONFIG_ARCH_MSM8960
+# TODO: TLMM Mapping issues need to be resolved
 obj-y	+= gpio-v2.o
+endif
 else
 obj-y	+= gpio.o
 endif

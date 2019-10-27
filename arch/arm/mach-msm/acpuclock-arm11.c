@@ -177,10 +177,11 @@ static int pc_pll_request(unsigned id, unsigned on)
  *---------------------------------------------------------------------------*/
 
 unsigned long acpuclk_power_collapse(void) {
-	int ret = acpuclk_get_rate();
+	int ret = acpuclk_get_rate(smp_processor_id());
 	ret *= 1000;
 	if (ret > drv_state.power_collapse_khz)
-		acpuclk_set_rate(drv_state.power_collapse_khz, 1);
+		acpuclk_set_rate(smp_processor_id(), drv_state.power_collapse_khz,
+				SETRATE_PC);
 	return ret;
 }
 
@@ -190,10 +191,11 @@ unsigned long acpuclk_get_wfi_rate(void)
 }
 
 unsigned long acpuclk_wait_for_irq(void) {
-	int ret = acpuclk_get_rate();
+	int ret = acpuclk_get_rate(smp_processor_id());
 	ret *= 1000;
 	if (ret > drv_state.wait_for_irq_khz)
-		acpuclk_set_rate(drv_state.wait_for_irq_khz, 1);
+		acpuclk_set_rate(smp_processor_id(), drv_state.wait_for_irq_khz,
+				SETRATE_SWFI);
 	return ret;
 }
 
@@ -290,12 +292,15 @@ static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s) {
 	}
 }
 
-int acpuclk_set_rate(unsigned long rate, int for_power_collapse)
+int acpuclk_set_rate(int cpu, unsigned long rate, enum setrate_reason reason)
 {
 	uint32_t reg_clkctl;
 	struct clkctl_acpu_speed *cur_s, *tgt_s, *strt_s;
 	int rc = 0;
 	unsigned int plls_enabled = 0, pll;
+
+	if (reason == SETRATE_CPUFREQ)
+		mutex_lock(&drv_state.lock);
 
 	strt_s = cur_s = drv_state.current_speed;
 
@@ -315,7 +320,8 @@ int acpuclk_set_rate(unsigned long rate, int for_power_collapse)
 		return -EINVAL;
 
 	/* Choose the highest speed speed at or below 'rate' with same PLL. */
-	if (for_power_collapse && tgt_s->a11clk_khz < cur_s->a11clk_khz) {
+	if (reason != SETRATE_CPUFREQ
+	    && tgt_s->a11clk_khz < cur_s->a11clk_khz) {
 		while (tgt_s->pll != ACPU_PLL_TCXO && tgt_s->pll != cur_s->pll)
 			tgt_s--;
 	}
@@ -323,8 +329,7 @@ int acpuclk_set_rate(unsigned long rate, int for_power_collapse)
 	if (strt_s->pll != ACPU_PLL_TCXO)
 		plls_enabled |= 1 << strt_s->pll;
 
-	if (!for_power_collapse) {
-		mutex_lock(&drv_state.lock);
+	if (reason == SETRATE_CPUFREQ) {
 		if (strt_s->pll != tgt_s->pll && tgt_s->pll != ACPU_PLL_TCXO) {
 			rc = pc_pll_request(tgt_s->pll, 1);
 			if (rc < 0) {
@@ -334,6 +339,9 @@ int acpuclk_set_rate(unsigned long rate, int for_power_collapse)
 			}
 			plls_enabled |= 1 << tgt_s->pll;
 		}
+	}
+
+	if (reason == SETRATE_CPUFREQ || reason == SETRATE_PC) {
 		/* Increase VDD if needed. */
 		if (tgt_s->vdd > cur_s->vdd) {
 			if ((rc = acpuclk_set_vdd_level(tgt_s->vdd)) < 0) {
@@ -343,7 +351,7 @@ int acpuclk_set_rate(unsigned long rate, int for_power_collapse)
 		}
 	}
 
-	/* Set wait states for CPU inbetween frequency changes */
+	/* Set wait states for CPU between frequency changes */
 	reg_clkctl = readl(A11S_CLK_CNTL_ADDR);
 	reg_clkctl |= (100 << 16); /* set WT_ST_CNT */
 	writel(reg_clkctl, A11S_CLK_CNTL_ADDR);
@@ -361,6 +369,7 @@ int acpuclk_set_rate(unsigned long rate, int for_power_collapse)
 		 */
 		int d = abs((int)(cur_s->a11clk_khz - tgt_s->a11clk_khz));
 		if (d > drv_state.max_speed_delta_khz) {
+
 			/* Step up or down depending on target vs current. */
 			int clk_index = tgt_s->a11clk_khz > cur_s->a11clk_khz ?
 				cur_s->up : cur_s->down;
@@ -374,11 +383,11 @@ int acpuclk_set_rate(unsigned long rate, int for_power_collapse)
 		} else {
 			cur_s = tgt_s;
 		}
-#if PERF_SWITCH_STEP_DEBUG
-		printk(KERN_DEBUG "%s: STEP khz = %u, pll = %d\n",
-			__FUNCTION__, cur_s->a11clk_khz, cur_s->pll);
-#endif
-		if (!for_power_collapse&& cur_s->pll != ACPU_PLL_TCXO
+
+		pr_debug("STEP khz = %u, pll = %d\n",
+			cur_s->a11clk_khz, cur_s->pll);
+
+		if (cur_s->pll != ACPU_PLL_TCXO
 		    && !(plls_enabled & (1 << cur_s->pll))) {
 			rc = pc_pll_request(cur_s->pll, 1);
 			if (rc < 0) {
@@ -393,42 +402,47 @@ int acpuclk_set_rate(unsigned long rate, int for_power_collapse)
 		drv_state.current_speed = cur_s;
 		/* Re-adjust lpj for the new clock speed. */
 		loops_per_jiffy = cur_s->lpj;
+		mb();
 		udelay(drv_state.acpu_switch_time_us);
 	}
 
 	/* Nothing else to do for power collapse. */
-	if (for_power_collapse)
-		return 0;
+	if (reason == SETRATE_SWFI)
+		goto out;
+
+	/* Change the AXI bus frequency if we can. */
+	if (strt_s->axiclk_khz != tgt_s->axiclk_khz) {
+		rc = clk_set_rate(ebi1_clk,
+				tgt_s->axiclk_khz * 1000);
+		if (rc < 0)
+			pr_warning("Setting AXI min rate failed (%d)\n", rc);
+	}
 
 	/* Disable PLLs we are not using anymore. */
-	plls_enabled &= ~(1 << tgt_s->pll);
+	if (tgt_s->pll != ACPU_PLL_TCXO)
+		plls_enabled &= ~(1 << tgt_s->pll);
 	for (pll = ACPU_PLL_0; pll <= ACPU_PLL_2; pll++)
 		if (plls_enabled & (1 << pll)) {
 			rc = pc_pll_request(pll, 0);
 			if (rc < 0) {
-				pr_err("PLL%d disable failed (%d)\n", pll, rc);
+				pr_warning("PLL%d disable failed (%d)\n", pll, rc);
 				goto out;
 			}
 		}
 
-	/* Change the AXI bus frequency if we can. */
-	if (strt_s->axiclk_khz != tgt_s->axiclk_khz) {
-		rc = clk_set_rate(ebi1_clk, tgt_s->axiclk_khz * 1000);
-		if (rc < 0)
-			pr_err("Setting AXI min rate failed!\n");
-	}
+	/* Nothing else to do for power collapse. */
+	if (reason == SETRATE_PC)
+		goto out;
 
 	/* Drop VDD level if we can. */
 	if (tgt_s->vdd < strt_s->vdd) {
 		if (acpuclk_set_vdd_level(tgt_s->vdd) < 0)
-			printk(KERN_ERR "acpuclock: Unable to drop ACPU vdd\n");
+			pr_warning("acpuclock: Unable to drop ACPU vdd\n");
 	}
 
-#if PERF_SWITCH_DEBUG
-	printk(KERN_DEBUG "%s: ACPU speed change complete\n", __FUNCTION__);
-#endif
+	pr_debug("%s: ACPU speed change complete\n", __FUNCTION__);
 out:
-	if (!for_power_collapse)
+	if (reason == SETRATE_CPUFREQ)
 		mutex_unlock(&drv_state.lock);
 	return rc;
 }
@@ -474,7 +488,7 @@ static void __init acpuclk_init(void)
 	printk(KERN_INFO "ACPU running at %d KHz\n", speed->a11clk_khz);
 }
 
-unsigned long acpuclk_get_rate(void)
+unsigned long acpuclk_get_rate(int cpu)
 {
 	WARN_ONCE(drv_state.current_speed == NULL,
 		  "acpuclk_get_rate: not initialized\n");

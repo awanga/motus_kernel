@@ -48,13 +48,13 @@ struct clk_ops {
 	int (*is_enabled)(unsigned id);
 	long (*round_rate)(unsigned id, unsigned rate);
 	int (*set_parent)(unsigned id, struct clk *parent);
+	bool (*is_local)(unsigned id);
 };
 
 struct clk {
 	uint32_t id;
 	uint32_t remote_id;
 	uint32_t flags;
-	const char *name;
 	struct clk_ops *ops;
 	const char *dbg_name;
 	struct list_head list;
@@ -103,5 +103,6 @@ extern struct clk_ops clk_ops_dummy;
 	} \
 	}
 
-#endif
+#define CLK_LOOKUP(con, c, dev) { .con_id = con, .clk = &c, .dev_id = dev }
 
+#endif

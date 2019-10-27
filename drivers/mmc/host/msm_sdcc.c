@@ -37,6 +37,8 @@
 #include <linux/debugfs.h>
 #include <linux/io.h>
 #include <linux/memory.h>
+#include <linux/gfp.h>
+#include <linux/gpio.h>
 #include <linux/pm_runtime.h>
 #include <linux/wakelock.h>
 
@@ -72,6 +74,9 @@ static struct dentry *debugfs_dir;
 static struct dentry *debugfs_file;
 static int  msmsdcc_dbg_init(void);
 #endif
+
+#define BUSCLK_PWRSAVE 1
+#define BUSCLK_TIMEOUT (HZ)
 
 static unsigned int msmsdcc_pwrsave = 1;
 #ifdef CONFIG_MMC_MSM_SDIO_SUPPORT
@@ -1318,26 +1323,9 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	switch (ios->power_mode) {
 	case MMC_POWER_OFF:
-#if !defined(CONFIG_MACH_MOT)
-		htc_pwrsink_set(PWRSINK_SDCARD, 0);
-#endif
-		if (!host->sdcc_irq_disabled) {
-			if (host->plat->cfg_mpm_sdiowakeup)
-				host->plat->cfg_mpm_sdiowakeup(
-					mmc_dev(mmc), SDC_DAT1_DISABLE);
-			disable_irq(host->irqres->start);
-			host->sdcc_irq_disabled = 1;
-		}
 		break;
 	case MMC_POWER_UP:
 		pwr |= MCI_PWR_UP;
-		if (host->sdcc_irq_disabled) {
-			if (host->plat->cfg_mpm_sdiowakeup)
-				host->plat->cfg_mpm_sdiowakeup(
-					mmc_dev(mmc), SDC_DAT1_ENABLE);
-			enable_irq(host->irqres->start);
-			host->sdcc_irq_disabled = 0;
-		}
 		break;
 	case MMC_POWER_ON:
 #if !defined(CONFIG_MACH_MOT)
@@ -1397,6 +1385,7 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		msmsdcc_setup_clocks(host, false);
 		host->clks_on = 0;
 	}
+
 	spin_unlock_irqrestore(&host->lock, flags);
 }
 
@@ -2232,7 +2221,7 @@ static int msmsdcc_remove(struct platform_device *pdev)
 	wake_lock_destroy(&host->sdio_suspend_wlock);
 	if (plat->sdiowakeup_irq) {
 		wake_lock_destroy(&host->sdio_wlock);
-		set_irq_wake(plat->sdiowakeup_irq, 0);
+		irq_set_irq_wake(plat->sdiowakeup_irq, 0);
 		free_irq(plat->sdiowakeup_irq, host);
 	}
 

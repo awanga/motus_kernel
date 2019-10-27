@@ -117,7 +117,7 @@ static struct fan5646 fan5646_data = {
     },
     .default_current = FAN5646_ISET_5mA,
     .tsleep = 7,
-    .lock = SPIN_LOCK_UNLOCKED,
+    .lock = __SPIN_LOCK_UNLOCKED(leds_fan5646),
     .vr = NULL,
 };
 

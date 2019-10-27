@@ -898,7 +898,7 @@ static void __init mot_7x01_init_mmc(void)
 	/* Setup VREG to pulldown when off */
 	msm_proc_comm(PCOM_VREG_PULLDOWN, &on_off, &id);
 
-	set_irq_wake(MSM_GPIO_TO_INT(SD_DETECT_N_SIGNAL), 1);
+	irq_set_irq_wake(MSM_GPIO_TO_INT(SD_DETECT_N_SIGNAL), 1);
 }
 
 static void __init mot_7x01_init_wlan(void)
@@ -1749,8 +1749,10 @@ static void __init mot_fixup(struct machine_desc *desc, struct tag *tags,
 //	android_pmem_adsp_pdata.start = 0;
 	resources_hw3d[2].start = 0;
 
-    printk("%s: bank[0]=%lx@%lx\n", __func__, mi->bank[0].size, mi->bank[0].start);
-    printk("%s: bank[1]=%lx@%lx\n", __func__, mi->bank[1].size, mi->bank[1].start);
+    printk("%s: bank[0]=%lx@%lx\n", __func__,
+	(long unsigned int)mi->bank[0].size, (long unsigned int)mi->bank[0].start);
+    printk("%s: bank[1]=%lx@%lx\n", __func__,
+	(long unsigned int)mi->bank[1].size, (long unsigned int)mi->bank[1].start);
 #ifdef CONFIG_ANDROID_RAM_CONSOLE
     printk("%s: ramconsole_resource[0]=%x..%x\n", __func__, ramconsole_resource[0].start, ramconsole_resource[0].end + 1);
 #endif

@@ -282,7 +282,7 @@ static int accel_probe(struct i2c_client *client, const struct i2c_device_id *id
 		}
         ipdev->poll_interval = (int)-1;
         ipdev->poll = accel_poll_data_ready;
-         
+
         idev = ipdev->input;
 
 		idev->name = "accelerometer";

@@ -105,12 +105,29 @@ void snd_soc_jack_report(struct snd_soc_jack *jack, int status, int mask)
 
 	snd_soc_dapm_sync(dapm);
 
-	snd_jack_report(jack->jack, status);
+	snd_jack_report(jack->jack, jack->status);
 
 out:
 	mutex_unlock(&codec->mutex);
 }
 EXPORT_SYMBOL_GPL(snd_soc_jack_report);
+
+/**
+ * snd_soc_jack_report_no_dapm - Report the current status for a jack
+ *				 without DAPM sync
+ * @jack:   the jack
+ * @status: a bitmask of enum snd_jack_type values that are currently detected.
+ * @mask:   a bitmask of enum snd_jack_type values that being reported.
+ */
+void snd_soc_jack_report_no_dapm(struct snd_soc_jack *jack, int status,
+				 int mask)
+{
+	jack->status &= ~mask;
+	jack->status |= status & mask;
+
+	snd_jack_report(jack->jack, jack->status);
+}
+EXPORT_SYMBOL_GPL(snd_soc_jack_report_no_dapm);
 
 /**
  * snd_soc_jack_add_zones - Associate voltage zones with jack
@@ -325,9 +342,9 @@ int snd_soc_jack_add_gpios(struct snd_soc_jack *jack, int count,
 					      gpio_handler,
 					      IRQF_TRIGGER_RISING |
 					      IRQF_TRIGGER_FALLING,
-					      jack->codec->dev->driver->name,
+					      gpios[i].name,
 					      &gpios[i]);
-		if (ret)
+		if (ret < 0)
 			goto err;
 
 		if (gpios[i].wake) {

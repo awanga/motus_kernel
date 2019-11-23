@@ -1,34 +1,13 @@
-/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, and the entire permission notice in its entirety,
- *    including the disclaimer of warranties.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote
- *    products derived from this software without specific prior
- *    written permission.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
  *
- * ALTERNATIVELY, this product may be distributed under the terms of
- * the GNU General Public License, version 2, in which case the provisions
- * of the GPL version 2 are required INSTEAD OF the BSD license.
- *
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE, ALL OF
- * WHICH ARE HEREBY DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
- * OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
- * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
- * USE OF THIS SOFTWARE, EVEN IF NOT ADVISED OF THE POSSIBILITY OF SUCH
- * DAMAGE.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 
 #ifndef _ARCH_ARM_MACH_MSM_BUS_CORE_H
@@ -41,26 +20,25 @@
 #include <mach/msm_bus_board.h>
 #include <mach/msm_bus.h>
 
-#if defined DEBUG
-
 #define MSM_BUS_DBG(msg, ...) \
-	printk(KERN_DEBUG "AXI: %s(): " msg, __func__, ## __VA_ARGS__)
-#define MSM_FAB_DBG(msg, ...) \
-	dev_dbg(&fabric->fabdev.dev, "AXI: %s(): " msg, __func__, ## \
-	__VA_ARGS__)
-
-#else
-#define MSM_BUS_DBG(msg, ...)
-#define MSM_FAB_DBG(msg, ...)
-#endif
-
+	pr_debug(msg, ## __VA_ARGS__)
 #define MSM_BUS_ERR(msg, ...) \
-	printk(KERN_ERR "AXI: %s(): " msg, __func__, ## __VA_ARGS__)
+	pr_err(msg, ## __VA_ARGS__)
 #define MSM_BUS_WARN(msg, ...) \
-	printk(KERN_WARNING "AXI: %s(): " msg, __func__, ## __VA_ARGS__)
+	pr_warn(msg, ## __VA_ARGS__)
 #define MSM_FAB_ERR(msg, ...) \
-	dev_err(&fabric->fabdev.dev, "AXI: %s(): " msg, __func__, ## \
-	__VA_ARGS__)
+	dev_err(&fabric->fabdev.dev, msg, ## __VA_ARGS__)
+
+#define IS_MASTER_VALID(mas) \
+	(((mas >= MSM_BUS_MASTER_FIRST) && (mas <= MSM_BUS_MASTER_LAST)) \
+	 ? 1 : 0)
+#define IS_SLAVE_VALID(slv) \
+	(((slv >= MSM_BUS_SLAVE_FIRST) && (slv <= MSM_BUS_SLAVE_LAST)) ? 1 : 0)
+
+#define INTERLEAVED_BW(fab_pdata, bw, ports) \
+	((fab_pdata->il_flag) ? DIV_ROUND_UP((bw), (ports)) : (bw))
+#define INTERLEAVED_VAL(fab_pdata, n) \
+	((fab_pdata->il_flag) ? (n) : 1)
 
 enum msm_bus_dbg_op_type {
 	MSM_BUS_DBG_UNREGISTER = -2,
@@ -81,9 +59,12 @@ struct msm_bus_node_info {
 	int *tier;
 	int num_tiers;
 	int ahb;
+	int hw_sel;
 	const char *slaveclk[NUM_CTX];
 	const char *memclk;
 	unsigned int buswidth;
+	unsigned int ws;
+	unsigned int mode;
 };
 
 struct path_node {
@@ -121,6 +102,27 @@ struct msm_bus_inode_info {
 	int commit_index;
 	struct nodeclk nodeclk[NUM_CTX];
 	struct nodeclk memclk;
+	void *hw_data;
+};
+
+struct msm_bus_hw_algorithm {
+	int (*allocate_commit_data)(struct msm_bus_fabric_registration
+		*fab_pdata, void **cdata, int ctx);
+	void *(*allocate_hw_data)(struct platform_device *pdev,
+		struct msm_bus_fabric_registration *fab_pdata);
+	void (*node_init)(void *hw_data, struct msm_bus_inode_info *info);
+	void (*free_commit_data)(void *cdata);
+	void (*update_bw)(struct msm_bus_inode_info *hop,
+		struct msm_bus_inode_info *info,
+		struct msm_bus_fabric_registration *fab_pdata,
+		void *sel_cdata, int *master_tiers,
+		long int add_bw);
+	void (*fill_cdata_buffer)(int *curr, char *buf, const int max_size,
+		void *cdata, int nmasters, int nslaves, int ntslaves);
+	int (*commit)(struct msm_bus_fabric_registration
+		*fab_pdata, void *hw_data, void **cdata);
+	int (*port_unhalt)(uint32_t haltid, uint8_t mport);
+	int (*port_halt)(uint32_t haltid, uint8_t mport);
 };
 
 struct msm_bus_fabric_device {
@@ -128,6 +130,8 @@ struct msm_bus_fabric_device {
 	const char *name;
 	struct device dev;
 	const struct msm_bus_fab_algorithm *algo;
+	const struct msm_bus_board_algorithm *board_algo;
+	struct msm_bus_hw_algorithm hw_algo;
 	int visited;
 };
 #define to_msm_bus_fabric_device(d) container_of(d, \
@@ -142,8 +146,7 @@ struct msm_bus_fab_algorithm {
 		unsigned int cl_active_flag);
 	int (*port_halt)(struct msm_bus_fabric_device *fabdev, int portid);
 	int (*port_unhalt)(struct msm_bus_fabric_device *fabdev, int portid);
-	int (*commit)(struct msm_bus_fabric_device *fabdev,
-		int active_only);
+	int (*commit)(struct msm_bus_fabric_device *fabdev);
 	struct msm_bus_inode_info *(*find_node)(struct msm_bus_fabric_device
 		*fabdev, int id);
 	struct msm_bus_inode_info *(*find_gw_node)(struct msm_bus_fabric_device
@@ -152,6 +155,13 @@ struct msm_bus_fab_algorithm {
 	void (*update_bw)(struct msm_bus_fabric_device *fabdev, struct
 		msm_bus_inode_info * hop, struct msm_bus_inode_info *info,
 		long int add_bw, int *master_tiers, int ctx);
+};
+
+struct msm_bus_board_algorithm {
+	const int board_nfab;
+	void (*assign_iids)(struct msm_bus_fabric_registration *fabreg,
+		int fabid);
+	int (*get_iid)(int id);
 };
 
 /**
@@ -176,22 +186,17 @@ void msm_bus_fabric_device_unregister(struct msm_bus_fabric_device *fabric);
 struct msm_bus_fabric_device *msm_bus_get_fabric_device(int fabid);
 int msm_bus_get_num_fab(void);
 
-int allocate_commit_data(struct msm_bus_fabric_registration *fab_pdata,
-	void **cdata);
-struct msm_rpm_iv_pair *allocate_rpm_data(struct msm_bus_fabric_registration
-	*fab_pdata);
-int msm_bus_rpm_commit(struct msm_bus_fabric_registration
-	*fab_pdata, int ctx, struct msm_rpm_iv_pair *rpm_data,
-	void *cdata);
-void free_commit_data(void *cdata);
-void msm_bus_rpm_update_bw(struct msm_bus_inode_info *hop,
-	struct msm_bus_inode_info *info,
-	struct msm_bus_fabric_registration *fab_pdata,
-	void *sel_cdata, int *master_tiers,
-	long int add_bw);
 void msm_bus_rpm_fill_cdata_buffer(int *curr, char *buf, const int max_size,
 	void *cdata, int nmasters, int nslaves, int ntslaves);
 
+int msm_bus_hw_fab_init(struct msm_bus_fabric_registration *pdata,
+	struct msm_bus_hw_algorithm *hw_algo);
+int msm_bus_rpm_hw_init(struct msm_bus_fabric_registration *pdata,
+	struct msm_bus_hw_algorithm *hw_algo);
+int msm_bus_noc_hw_init(struct msm_bus_fabric_registration *pdata,
+	struct msm_bus_hw_algorithm *hw_algo);
+int msm_bus_bimc_hw_init(struct msm_bus_fabric_registration *pdata,
+	struct msm_bus_hw_algorithm *hw_algo);
 #if defined(CONFIG_DEBUG_FS) && defined(CONFIG_MSM_BUS_SCALING)
 void msm_bus_dbg_client_data(struct msm_bus_scale_pdata *pdata, int index,
 	uint32_t cl);

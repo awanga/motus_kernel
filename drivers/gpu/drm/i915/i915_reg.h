@@ -291,6 +291,9 @@
 #define RING_MAX_IDLE(base)	((base)+0x54)
 #define RING_HWS_PGA(base)	((base)+0x80)
 #define RING_HWS_PGA_GEN6(base)	((base)+0x2080)
+#define RENDER_HWS_PGA_GEN7	(0x04080)
+#define BSD_HWS_PGA_GEN7	(0x04180)
+#define BLT_HWS_PGA_GEN7	(0x04280)
 #define RING_ACTHD(base)	((base)+0x74)
 #define RING_NOPID(base)	((base)+0x94)
 #define RING_IMR(base)		((base)+0xa8)
@@ -528,6 +531,7 @@
 #define   GEN6_BSD_SLEEP_PSMI_CONTROL_RC_ILDL_MESSAGE_ENABLE		0
 #define   GEN6_BSD_SLEEP_PSMI_CONTROL_IDLE_INDICATOR			(1 << 3)
 
+#define GEN6_BSD_HWSTAM			0x12098
 #define GEN6_BSD_IMR			0x120a8
 #define   GEN6_BSD_USER_INTERRUPT	(1 << 12)
 
@@ -2540,9 +2544,17 @@
 #define _CURBBASE		0x700c4
 #define _CURBPOS			0x700c8
 
+#define _CURBCNTR_IVB		0x71080
+#define _CURBBASE_IVB		0x71084
+#define _CURBPOS_IVB		0x71088
+
 #define CURCNTR(pipe) _PIPE(pipe, _CURACNTR, _CURBCNTR)
 #define CURBASE(pipe) _PIPE(pipe, _CURABASE, _CURBBASE)
 #define CURPOS(pipe) _PIPE(pipe, _CURAPOS, _CURBPOS)
+
+#define CURCNTR_IVB(pipe) _PIPE(pipe, _CURACNTR, _CURBCNTR_IVB)
+#define CURBASE_IVB(pipe) _PIPE(pipe, _CURABASE, _CURBBASE_IVB)
+#define CURPOS_IVB(pipe) _PIPE(pipe, _CURAPOS, _CURBPOS_IVB)
 
 /* Display A control */
 #define _DSPACNTR                0x70180
@@ -2778,6 +2790,19 @@
 #define DE_PIPEA_VSYNC          (1 << 3)
 #define DE_PIPEA_FIFO_UNDERRUN  (1 << 0)
 
+/* More Ivybridge lolz */
+#define DE_ERR_DEBUG_IVB		(1<<30)
+#define DE_GSE_IVB			(1<<29)
+#define DE_PCH_EVENT_IVB		(1<<28)
+#define DE_DP_A_HOTPLUG_IVB		(1<<27)
+#define DE_AUX_CHANNEL_A_IVB		(1<<26)
+#define DE_SPRITEB_FLIP_DONE_IVB	(1<<9)
+#define DE_SPRITEA_FLIP_DONE_IVB	(1<<4)
+#define DE_PLANEB_FLIP_DONE_IVB		(1<<8)
+#define DE_PLANEA_FLIP_DONE_IVB		(1<<3)
+#define DE_PIPEB_VBLANK_IVB		(1<<5)
+#define DE_PIPEA_VBLANK_IVB		(1<<0)
+
 #define DEISR   0x44000
 #define DEIMR   0x44004
 #define DEIIR   0x44008
@@ -2809,6 +2834,7 @@
 #define  ILK_eDP_A_DISABLE		(1<<24)
 #define  ILK_DESKTOP			(1<<23)
 #define ILK_DSPCLK_GATE		0x42020
+#define  IVB_VRHUNIT_CLK_GATE	(1<<28)
 #define  ILK_DPARB_CLK_GATE	(1<<5)
 #define  ILK_DPFD_CLK_GATE	(1<<7)
 
@@ -3057,6 +3083,9 @@
 #define  TRANS_6BPC             (2<<5)
 #define  TRANS_12BPC            (3<<5)
 
+#define SOUTH_CHICKEN2		0xc2004
+#define  DPLS_EDP_PPS_FIX_DIS	(1<<0)
+
 #define _FDI_RXA_CHICKEN         0xc200c
 #define _FDI_RXB_CHICKEN         0xc2010
 #define  FDI_RX_PHASE_SYNC_POINTER_OVR	(1<<1)
@@ -3107,7 +3136,16 @@
 #define  FDI_TX_ENHANCE_FRAME_ENABLE    (1<<18)
 /* Ironlake: hardwired to 1 */
 #define  FDI_TX_PLL_ENABLE              (1<<14)
+
+/* Ivybridge has different bits for lolz */
+#define  FDI_LINK_TRAIN_PATTERN_1_IVB       (0<<8)
+#define  FDI_LINK_TRAIN_PATTERN_2_IVB       (1<<8)
+#define  FDI_LINK_TRAIN_PATTERN_IDLE_IVB    (2<<8)
+#define  FDI_LINK_TRAIN_NONE_IVB            (3<<8)
+
 /* both Tx and Rx */
+#define  FDI_COMPOSITE_SYNC		(1<<11)
+#define  FDI_LINK_TRAIN_AUTO		(1<<10)
 #define  FDI_SCRAMBLING_ENABLE          (0<<7)
 #define  FDI_SCRAMBLING_DISABLE         (1<<7)
 
@@ -3117,6 +3155,8 @@
 #define FDI_RX_CTL(pipe) _PIPE(pipe, _FDI_RXA_CTL, _FDI_RXB_CTL)
 #define  FDI_RX_ENABLE          (1<<31)
 /* train, dp width same as FDI_TX */
+#define  FDI_FS_ERRC_ENABLE		(1<<27)
+#define  FDI_FE_ERRC_ENABLE		(1<<26)
 #define  FDI_DP_PORT_WIDTH_X8           (7<<19)
 #define  FDI_8BPC                       (0<<16)
 #define  FDI_10BPC                      (1<<16)
@@ -3333,6 +3373,10 @@
 
 #define  GT_FIFO_FREE_ENTRIES			0x120008
 
+#define GEN6_UCGCTL2				0x9404
+# define GEN6_RCPBUNIT_CLOCK_GATE_DISABLE		(1 << 12)
+# define GEN6_RCCUNIT_CLOCK_GATE_DISABLE		(1 << 11)
+
 #define GEN6_RPNSWREQ				0xA008
 #define   GEN6_TURBO_DISABLE			(1<<31)
 #define   GEN6_FREQUENCY(x)			((x)<<25)
@@ -3389,7 +3433,7 @@
 #define GEN6_PMINTRMSK				0xA168
 
 #define GEN6_PMISR				0x44020
-#define GEN6_PMIMR				0x44024
+#define GEN6_PMIMR				0x44024 /* rps_lock */
 #define GEN6_PMIIR				0x44028
 #define GEN6_PMIER				0x4402C
 #define  GEN6_PM_MBOX_EVENT			(1<<25)
@@ -3399,6 +3443,9 @@
 #define  GEN6_PM_RP_DOWN_THRESHOLD		(1<<4)
 #define  GEN6_PM_RP_UP_EI_EXPIRED		(1<<2)
 #define  GEN6_PM_RP_DOWN_EI_EXPIRED		(1<<1)
+#define  GEN6_PM_DEFERRED_EVENTS		(GEN6_PM_RP_UP_THRESHOLD | \
+						 GEN6_PM_RP_DOWN_THRESHOLD | \
+						 GEN6_PM_RP_DOWN_TIMEOUT)
 
 #define GEN6_PCODE_MAILBOX			0x138124
 #define   GEN6_PCODE_READY			(1<<31)

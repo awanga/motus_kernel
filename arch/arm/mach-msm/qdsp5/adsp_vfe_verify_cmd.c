@@ -16,7 +16,6 @@
  *
  */
 
-#include <mach/debug_adsp_mm.h>
 #include <mach/qdsp5/qdsp5vfecmdi.h>
 #include "adsp.h"
 #include <mach/debug_mm.h>

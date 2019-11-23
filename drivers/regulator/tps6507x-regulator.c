@@ -553,7 +553,6 @@ static __devinit
 int tps6507x_pmic_probe(struct platform_device *pdev)
 {
 	struct tps6507x_dev *tps6507x_dev = dev_get_drvdata(pdev->dev.parent);
-	static int desc_id;
 	struct tps_info *info = &tps6507x_pmic_regs[0];
 	struct regulator_init_data *init_data;
 	struct regulator_dev *rdev;
@@ -598,7 +597,7 @@ int tps6507x_pmic_probe(struct platform_device *pdev)
 		}
 
 		tps->desc[i].name = info->name;
-		tps->desc[i].id = desc_id++;
+		tps->desc[i].id = i;
 		tps->desc[i].n_voltages = num_voltages[i];
 		tps->desc[i].ops = (i > TPS6507X_DCDC_3 ?
 		&tps6507x_pmic_ldo_ops : &tps6507x_pmic_dcdc_ops);
@@ -606,7 +605,7 @@ int tps6507x_pmic_probe(struct platform_device *pdev)
 		tps->desc[i].owner = THIS_MODULE;
 
 		rdev = regulator_register(&tps->desc[i],
-					tps6507x_dev->dev, init_data, tps);
+					tps6507x_dev->dev, init_data, tps, NULL);
 		if (IS_ERR(rdev)) {
 			dev_err(tps6507x_dev->dev,
 				"failed to register %s regulator\n",

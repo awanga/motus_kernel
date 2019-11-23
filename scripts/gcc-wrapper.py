@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+# Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -30,6 +30,7 @@
 # Invoke gcc, looking for warnings, and causing a failure if there are
 # non-whitelisted warnings.
 
+import errno
 import re
 import os
 import sys
@@ -39,36 +40,58 @@ import subprocess
 # force LANG to be set to en_US.UTF-8 to get consistent warnings.
 
 allowed_warnings = set([
+    "alignment.c:298",
     "alignment.c:720",
-    "async.c:127",
-    "async.c:283",
-    "decompress_bunzip2.c:511",
-    "dm.c:1118",
-    "dm.c:1146",
-    "dm-table.c:1065",
-    "dm-table.c:1071",
-    "ehci-dbg.c:44",
-    "ehci-dbg.c:88",
-    "ehci-hcd.c:1048",
-    "ehci-hcd.c:423",
-    "ehci-hcd.c:614",
-    "ehci-hub.c:109",
-    "ehci-hub.c:1265",
-    "ehci-msm.c:156",
-    "ehci-msm.c:201",
-    "ehci-msm.c:455",
-    "eventpoll.c:1118",
-    "gspca.c:1509",
-    "ioctl.c:4673",
-    "main.c:305",
-    "main.c:734",
-    "nf_conntrack_netlink.c:762",
+    "async.c:122",
+    "async.c:270",
+    "block.c:885",
+    "block.c:886",
+    "dir.c:43",
+    "dm.c:1053",
+    "dm.c:1080",
+    "dm-table.c:1120",
+    "dm-table.c:1126",
+    "drm_edid.c:1303",
+    "eventpoll.c:1143",
+    "f_mass_storage.c:3368",
+    "inode.c:72",
+    "inode.c:73",
+    "inode.c:74",
+    "msm_sdcc.c:126",
+    "msm_sdcc.c:128",
+    "nf_conntrack_core.c:1579",
+    "nf_conntrack_core.c:1580",
+    "nf_conntrack_netlink.c:790",
+    "nf_conntrack_proto.c:210",
+    "nf_conntrack_proto.c:345",
+    "nf_conntrack_proto.c:370",
+    "nf_nat_core.c:528",
+    "nf_nat_core.c:739",
+    "nf_nat_core.c:740",
+    "nf_nat_core.c:741",
+    "nf_nat_core.c:742",
+    "nf_nat_core.c:751",
+    "nf_nat_core.c:753",
+    "nf_nat_core.c:756",
+    "nf_nat_ftp.c:123",
+    "nf_nat_pptp.c:285",
+    "nf_nat_pptp.c:288",
+    "nf_nat_pptp.c:291",
+    "nf_nat_pptp.c:294",
+    "nf_nat_sip.c:550",
+    "nf_nat_sip.c:551",
+    "nf_nat_sip.c:552",
+    "nf_nat_sip.c:553",
+    "nf_nat_sip.c:555",
+    "nf_nat_sip.c:556",
+    "nf_nat_sip.c:554",
     "nf_nat_standalone.c:118",
-    "return_address.c:61",
-    "scan.c:749",
-    "smsc.c:257",
-    "yaffs_guts.c:1571",
-    "yaffs_guts.c:600",
+    "nf_nat_tftp.c:46",
+    "return_address.c:62",
+    "sch_generic.c:678",
+    "soc-core.c:1719",
+    "xt_log.h:50",
+    "vx6953.c:3124",
  ])
 
 # Capture the name of the object file, can find it.
@@ -102,12 +125,20 @@ def run_gcc():
 
     compiler = sys.argv[0]
 
-    proc = subprocess.Popen(args, stderr=subprocess.PIPE)
-    for line in proc.stderr:
-        print line,
-        interpret_warning(line)
+    try:
+        proc = subprocess.Popen(args, stderr=subprocess.PIPE)
+        for line in proc.stderr:
+            print line,
+            interpret_warning(line)
 
-    result = proc.wait()
+        result = proc.wait()
+    except OSError as e:
+        result = e.errno
+        if result == errno.ENOENT:
+            print args[0] + ':',e.strerror
+            print 'Is your PATH set correctly?'
+        else:
+            print ' '.join(args), str(e)
 
     return result
 

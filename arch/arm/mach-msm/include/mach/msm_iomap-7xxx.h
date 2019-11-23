@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -35,98 +35,40 @@
  *
  */
 
-#define MSM_VIC_BASE          IOMEM(0xFA000000)
-#define MSM_VIC_PHYS          0xC0000000
-#define MSM_VIC_SIZE          SZ_4K
+#define MSM7XXX_VIC_PHYS          0xC0000000
+#define MSM7XXX_VIC_SIZE          SZ_4K
 
-#define MSM_CSR_BASE          IOMEM(0xFA001000)
-#define MSM_CSR_PHYS          0xC0100000
-#define MSM_CSR_SIZE          SZ_4K
+#define MSM7XXX_CSR_PHYS          0xC0100000
+#define MSM7XXX_CSR_SIZE          SZ_4K
 
-#define MSM_TMR_PHYS          MSM_CSR_PHYS
-#define MSM_TMR_BASE          MSM_CSR_BASE
-#define MSM_TMR_SIZE          SZ_4K
+#define MSM7XXX_TMR_PHYS          MSM7XXX_CSR_PHYS
+#define MSM7XXX_TMR_SIZE          SZ_4K
 
-#define MSM_DMOV_BASE         IOMEM(0xFA002000)
-#define MSM_DMOV_PHYS         0xA9700000
-#define MSM_DMOV_SIZE         SZ_4K
+#define MSM7XXX_GPIO1_PHYS        0xA9200000
+#define MSM7XXX_GPIO1_SIZE        SZ_4K
 
-#define MSM_GPIO1_BASE        IOMEM(0xFA003000)
-#define MSM_GPIO1_PHYS        0xA9200000
-#define MSM_GPIO1_SIZE        SZ_4K
+#define MSM7XXX_GPIO2_PHYS        0xA9300000
+#define MSM7XXX_GPIO2_SIZE        SZ_4K
 
-#define MSM_GPIO2_BASE        IOMEM(0xFA004000)
-#define MSM_GPIO2_PHYS        0xA9300000
-#define MSM_GPIO2_SIZE        SZ_4K
+#define MSM7XXX_CLK_CTL_PHYS      0xA8600000
+#define MSM7XXX_CLK_CTL_SIZE      SZ_4K
 
-#define MSM_CLK_CTL_BASE      IOMEM(0xFA005000)
-#define MSM_CLK_CTL_PHYS      0xA8600000
-#define MSM_CLK_CTL_SIZE      SZ_4K
+#define MSM7XXX_L2CC_PHYS         0xC0400000
+#define MSM7XXX_L2CC_SIZE         SZ_4K
 
-#define MSM_L2CC_BASE         IOMEM(0xFA006000)
-#define MSM_L2CC_PHYS         0xC0400000
-#define MSM_L2CC_SIZE         SZ_4K
+#define MSM7XXX_UART1_PHYS        0xA9A00000
+#define MSM7XXX_UART1_SIZE        SZ_4K
 
-#define MSM_SHARED_RAM_BASE   IOMEM(0xFA100000)
-#define MSM_SHARED_RAM_SIZE   SZ_1M
+#define MSM7XXX_UART2_PHYS        0xA9B00000
+#define MSM7XXX_UART2_SIZE        SZ_4K
 
-#define MSM_UART1_PHYS        0xA9A00000
-#define MSM_UART1_SIZE        SZ_4K
+#define MSM7XXX_UART3_PHYS        0xA9C00000
+#define MSM7XXX_UART3_SIZE        SZ_4K
 
-#define MSM_UART2_PHYS        0xA9B00000
-#define MSM_UART2_SIZE        SZ_4K
+#define MSM7XXX_MDC_PHYS	  0xAA500000
+#define MSM7XXX_MDC_SIZE          SZ_1M
 
-#define MSM_UART3_PHYS        0xA9C00000
-#define MSM_UART3_SIZE        SZ_4K
-
-#define MSM_SDC1_PHYS         0xA0400000
-#define MSM_SDC1_SIZE         SZ_4K
-
-#define MSM_SDC2_PHYS         0xA0500000
-#define MSM_SDC2_SIZE         SZ_4K
-
-#define MSM_SDC3_PHYS         0xA0600000
-#define MSM_SDC3_SIZE         SZ_4K
-
-#define MSM_SDC4_PHYS         0xA0700000
-#define MSM_SDC4_SIZE         SZ_4K
-
-#define MSM_NAND_PHYS         0xA0A00000
-#define MSM_NAND_SIZE         SZ_4K
-
-#define MSM_USB_BASE	      0xA0800000
-#define MSM_USB_SIZE	      SZ_1K
-
-#ifdef CONFIG_MSM_DEBUG_UART
-#define MSM_DEBUG_UART_BASE   0xFB000000
-#if CONFIG_MSM_DEBUG_UART == 1
-#define MSM_DEBUG_UART_PHYS   MSM_UART1_PHYS
-#elif CONFIG_MSM_DEBUG_UART == 2
-#define MSM_DEBUG_UART_PHYS   MSM_UART2_PHYS
-#elif CONFIG_MSM_DEBUG_UART == 3
-#define MSM_DEBUG_UART_PHYS   MSM_UART3_PHYS
-#endif
-#define MSM_DEBUG_UART_SIZE   SZ_4K
-#endif
-
-#define MSM_MDC_BASE	      IOMEM(0xFA200000)
-#define MSM_MDC_PHYS	      0xAA500000
-#define MSM_MDC_SIZE	      SZ_1M
-
-#define MSM_AD5_BASE          IOMEM(0xFA300000)
-#define MSM_AD5_PHYS          0xAC000000
-#define MSM_AD5_SIZE          (SZ_1M*13)
-
-#define MSM_VFE_PHYS          0xA0F00000
-#define MSM_VFE_SIZE          SZ_1M
-
-#define MSM_UART1DM_PHYS      0xA0200000
-#define MSM_UART2DM_PHYS      0xA0300000
-
-#define MSM_SSBI_PHYS         0xA8100000
-#define MSM_SSBI_SIZE         SZ_4K
-
-#define MSM_TSSC_PHYS         0xAA300000
-#define MSM_TSSC_SIZE         SZ_4K
+#define MSM7XXX_AD5_PHYS          0xAC000000
+#define MSM7XXX_AD5_SIZE          (SZ_1M*13)
 
 #endif

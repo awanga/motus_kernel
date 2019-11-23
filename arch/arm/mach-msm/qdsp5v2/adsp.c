@@ -2,7 +2,7 @@
  * Register/Interrupt access for userspace aDSP library.
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2008-2009,2011 Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2009,2011-2012 Code Aurora Forum. All rights reserved.
  * Author: Iliyan Malchev <ibm@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -34,12 +34,17 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <mach/msm_iomap.h>
-#include <mach/clk.h>
 #include <mach/msm_adsp.h>
 #include "adsp.h"
 #include <mach/debug_mm.h>
+#include <linux/debugfs.h>
 
-#define INT_ADSP INT_ADSP_A9_A11
+#ifdef CONFIG_DEBUG_FS
+static struct dentry *dentry_adsp;
+static struct dentry *dentry_wdata;
+static struct dentry *dentry_rdata;
+static int wdump, rdump;
+#endif /* CONFIG_DEBUG_FS */
 
 static struct adsp_info adsp_info;
 static struct msm_adsp_module *adsp_modules;
@@ -424,6 +429,19 @@ int msm_adsp_write(struct msm_adsp_module *module, unsigned dsp_queue_addr,
 			void *cmd_buf, size_t cmd_size)
 {
 	int rc, retries = 0;
+#ifdef CONFIG_DEBUG_FS
+	uint16_t *ptr;
+	int ii;
+
+	if (wdump > 0) {
+		ptr = cmd_buf;
+		pr_info("A->D:%x\n", module->id);
+		pr_info("adsp: %x %d\n", dsp_queue_addr, cmd_size);
+		for (ii = 0; ii < cmd_size/2; ii++)
+			pr_info("%x ", ptr[ii]);
+		pr_info("\n");
+	}
+#endif /* CONFIG_DEBUG_FS */
 	do {
 		rc = __msm_adsp_write(module, dsp_queue_addr, cmd_buf,
 								cmd_size);
@@ -670,6 +688,10 @@ static int adsp_rtos_read_ctrl_word_cmd_tast_to_h_v(
 	unsigned rtos_task_id;
 	unsigned msg_id;
 	unsigned msg_length;
+#ifdef CONFIG_DEBUG_FS
+	uint16_t *ptr;
+	int ii;
+#endif /* CONFIG_DEBUG_FS */
 	void (*func)(void *, size_t);
 
 	if (dsp_addr >= (void *)(MSM_AD5_BASE + QDSP_RAMC_OFFSET)) {
@@ -710,6 +732,16 @@ static int adsp_rtos_read_ctrl_word_cmd_tast_to_h_v(
 		MM_ERR("module %s is not open\n", module->name);
 		return 0;
 	}
+#ifdef CONFIG_DEBUG_FS
+	if (rdump > 0) {
+		ptr = read_event_addr;
+		pr_info("D->A\n");
+		pr_info("m_id = %x id = %x\n", module->id, msg_id);
+		for (ii = 0; ii < msg_length/2; ii++)
+			pr_info("%x ", ptr[ii]);
+		pr_info("\n");
+	}
+#endif /* CONFIG_DEBUG_FS */
 
 	module->ops->event(module->driver_data, msg_id, msg_length, func);
 	return 0;
@@ -816,7 +848,7 @@ static irqreturn_t adsp_irq_handler(int irq, void *data)
 int adsp_set_clkrate(struct msm_adsp_module *module, unsigned long clk_rate)
 {
 	if (module->clk && clk_rate)
-		return clk_set_min_rate(module->clk, clk_rate);
+		return clk_set_rate(module->clk, clk_rate);
 
 	return -EINVAL;
 }
@@ -855,7 +887,7 @@ int msm_adsp_enable(struct msm_adsp_module *module)
 
 		mutex_lock(&adsp_open_lock);
 		if (adsp_open_count++ == 0)
-			enable_irq(INT_ADSP);
+			enable_irq(adsp_info.int_adsp);
 		mutex_unlock(&adsp_open_lock);
 		break;
 	case ADSP_STATE_ENABLING:
@@ -910,7 +942,7 @@ int msm_adsp_disable(struct msm_adsp_module *module)
 		mutex_unlock(&module->lock);
 		mutex_lock(&adsp_open_lock);
 		if (--adsp_open_count == 0) {
-			disable_irq(INT_ADSP);
+			disable_irq(adsp_info.int_adsp);
 			MM_INFO("disable interrupt\n");
 		}
 		mutex_unlock(&adsp_open_lock);
@@ -924,6 +956,12 @@ static int msm_adsp_probe(struct platform_device *pdev)
 {
 	unsigned count;
 	int rc, i;
+
+	adsp_info.int_adsp = platform_get_irq(pdev, 0);
+	if (adsp_info.int_adsp < 0) {
+		MM_ERR("no irq resource?\n");
+		return -ENODEV;
+	}
 
 	adsp_info.init_info_ptr = kzalloc(
 		(sizeof(struct adsp_rtos_mp_mtoa_init_info_type)), GFP_KERNEL);
@@ -962,11 +1000,11 @@ static int msm_adsp_probe(struct platform_device *pdev)
 	spin_lock_init(&adsp_cmd_lock);
 	spin_lock_init(&adsp_write_lock);
 
-	rc = request_irq(INT_ADSP, adsp_irq_handler,
+	rc = request_irq(adsp_info.int_adsp, adsp_irq_handler,
 			IRQF_TRIGGER_RISING, "adsp", 0);
 	if (rc < 0)
 		goto fail_request_irq;
-	disable_irq(INT_ADSP);
+	disable_irq(adsp_info.int_adsp);
 
 	for (i = 0; i < count; i++) {
 		struct msm_adsp_module *mod = adsp_modules + i;
@@ -980,8 +1018,7 @@ static int msm_adsp_probe(struct platform_device *pdev)
 		else
 			mod->clk = NULL;
 		if (mod->clk && adsp_info.module[i].clk_rate)
-			clk_set_min_rate(mod->clk,
-						adsp_info.module[i].clk_rate);
+			clk_set_rate(mod->clk, adsp_info.module[i].clk_rate);
 		mod->verify_cmd = adsp_info.module[i].verify_cmd;
 		mod->patch_event = adsp_info.module[i].patch_event;
 		INIT_HLIST_HEAD(&mod->pmem_regions);
@@ -1023,14 +1060,129 @@ fail_allocate_cb:
 	daldevice_detach(adsp_info.handle);
 	adsp_info.handle = NULL;
 fail_dal_attach:
-	enable_irq(INT_ADSP);
-	free_irq(INT_ADSP, 0);
+	enable_irq(adsp_info.int_adsp);
+	free_irq(adsp_info.int_adsp, 0);
 fail_request_irq:
 	kfree(adsp_modules);
 	kfree(adsp_info.init_info_ptr);
 	kfree(adsp_info.raw_event);
 	return rc;
 }
+
+#ifdef CONFIG_DEBUG_FS
+static int get_parameters(char *buf, long int *param1, int num_of_par)
+{
+	char *token;
+	int base, cnt;
+
+	token = strsep(&buf, " ");
+
+	for (cnt = 0; cnt < num_of_par; cnt++) {
+		if (token != NULL) {
+			if ((token[1] == 'x') || (token[1] == 'X'))
+				base = 16;
+			else
+				base = 10;
+
+			if (strict_strtoul(token, base, &param1[cnt]) != 0)
+				return -EINVAL;
+
+			token = strsep(&buf, " ");
+			}
+		else
+			return -EINVAL;
+	}
+	return 0;
+}
+
+static ssize_t adsp_debug_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+	pr_debug("adsp debugfs opened\n");
+	return 0;
+}
+static ssize_t adsp_debug_write(struct file *file, const char __user *buf,
+				size_t cnt, loff_t *ppos)
+{
+	char *access_str = file->private_data;
+	char lbuf[32];
+	int rc;
+	long int param[5];
+
+	if (cnt > sizeof(lbuf) - 1)
+		return -EINVAL;
+	rc = copy_from_user(lbuf, buf, cnt);
+	if (rc) {
+		pr_info("Unable to copy data from user space\n");
+		return -EFAULT;
+	}
+	lbuf[cnt] = '\0';
+
+	if (!strncmp(access_str, "write_log", 9)) {
+		if (get_parameters(lbuf, param, 1) == 0) {
+			switch (param[0]) {
+			case 1:
+				if (wdump <= 0)
+					wdump = 1;
+				pr_debug("write cmd to DSP(A->D) dump \
+					 started:%d\n", wdump);
+				break;
+			case 0:
+				if (wdump > 0)
+					wdump = 0;
+				pr_debug("Stop write cmd to \
+					 DSP(A->D):%d\n", wdump);
+				break;
+			default:
+				rc = -EINVAL;
+				break;
+			}
+		} else
+			rc = -EINVAL;
+	} else if (!strncmp(access_str, "read_log", 8)) {
+		if (get_parameters(lbuf, param, 1) == 0) {
+			switch (param[0]) {
+			case 1:
+				if (rdump <= 0)
+					rdump = 1;
+				pr_debug("write cmd from DSP(D->A) dump \
+					started:%d\n", wdump);
+				break;
+			case 0:
+				if (rdump > 0)
+					rdump = 0;
+				pr_debug("Stop write cmd from \
+					DSP(D->A):%d\n", wdump);
+				break;
+			default:
+				rc = -EINVAL;
+				break;
+			}
+		} else
+			rc = -EINVAL;
+	} else {
+		rc = -EINVAL;
+	}
+	if (rc == 0)
+		rc = cnt;
+	else {
+		pr_err("%s: rc = %d\n", __func__, rc);
+		pr_info("\nWrong command: Use =>\n");
+		pr_info("-------------------------\n");
+		pr_info("To Start A->D:: echo \"1\">/sys/kernel/debug/ \
+			adsp_cmd/write_log\n");
+		pr_info("To Start D->A:: echo \"1\">/sys/kernel/debug/ \
+			adsp_cmd/read_log\n");
+		pr_info("To Stop  A->D:: echo \"0\">/sys/kernel/debug/ \
+			adsp_cmd/write_log\n");
+		pr_info("To Stop  D->A:: echo \"0\">/sys/kernel/debug/ \
+			adsp_cmd/read_log\n");
+		pr_info("------------------------\n");
+	}
+
+	return rc;
+}
+#endif
 
 static struct platform_driver msm_adsp_driver = {
 	.probe = msm_adsp_probe,
@@ -1039,19 +1191,32 @@ static struct platform_driver msm_adsp_driver = {
 	},
 };
 
-struct platform_device msm_adsp_device = {
-	.name = "msm_adsp",
-	.id = -1,
-};
-
 static char msm_adsp_driver_name[] = "msm_adsp";
+
+#ifdef CONFIG_DEBUG_FS
+static const struct file_operations adsp_debug_fops = {
+	.write = adsp_debug_write,
+	.open = adsp_debug_open,
+};
+#endif
 
 static int __init adsp_init(void)
 {
 	int rc;
 
+#ifdef CONFIG_DEBUG_FS
+	dentry_adsp    = debugfs_create_dir("adsp_cmd", 0);
+	if (!IS_ERR(dentry_adsp)) {
+		dentry_wdata   = debugfs_create_file("write_log", \
+		 S_IFREG | S_IRUGO, dentry_adsp,
+		 (void *) "write_log" , &adsp_debug_fops);
+		dentry_rdata   = debugfs_create_file("read_log", \
+		 S_IFREG | S_IRUGO, dentry_adsp,
+		 (void *) "read_log", &adsp_debug_fops);
+	}
+#endif /* CONFIG_DEBUG_FS */
+
 	msm_adsp_driver.driver.name = msm_adsp_driver_name;
-	rc = platform_device_register(&msm_adsp_device);
 	rc = platform_driver_register(&msm_adsp_driver);
 	MM_INFO("%s -- %d\n", msm_adsp_driver_name, rc);
 	return rc;

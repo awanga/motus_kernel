@@ -9,11 +9,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
  */
 
 #include <linux/slab.h>
@@ -31,6 +26,7 @@
 #define PMAPP_RPC_VER_3_1		0x00030001
 #define PMAPP_RPC_VER_5_1		0x00050001
 #define PMAPP_RPC_VER_6_1		0x00060001
+#define PMAPP_RPC_VER_7_1		0x00070001
 
 #define VBUS_SESS_VALID_CB_PROC			1
 #define PM_VOTE_USB_PWR_SEL_SWITCH_APP__HSUSB 	(1 << 2)
@@ -46,6 +42,7 @@
 #define PMAPP_VREG_PINCNTRL_VOTE_PROC		30
 #define PMAPP_DISP_BACKLIGHT_SET_PROC		31
 #define PMAPP_DISP_BACKLIGHT_INIT_PROC		32
+#define PMAPP_VREG_LPM_PINCNTRL_VOTE_PROC	34
 
 /* Clock voter name max length */
 #define PMAPP_CLOCK_VOTER_ID_LEN		4
@@ -63,6 +60,7 @@ static struct vreg *boost_vreg, *usb_vreg;
 
 /* Add newer versions at the top of array */
 static const unsigned int rpc_vers[] = {
+	PMAPP_RPC_VER_7_1,
 	PMAPP_RPC_VER_6_1,
 	PMAPP_RPC_VER_5_1,
 	PMAPP_RPC_VER_3_1,
@@ -242,8 +240,7 @@ int msm_pm_app_rpc_init(void (*callback)(int online))
 {
 	uint32_t cb_id, rc;
 
-	if (!machine_is_qsd8x50_ffa() && !machine_is_qsd8x50a_ffa()
-			&& !machine_is_msm7x27_ffa())
+	if (!machine_is_qsd8x50_ffa() && !machine_is_msm7x27_ffa())
 		return -ENOTSUPP;
 
 	client = msm_rpc_register_client("pmapp_usb",
@@ -284,6 +281,7 @@ done:
 				&cb_id, NULL, NULL, -1);
 	return rc;
 }
+EXPORT_SYMBOL(msm_pm_app_rpc_init);
 
 void msm_pm_app_rpc_deinit(void(*callback)(int online))
 {
@@ -605,7 +603,7 @@ EXPORT_SYMBOL(pmapp_vreg_pincntrl_vote);
 
 int pmapp_disp_backlight_set_brightness(int value)
 {
-	if (value < 0 || value > 100)
+	if (value < 0 || value > 255)
 		return -EINVAL;
 
 	return pmapp_rpc_set_only(value, 0, 0, 0, 1,
@@ -618,3 +616,16 @@ void pmapp_disp_backlight_init(void)
 	pmapp_rpc_set_only(0, 0, 0, 0, 0, PMAPP_DISP_BACKLIGHT_INIT_PROC);
 }
 EXPORT_SYMBOL(pmapp_disp_backlight_init);
+
+int pmapp_vreg_lpm_pincntrl_vote(const char *voter_id, uint vreg_id,
+						uint clock_id, uint vote)
+{
+	if (strnlen(voter_id, PMAPP_CLOCK_VOTER_ID_LEN)
+			 != PMAPP_CLOCK_VOTER_ID_LEN)
+		return -EINVAL;
+
+	return pmapp_rpc_set_only(*((uint *) voter_id), vreg_id, clock_id,
+					vote, 4,
+					PMAPP_VREG_LPM_PINCNTRL_VOTE_PROC);
+}
+EXPORT_SYMBOL(pmapp_vreg_lpm_pincntrl_vote);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,11 +8,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  *
  */
 #include <linux/module.h>
@@ -25,8 +20,8 @@
 #include <asm/uaccess.h>
 #include <mach/board.h>
 #include <mach/qdsp6v2/audio_dev_ctl.h>
-#include <mach/qdsp6v2/apr_audio.h>
-#include <mach/qdsp6v2/q6afe.h>
+#include <sound/q6afe.h>
+#include <sound/apr_audio.h>
 #include "snddev_mi2s.h"
 
 #define SNDDEV_MI2S_PCM_SZ 32 /* 16 bit / sample stereo mode */
@@ -189,7 +184,7 @@ static int snddev_mi2s_open(struct msm_snddev_info *dev_info)
 	}
 
 	/* set up osr clk */
-	drv->tx_osrclk = clk_get(0, "mi2s_osr_clk");
+	drv->tx_osrclk = clk_get_sys(NULL, "mi2s_osr_clk");
 	if (IS_ERR(drv->tx_osrclk))
 		pr_err("%s master clock Error\n", __func__);
 
@@ -199,20 +194,20 @@ static int snddev_mi2s_open(struct msm_snddev_info *dev_info)
 		pr_err("ERROR setting osr clock\n");
 		return -ENODEV;
 	}
-	clk_enable(drv->tx_osrclk);
+	clk_prepare_enable(drv->tx_osrclk);
 
 	/* set up bit clk */
-	drv->tx_bitclk = clk_get(0, "mi2s_bit_clk");
+	drv->tx_bitclk = clk_get_sys(NULL, "mi2s_bit_clk");
 	if (IS_ERR(drv->tx_bitclk))
 		pr_err("%s clock Error\n", __func__);
 
 	rc =  clk_set_rate(drv->tx_bitclk, 8);
 	if (IS_ERR_VALUE(rc)) {
 		pr_err("ERROR setting bit clock\n");
-		clk_disable(drv->tx_osrclk);
+		clk_disable_unprepare(drv->tx_osrclk);
 		return -ENODEV;
 	}
-	clk_enable(drv->tx_bitclk);
+	clk_prepare_enable(drv->tx_bitclk);
 
 	afe_config.mi2s.bitwidth = 16;
 
@@ -318,6 +313,8 @@ static int snddev_mi2s_open(struct msm_snddev_info *dev_info)
 		goto error_invalid_data;
 	}
 	afe_config.mi2s.ws = 1;
+	afe_config.mi2s.format = MSM_AFE_I2S_FORMAT_LPCM;
+
 	rc = afe_open(snddev_mi2s_data->copp_id, &afe_config,
 		dev_info->sample_rate);
 
@@ -339,8 +336,8 @@ static int snddev_mi2s_open(struct msm_snddev_info *dev_info)
 
 error_invalid_data:
 
-	clk_disable(drv->tx_bitclk);
-	clk_disable(drv->tx_osrclk);
+	clk_disable_unprepare(drv->tx_bitclk);
+	clk_disable_unprepare(drv->tx_osrclk);
 	return -EINVAL;
 }
 
@@ -361,8 +358,8 @@ static int snddev_mi2s_close(struct msm_snddev_info *dev_info)
 		return -EIO;
 	}
 	afe_close(snddev_mi2s_data->copp_id);
-	clk_disable(mi2s_drv->tx_bitclk);
-	clk_disable(mi2s_drv->tx_osrclk);
+	clk_disable_unprepare(mi2s_drv->tx_bitclk);
+	clk_disable_unprepare(mi2s_drv->tx_osrclk);
 
 	mi2s_gpios_free();
 

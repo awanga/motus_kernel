@@ -36,7 +36,6 @@
 #include <asm/uaccess.h>
 #include <mach/mpp.h>
 #include <mach/vreg.h>
-#include <mach/vboost.h>
 #include <asm/mach-types.h>
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -111,15 +110,16 @@ static void pm7540_btn_do_brightness_set (enum pm_mpp_i_sink_level_type level)
     pr_debug ("%s: %d\n", __FUNCTION__, level);
     mpp = mpp_get (NULL, MPP_NAME);
 
+    if (vreg == NULL)
+        vreg = vreg_get(NULL, "boost");
+
     if (level == PM_MPP__I_SINK__LEVEL_INVALID) {
         level = isink_level;
         stype = PM_MPP__I_SINK__SWITCH_DIS;
-        vboost_disable (VBOOST_PM7540_BTN);
+        vreg_disable (vreg);
     } else {
         stype = PM_MPP__I_SINK__SWITCH_ENA;
-        vboost_enable (VBOOST_PM7540_BTN);
-        if (vreg == NULL)
-            vreg = vreg_get (0, "boost");
+        vreg_enable (vreg);
         vreg_set_level (vreg, 5000);
     }
     config = (level << 16) | stype;
@@ -323,7 +323,6 @@ static void pm7540_btn_als_changed (unsigned old_zone, unsigned zone,
     printk_als ("%s: ALS zone changed: %d => %d\n",
         __FUNCTION__, old_zone, zone);
 }
-
 
 static int pm7540_btn_leds_probe(struct platform_device *pdev)
 {

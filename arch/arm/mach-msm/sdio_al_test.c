@@ -8,11 +8,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  */
 
 /*
@@ -35,7 +30,7 @@
 #include <linux/wakelock.h>
 #include <linux/uaccess.h>
 
-#include <sdio_al_private.h>
+#include "sdio_al_private.h"
 #include <linux/debugfs.h>
 
 #include <linux/kthread.h>
@@ -397,10 +392,10 @@ static int sdio_al_test_extract_number(const char __user *buf,
 	/* stripping leading and trailing white spaces */
 	start = strstrip(local_buf);
 
-	ret = strict_strtol(start, 10, (long *)&number);
+	ret = kstrtoint(start, 10, &number);
 
 	if (ret) {
-		pr_err(TEST_MODULE_NAME " : %s - strict_strtol() failed\n",
+		pr_err(TEST_MODULE_NAME " : %s - kstrtoint() failed\n",
 		       __func__);
 		return ret;
 	}
@@ -3909,9 +3904,8 @@ static void open_close_test(struct test_channel *test_ch)
 					curr_burst_size, test_ch->name);
 			ret = write_packet_burst(test_ch, curr_burst_size);
 			if (ret) {
-				pr_err(TEST_MODULE_NAME ":%s write burst "
-				       "failed (%d), ch %s\n",
-				       __func__, ret, test_ch->name);
+				pr_err(TEST_MODULE_NAME ":%s write burst failed (%d), ch %s\n",
+						__func__, ret, test_ch->name);
 				goto exit_err;
 			}
 			if (i > 0) {

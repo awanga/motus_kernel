@@ -1,6 +1,6 @@
 /* ehci-msm.c - HSUSB Host Controller Driver Implementation
  *
- * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  *
  * Partly derived from ehci-fsl.c and ehci-hcd.c
  * Copyright (c) 2000-2004 by David Brownell
@@ -43,8 +43,8 @@
 
 struct msmusb_hcd {
 	struct ehci_hcd ehci;
-	struct clk *clk;
-	struct clk *pclk;
+	struct clk *alt_core_clk;
+	struct clk *iface_clk;
 	unsigned in_lpm;
 	struct work_struct lpm_exit_work;
 	spinlock_t lock;
@@ -79,9 +79,9 @@ static void msm_xusb_pm_qos_update(struct msmusb_hcd *mhcd, int vote)
 		return;
 
 	if (vote)
-		clk_enable(pdata->ebi1_clk);
+		clk_prepare_enable(pdata->ebi1_clk);
 	else
-		clk_disable(pdata->ebi1_clk);
+		clk_disable_unprepare(pdata->ebi1_clk);
 }
 
 static void msm_xusb_enable_clks(struct msmusb_hcd *mhcd)
@@ -96,11 +96,11 @@ static void msm_xusb_enable_clks(struct msmusb_hcd *mhcd)
 		/* OTG driver takes care of clock management */
 		break;
 	case USB_PHY_SERIAL_PMIC:
-		clk_enable(mhcd->clk);
-		clk_enable(mhcd->pclk);
+		clk_prepare_enable(mhcd->alt_core_clk);
+		clk_prepare_enable(mhcd->iface_clk);
 		break;
 	default:
-		pr_err("%s: undefined phy type ( %X ) \n", __func__,
+		pr_err("%s: undefined phy type ( %X )\n", __func__,
 						pdata->phy_info);
 		return;
 	}
@@ -119,11 +119,11 @@ static void msm_xusb_disable_clks(struct msmusb_hcd *mhcd)
 		/* OTG driver takes care of clock management */
 		break;
 	case USB_PHY_SERIAL_PMIC:
-		clk_disable(mhcd->clk);
-		clk_disable(mhcd->pclk);
+		clk_disable_unprepare(mhcd->alt_core_clk);
+		clk_disable_unprepare(mhcd->iface_clk);
 		break;
 	default:
-		pr_err("%s: undefined phy type ( %X ) \n", __func__,
+		pr_err("%s: undefined phy type ( %X )\n", __func__,
 						pdata->phy_info);
 		return;
 	}
@@ -151,6 +151,7 @@ static int usb_wakeup_phy(struct usb_hcd *hcd)
 	return ret;
 }
 
+#ifdef CONFIG_PM
 static int usb_suspend_phy(struct usb_hcd *hcd)
 {
 	int ret = 0;
@@ -217,6 +218,7 @@ static int usb_lpm_enter(struct usb_hcd *hcd)
 	pr_info("%s: lpm enter procedure end\n", __func__);
 	return 0;
 }
+#endif
 
 void usb_lpm_exit_w(struct work_struct *work)
 {
@@ -339,7 +341,7 @@ static int ehci_msm_reset(struct usb_hcd *hcd)
 
 	ehci->caps = USB_CAPLENGTH;
 	ehci->regs = USB_CAPLENGTH +
-		HC_LENGTH(ehci_readl(ehci, &ehci->caps->hc_capbase));
+		HC_LENGTH(ehci, ehci_readl(ehci, &ehci->caps->hc_capbase));
 
 	/* cache the data to minimize the chip reads*/
 	ehci->hcs_params = ehci_readl(ehci, &ehci->caps->hcs_params);
@@ -374,6 +376,7 @@ static int ehci_msm_run(struct usb_hcd *hcd)
 	struct msm_usb_host_platform_data *pdata = mhcd->pdata;
 
 	hcd->uses_new_polling = 1;
+	set_bit(HCD_FLAG_POLL_RH, &hcd->flags);
 
 	/* set hostmode */
 	reg_ptr = (u32 __iomem *)(((u8 __iomem *)ehci->regs) + USBMODE);
@@ -602,20 +605,8 @@ static int msm_xusb_rpc_close(struct msmusb_hcd *mhcd)
 	return retval;
 }
 
-#ifdef	CONFIG_USB_OTG
-static void ehci_msm_start_hnp(struct ehci_hcd *ehci)
-{
-	struct usb_hcd *hcd = ehci_to_hcd(ehci);
-	struct msmusb_hcd *mhcd = hcd_to_mhcd(hcd);
-
-	/* OTG driver handles HNP */
-	otg_start_hnp(mhcd->xceiv);
-}
-#else
-#define ehci_msm_start_hnp	NULL
-#endif
-
-static int msm_xusb_init_host(struct msmusb_hcd *mhcd)
+static int msm_xusb_init_host(struct platform_device *pdev,
+			      struct msmusb_hcd *mhcd)
 {
 	int ret = 0;
 	struct msm_otg *otg;
@@ -641,9 +632,9 @@ static int msm_xusb_init_host(struct msmusb_hcd *mhcd)
 		otg = container_of(mhcd->xceiv, struct msm_otg, otg);
 		hcd->regs = otg->regs;
 		otg->start_host = msm_hsusb_start_host;
-		ehci->start_hnp = ehci_msm_start_hnp;
 
 		ret = otg_set_host(mhcd->xceiv, &hcd->self);
+		ehci->transceiver = mhcd->xceiv;
 		break;
 	case USB_PHY_SERIAL_PMIC:
 		hcd->regs = ioremap(hcd->rsrc_start, hcd->rsrc_len);
@@ -651,25 +642,25 @@ static int msm_xusb_init_host(struct msmusb_hcd *mhcd)
 		if (!hcd->regs)
 			return -EFAULT;
 		/* get usb clocks */
-		mhcd->clk = clk_get(NULL, "usb_hs2_clk");
-		if (IS_ERR(mhcd->clk)) {
+		mhcd->alt_core_clk = clk_get(&pdev->dev, "alt_core_clk");
+		if (IS_ERR(mhcd->alt_core_clk)) {
 			iounmap(hcd->regs);
-			return PTR_ERR(mhcd->clk);
+			return PTR_ERR(mhcd->alt_core_clk);
 		}
 
-		mhcd->pclk = clk_get(NULL, "usb_hs2_pclk");
-		if (IS_ERR(mhcd->pclk)) {
+		mhcd->iface_clk = clk_get(&pdev->dev, "iface_clk");
+		if (IS_ERR(mhcd->iface_clk)) {
 			iounmap(hcd->regs);
-			clk_put(mhcd->clk);
-			return PTR_ERR(mhcd->pclk);
+			clk_put(mhcd->alt_core_clk);
+			return PTR_ERR(mhcd->iface_clk);
 		}
 		mhcd->otg_ops.request = msm_hsusb_request_host;
 		mhcd->otg_ops.handle = (void *) mhcd;
 		ret = msm_xusb_init_phy(mhcd);
 		if (ret < 0) {
 			iounmap(hcd->regs);
-			clk_put(mhcd->clk);
-			clk_put(mhcd->pclk);
+			clk_put(mhcd->alt_core_clk);
+			clk_put(mhcd->iface_clk);
 		}
 		break;
 	default:
@@ -721,13 +712,13 @@ static int __devinit ehci_msm_probe(struct platform_device *pdev)
 	INIT_WORK(&mhcd->lpm_exit_work, usb_lpm_exit_w);
 
 	wake_lock_init(&mhcd->wlock, WAKE_LOCK_SUSPEND, dev_name(&pdev->dev));
-	pdata->ebi1_clk = clk_get(NULL, "ebi1_usb_clk");
+	pdata->ebi1_clk = clk_get(&pdev->dev, "core_clk");
 	if (IS_ERR(pdata->ebi1_clk))
 		pdata->ebi1_clk = NULL;
 	else
 		clk_set_rate(pdata->ebi1_clk, INT_MAX);
 
-	retval = msm_xusb_init_host(mhcd);
+	retval = msm_xusb_init_host(pdev, mhcd);
 
 	if (retval < 0) {
 		wake_lock_destroy(&mhcd->wlock);
@@ -749,14 +740,15 @@ static void msm_xusb_uninit_host(struct msmusb_hcd *mhcd)
 	case USB_PHY_INTEGRATED:
 		if (pdata->vbus_init)
 			pdata->vbus_init(0);
+		hcd_to_ehci(hcd)->transceiver = NULL;
 		otg_set_host(mhcd->xceiv, NULL);
 		otg_put_transceiver(mhcd->xceiv);
 		cancel_work_sync(&mhcd->otg_work);
 		break;
 	case USB_PHY_SERIAL_PMIC:
 		iounmap(hcd->regs);
-		clk_put(mhcd->clk);
-		clk_put(mhcd->pclk);
+		clk_put(mhcd->alt_core_clk);
+		clk_put(mhcd->iface_clk);
 		msm_fsusb_reset_phy();
 		msm_fsusb_rpc_deinit();
 		break;

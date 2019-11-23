@@ -112,9 +112,6 @@ static void report_key(struct gpio_kp *kp, int key_index, int out, int in)
 	unsigned short keycode = keyentry & MATRIX_KEY_MASK;
 	unsigned short dev = keyentry >> MATRIX_CODE_BITS;
 
-	if (mi->sw_fixup && !mi->sw_fixup(key_index))
-		return;
-
 	if (pressed != test_bit(keycode, kp->input_devs->dev[dev]->key)) {
 		if (keycode == KEY_RESERVED) {
 			if (mi->flags & GPIOKPF_PRINT_UNMAPPED_KEYS)
@@ -131,6 +128,14 @@ static void report_key(struct gpio_kp *kp, int key_index, int out, int in)
 			input_report_key(kp->input_devs->dev[dev], keycode, pressed);
 		}
 	}
+}
+
+static void report_sync(struct gpio_kp *kp)
+{
+	int i;
+
+	for (i = 0; i < kp->input_devs->count; i++)
+		input_sync(kp->input_devs->dev[i]);
 }
 
 static enum hrtimer_restart gpio_keypad_timer_func(struct hrtimer *timer)
@@ -176,12 +181,14 @@ static enum hrtimer_restart gpio_keypad_timer_func(struct hrtimer *timer)
 			gpio_set_value(gpio, polarity);
 		else
 			gpio_direction_output(gpio, polarity);
-		hrtimer_start(timer, mi->settle_time, HRTIMER_MODE_REL);
+		hrtimer_start(timer, timespec_to_ktime(mi->settle_time),
+			HRTIMER_MODE_REL);
 		return HRTIMER_NORESTART;
 	}
 	if (gpio_keypad_flags & GPIOKPF_DEBOUNCE) {
 		if (kp->key_state_changed) {
-			hrtimer_start(&kp->timer, mi->debounce_delay,
+			hrtimer_start(&kp->timer,
+				timespec_to_ktime(mi->debounce_delay),
 				      HRTIMER_MODE_REL);
 			return HRTIMER_NORESTART;
 		}
@@ -194,9 +201,11 @@ static enum hrtimer_restart gpio_keypad_timer_func(struct hrtimer *timer)
 		for (out = 0; out < mi->noutputs; out++)
 			for (in = 0; in < mi->ninputs; in++, key_index++)
 				report_key(kp, key_index, out, in);
+		report_sync(kp);
 	}
 	if (!kp->use_irq || kp->some_keys_pressed) {
-		hrtimer_start(timer, mi->poll_time, HRTIMER_MODE_REL);
+		hrtimer_start(timer, timespec_to_ktime(mi->poll_time),
+			HRTIMER_MODE_REL);
 		return HRTIMER_NORESTART;
 	}
 
@@ -275,9 +284,9 @@ static int gpio_keypad_request_irqs(struct gpio_kp *kp)
 				"irq %d\n", mi->input_gpios[i], irq);
 			goto err_request_irq_failed;
 		}
-		err = irq_set_irq_wake(irq, 1);
+		err = enable_irq_wake(irq);
 		if (err) {
-			pr_err("gpiomatrix: irq_set_irq_wake failed for input %d, "
+			pr_err("gpiomatrix: set_irq_wake failed for input %d, "
 				"irq %d\n", mi->input_gpios[i], irq);
 		}
 		disable_irq(irq);

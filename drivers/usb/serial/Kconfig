@@ -535,15 +535,6 @@ config USB_SERIAL_SAFE_PADDED
 	bool "USB Secure Encapsulated Driver - Padded"
 	depends on USB_SERIAL_SAFE
 
-config USB_SERIAL_SAMBA
-	tristate "USB Atmel SAM Boot Assistant (SAM-BA) driver"
-	help
-	  Say Y here if you want to access the SAM-BA boot application of an
-	  Atmel AT91SAM device.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called sam-ba.
-
 config USB_SERIAL_SIEMENS_MPI
 	tristate "USB Siemens MPI driver"
 	help
@@ -667,6 +658,15 @@ config USB_SERIAL_SSU100
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called ssu100.
+
+config USB_SERIAL_CSVT
+	tristate "USB serial driver for Circuit-Switched Video Telephony"
+	help
+	  Say Y here if you want to use usb serial driver for Circuit-Switched
+	  Video Telephony
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called csvt.
 
 config USB_SERIAL_DEBUG
 	tristate "USB Debugging Device"

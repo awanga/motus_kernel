@@ -1,7 +1,7 @@
 /* linux/include/mach/hsusb.h
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -19,6 +19,9 @@
 #define __ASM_ARCH_MSM_HSUSB_H
 
 #include <linux/types.h>
+#include <linux/pm_qos_params.h>
+#include <linux/usb/ch9.h>
+#include <linux/usb/gadget.h>
 
 #define PHY_TYPE_MASK		0x0F
 #define PHY_TYPE_MODE		0xF0
@@ -59,11 +62,21 @@
 #define phy_id_state_c(ints)	(phy_id_state((ints)) == PHY_ID_C)
 #endif
 
-enum hsusb_phy_type {
-	UNDEFINED,
-	INTEGRATED,
-	EXTERNAL,
-};
+/*
+ * The following are bit fields describing the usb_request.udc_priv word.
+ * These bit fields are set by function drivers that wish to queue
+ * usb_requests with sps/bam parameters.
+ */
+#define MSM_PIPE_ID_MASK		(0x1F)
+#define MSM_TX_PIPE_ID_OFS		(16)
+#define MSM_SPS_MODE			BIT(5)
+#define MSM_IS_FINITE_TRANSFER		BIT(6)
+#define MSM_PRODUCER			BIT(7)
+#define MSM_DISABLE_WB			BIT(8)
+#define MSM_ETD_IOC			BIT(9)
+#define MSM_INTERNAL_MEM		BIT(10)
+#define MSM_VENDOR_ID			BIT(16)
+
 /* used to detect the OTG Mode */
 enum otg_mode {
 	OTG_ID = 0,   		/* ID pin detection */
@@ -76,18 +89,6 @@ enum usb_mode {
 	USB_HOST_MODE,
 	USB_PERIPHERAL_MODE,
 };
-struct usb_function_map {
-	char name[20];
-	unsigned bit_pos;
-};
-
-#ifdef CONFIG_USB_FUNCTION
-/* platform device data for msm_hsusb driver */
-struct usb_composition {
-	__u16   product_id;
-	unsigned long functions;
-};
-#endif
 
 enum chg_type {
 	USB_CHG_TYPE__SDP,
@@ -139,35 +140,9 @@ struct msm_hsusb_gadget_platform_data {
 	int is_phy_status_timer_on;
 };
 
-struct msm_hsusb_platform_data {
-	__u16   version;
-	unsigned phy_info;
-	__u16   vendor_id;
-	char   	*product_name;
-	char   	*serial_number;
-	char   	*manufacturer_name;
-	struct usb_composition *compositions;
-	int num_compositions;
-	struct usb_function_map *function_map;
-	int num_functions;
-	/* gpio mux function used for LPM */
-	int (*config_gpio)(int config);
-	/* ROC info for AHB Mode */
-	unsigned int soc_version;
-
-	int (*phy_reset)(void __iomem *addr);
-
-	unsigned int core_clk;
-
-	int vreg5v_required;
-
-	u32 swfi_latency;
-};
-
 struct msm_otg_platform_data {
 	int (*rpc_connect)(int);
 	int (*phy_reset)(void __iomem *);
-	unsigned int core_clk;
 	int pmic_vbus_irq;
 	int pmic_id_irq;
 	/* if usb link is in sps there is no need for
@@ -183,13 +158,12 @@ struct msm_otg_platform_data {
 	int			phy_reset_sig_inverted;
 	int			phy_can_powercollapse;
 	int			pclk_required_during_lpm;
-
+	int			bam_disable;
 	/* HSUSB core in 8660 has the capability to gate the
 	 * pclk when not being used. Though this feature is
 	 * now being disabled because of H/w issues
 	 */
 	int			pclk_is_hw_gated;
-	char			*pclk_src_name;
 
 	int (*ldo_init) (int init);
 	int (*ldo_enable) (int enable);
@@ -216,7 +190,7 @@ struct msm_otg_platform_data {
 	int (*config_vddcx)(int high);
 	int (*init_vddcx)(int init);
 
-	struct pm_qos_request_list *pm_qos_req_dma;
+	struct pm_qos_request_list pm_qos_req_dma;
 };
 
 struct msm_usb_host_platform_data {
@@ -227,5 +201,9 @@ struct msm_usb_host_platform_data {
 	int  (*vbus_init)(int init);
 	struct clk *ebi1_clk;
 };
+
+int msm_ep_config(struct usb_ep *ep);
+int msm_ep_unconfig(struct usb_ep *ep);
+int msm_data_fifo_config(struct usb_ep *ep, u32 addr, u32 size);
 
 #endif

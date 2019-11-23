@@ -33,12 +33,6 @@
 /* number of tx requests to allocate */
 #define TX_REQ_MAX 4
 
-struct ccid_descs {
-	struct usb_endpoint_descriptor *in;
-	struct usb_endpoint_descriptor *out;
-	struct usb_endpoint_descriptor *notify;
-};
-
 struct ccid_ctrl_dev {
 	atomic_t opened;
 	struct list_head tx_q;
@@ -64,16 +58,10 @@ struct f_ccid {
 	int ifc_id;
 	spinlock_t lock;
 	atomic_t online;
-	/* usb descriptors */
-	struct ccid_descs fs;
-	struct ccid_descs hs;
 	/* usb eps*/
 	struct usb_ep *notify;
 	struct usb_ep *in;
 	struct usb_ep *out;
-	struct usb_endpoint_descriptor *in_desc;
-	struct usb_endpoint_descriptor *out_desc;
-	struct usb_endpoint_descriptor *notify_desc;
 	struct usb_request *notify_req;
 	struct ccid_ctrl_dev ctrl_dev;
 	struct ccid_bulk_dev bulk_dev;
@@ -436,10 +424,14 @@ ccid_function_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	}
 
 	/* choose the descriptors and enable endpoints */
-	ccid_dev->notify_desc = ep_choose(cdev->gadget,
-				ccid_dev->hs.notify,
-				ccid_dev->fs.notify);
-	ret = usb_ep_enable(ccid_dev->notify, ccid_dev->notify_desc);
+	ret = config_ep_by_speed(cdev->gadget, f, ccid_dev->notify);
+	if (ret) {
+		ccid_dev->notify->desc = NULL;
+		pr_err("%s: config_ep_by_speed failed for ep#%s, err#%d\n",
+				__func__, ccid_dev->notify->name, ret);
+		goto free_bulk_in;
+	}
+	ret = usb_ep_enable(ccid_dev->notify);
 	if (ret) {
 		pr_err("%s: usb ep#%s enable failed, err#%d\n",
 				__func__, ccid_dev->notify->name, ret);
@@ -447,18 +439,28 @@ ccid_function_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	}
 	ccid_dev->notify->driver_data = ccid_dev;
 
-	ccid_dev->in_desc = ep_choose(cdev->gadget,
-			ccid_dev->hs.in, ccid_dev->fs.in);
-	ret = usb_ep_enable(ccid_dev->in, ccid_dev->in_desc);
+	ret = config_ep_by_speed(cdev->gadget, f, ccid_dev->in);
+	if (ret) {
+		ccid_dev->in->desc = NULL;
+		pr_err("%s: config_ep_by_speed failed for ep#%s, err#%d\n",
+				__func__, ccid_dev->in->name, ret);
+		goto disable_ep_notify;
+	}
+	ret = usb_ep_enable(ccid_dev->in);
 	if (ret) {
 		pr_err("%s: usb ep#%s enable failed, err#%d\n",
 				__func__, ccid_dev->in->name, ret);
 		goto disable_ep_notify;
 	}
 
-	ccid_dev->out_desc = ep_choose(cdev->gadget,
-			ccid_dev->hs.out, ccid_dev->fs.out);
-	ret = usb_ep_enable(ccid_dev->out, ccid_dev->out_desc);
+	ret = config_ep_by_speed(cdev->gadget, f, ccid_dev->out);
+	if (ret) {
+		ccid_dev->out->desc = NULL;
+		pr_err("%s: config_ep_by_speed failed for ep#%s, err#%d\n",
+				__func__, ccid_dev->out->name, ret);
+		goto disable_ep_in;
+	}
+	ret = usb_ep_enable(ccid_dev->out);
 	if (ret) {
 		pr_err("%s: usb ep#%s enable failed, err#%d\n",
 				__func__, ccid_dev->out->name, ret);
@@ -490,10 +492,6 @@ static void ccid_function_unbind(struct usb_configuration *c,
 		usb_free_descriptors(f->hs_descriptors);
 	usb_free_descriptors(f->descriptors);
 
-	misc_deregister(&ccid_bulk_device);
-	misc_deregister(&ccid_ctrl_device);
-	kfree(_ccid_dev);
-	_ccid_dev = NULL;
 }
 
 static int ccid_function_bind(struct usb_configuration *c,
@@ -542,16 +540,6 @@ static int ccid_function_bind(struct usb_configuration *c,
 	if (!f->descriptors)
 		goto ep_auto_out_fail;
 
-	ccid_dev->fs.in = usb_find_endpoint(ccid_fs_descs,
-					f->descriptors,
-					&ccid_fs_in_desc);
-	ccid_dev->fs.out = usb_find_endpoint(ccid_fs_descs,
-					f->descriptors,
-					&ccid_fs_out_desc);
-	ccid_dev->fs.notify = usb_find_endpoint(ccid_fs_descs,
-					f->descriptors,
-					&ccid_fs_notify_desc);
-
 	if (gadget_is_dualspeed(cdev->gadget)) {
 		ccid_hs_in_desc.bEndpointAddress =
 				ccid_fs_in_desc.bEndpointAddress;
@@ -564,13 +552,6 @@ static int ccid_function_bind(struct usb_configuration *c,
 		f->hs_descriptors = usb_copy_descriptors(ccid_hs_descs);
 		if (!f->hs_descriptors)
 			goto ep_auto_out_fail;
-
-		ccid_dev->hs.in = usb_find_endpoint(ccid_hs_descs,
-				f->hs_descriptors, &ccid_hs_in_desc);
-		ccid_dev->hs.out = usb_find_endpoint(ccid_hs_descs,
-				f->hs_descriptors, &ccid_hs_out_desc);
-		ccid_dev->hs.notify = usb_find_endpoint(ccid_hs_descs,
-				f->hs_descriptors, &ccid_hs_notify_desc);
 	}
 
 	pr_debug("%s: CCID %s Speed, IN:%s OUT:%s\n", __func__,
@@ -959,16 +940,9 @@ static int ccid_ctrl_device_init(struct f_ccid *dev)
 
 static int ccid_bind_config(struct usb_configuration *c)
 {
-	struct f_ccid  *ccid_dev;
-	int ret;
+	struct f_ccid *ccid_dev = _ccid_dev;
 
-	ccid_dev = kzalloc(sizeof(*ccid_dev), GFP_KERNEL);
-	if (!ccid_dev)
-		return -ENOMEM;
-
-	_ccid_dev = ccid_dev;
-	spin_lock_init(&ccid_dev->lock);
-
+	pr_debug("ccid_bind_config\n");
 	ccid_dev->cdev = c->cdev;
 	ccid_dev->function.name = FUNCTION_NAME;
 	ccid_dev->function.descriptors = ccid_fs_descs;
@@ -979,41 +953,47 @@ static int ccid_bind_config(struct usb_configuration *c)
 	ccid_dev->function.setup = ccid_function_setup;
 	ccid_dev->function.disable = ccid_function_disable;
 
+	return usb_add_function(c, &ccid_dev->function);
+
+}
+
+static int ccid_setup(void)
+{
+	struct f_ccid  *ccid_dev;
+	int ret;
+
+	ccid_dev = kzalloc(sizeof(*ccid_dev), GFP_KERNEL);
+	if (!ccid_dev)
+		return -ENOMEM;
+
+	_ccid_dev = ccid_dev;
+	spin_lock_init(&ccid_dev->lock);
+
 	ret = ccid_ctrl_device_init(ccid_dev);
 	if (ret) {
 		pr_err("%s: ccid_ctrl_device_init failed, err:%d\n",
 				__func__, ret);
-		goto err;
+		goto err_ctrl_init;
 	}
 	ret = ccid_bulk_device_init(ccid_dev);
 	if (ret) {
 		pr_err("%s: ccid_bulk_device_init failed, err:%d\n",
 				__func__, ret);
-		goto err1;
+		goto err_bulk_init;
 	}
 
-	ret = usb_add_function(c, &ccid_dev->function);
-	if (ret)
-		goto err2;
 	return 0;
-err2:
-	misc_deregister(&ccid_bulk_device);
-err1:
+err_bulk_init:
 	misc_deregister(&ccid_ctrl_device);
-err:
+err_ctrl_init:
 	kfree(ccid_dev);
 	pr_err("ccid gadget driver failed to initialize\n");
 	return ret;
 }
 
-static struct android_usb_function ccid_function = {
-	.name = FUNCTION_NAME,
-	.bind_config = ccid_bind_config,
-};
-
-static int __init ccid_init(void)
+static void ccid_cleanup(void)
 {
-	android_register_function(&ccid_function);
-	return 0;
+	misc_deregister(&ccid_bulk_device);
+	misc_deregister(&ccid_ctrl_device);
+	kfree(_ccid_dev);
 }
-module_init(ccid_init);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,11 +8,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  *
  */
 
@@ -26,24 +21,37 @@
 #include <linux/mfd/pmic8058.h>
 #include <linux/jiffies.h>
 #include <linux/suspend.h>
+#include <linux/percpu.h>
 #include <linux/interrupt.h>
+#include <asm/fiq.h>
+#include <asm/hardware/gic.h>
 #include <mach/msm_iomap.h>
-#include <mach/scm-io.h>
+#include <asm/mach-types.h>
 #include <mach/scm.h>
-#include <mach/msm_watchdog.h>
+#include <mach/socinfo.h>
+#include "msm_watchdog.h"
+#include "timer.h"
 
-#define TCSR_WDT_CFG 0x30
+#define MODULE_NAME "msm_watchdog"
 
-#define WDT0_RST	(MSM_TMR0_BASE + 0x38)
-#define WDT0_EN		(MSM_TMR0_BASE + 0x40)
-#define WDT0_BARK_TIME	(MSM_TMR0_BASE + 0x4C)
-#define WDT0_BITE_TIME	(MSM_TMR0_BASE + 0x5C)
+#define TCSR_WDT_CFG	0x30
 
-/* Watchdog pet interval in ms */
-#define PET_DELAY 10000
+#define WDT0_RST	0x38
+#define WDT0_EN		0x40
+#define WDT0_STS	0x44
+#define WDT0_BARK_TIME	0x4C
+#define WDT0_BITE_TIME	0x5C
+
+#define WDT_HZ		32768
+
+struct msm_watchdog_dump msm_dump_cpu_ctx;
+
+static void __iomem *msm_tmr0_base;
+
 static unsigned long delay_time;
+static unsigned long bark_time;
 static unsigned long long last_pet;
-static unsigned long forced_pets;
+static bool has_vic;
 
 /*
  * On the kernel command line specify
@@ -74,6 +82,8 @@ module_param_call(runtime_disable, wdog_enable_set, param_get_int,
 static int appsbark;
 module_param(appsbark, int, 0);
 
+static int appsbark_fiq;
+
 /*
  * Use /sys/module/msm_watchdog/parameters/print_all_stacks
  * to control whether stacks of all running
@@ -82,50 +92,57 @@ module_param(appsbark, int, 0);
 static int print_all_stacks = 1;
 module_param(print_all_stacks, int,  S_IRUGO | S_IWUSR);
 
+/* Area for context dump in secure mode */
+static void *scm_regsave;
+
+static struct msm_watchdog_pdata __percpu **percpu_pdata;
+
 static void pet_watchdog_work(struct work_struct *work);
+static void init_watchdog_work(struct work_struct *work);
 static DECLARE_DELAYED_WORK(dogwork_struct, pet_watchdog_work);
+static DECLARE_WORK(init_dogwork_struct, init_watchdog_work);
 
-static int msm_watchdog_suspend(void)
+/* Called from the FIQ bark handler */
+void msm_wdog_bark_fin(void)
 {
-	__raw_writel(1, WDT0_RST);
-	__raw_writel(0, WDT0_EN);
-	dsb();
-	return NOTIFY_DONE;
-}
-static int msm_watchdog_resume(void)
-{
-	__raw_writel(1, WDT0_EN);
-	__raw_writel(1, WDT0_RST);
-	return NOTIFY_DONE;
+	pr_crit("\nApps Watchdog bark received - Calling Panic\n");
+	panic("Apps Watchdog Bark received\n");
 }
 
-static int msm_watchdog_power_event(struct notifier_block *this,
-				unsigned long event, void *ptr)
+static int msm_watchdog_suspend(struct device *dev)
 {
-	switch (event) {
-	case PM_POST_HIBERNATION:
-	case PM_POST_SUSPEND:
-		return msm_watchdog_resume();
-	case PM_HIBERNATION_PREPARE:
-	case PM_SUSPEND_PREPARE:
-		return msm_watchdog_suspend();
-	default:
-		return NOTIFY_DONE;
-	}
+	if (!enable)
+		return 0;
+
+	__raw_writel(1, msm_tmr0_base + WDT0_RST);
+	__raw_writel(0, msm_tmr0_base + WDT0_EN);
+	mb();
+	return 0;
+}
+
+static int msm_watchdog_resume(struct device *dev)
+{
+	if (!enable)
+		return 0;
+
+	__raw_writel(1, msm_tmr0_base + WDT0_EN);
+	__raw_writel(1, msm_tmr0_base + WDT0_RST);
+	mb();
+	return 0;
 }
 
 static int panic_wdog_handler(struct notifier_block *this,
 			      unsigned long event, void *ptr)
 {
 	if (panic_timeout == 0) {
-		__raw_writel(0, WDT0_EN);
-		dsb();
-		secure_writel(0, MSM_TCSR_BASE + TCSR_WDT_CFG);
+		__raw_writel(0, msm_tmr0_base + WDT0_EN);
+		mb();
 	} else {
-		__raw_writel(32768 * (panic_timeout + 4), WDT0_BARK_TIME);
-		__raw_writel(32768 * (panic_timeout + 4), WDT0_BITE_TIME);
-		__raw_writel(1, WDT0_RST);
-		dsb();
+		__raw_writel(WDT_HZ * (panic_timeout + 4),
+				msm_tmr0_base + WDT0_BARK_TIME);
+		__raw_writel(WDT_HZ * (panic_timeout + 4),
+				msm_tmr0_base + WDT0_BITE_TIME);
+		__raw_writel(1, msm_tmr0_base + WDT0_RST);
 	}
 	return NOTIFY_DONE;
 }
@@ -134,17 +151,43 @@ static struct notifier_block panic_blk = {
 	.notifier_call	= panic_wdog_handler,
 };
 
-static struct notifier_block msm_watchdog_power_notifier = {
-	.notifier_call = msm_watchdog_power_event,
+struct wdog_disable_work_data {
+	struct work_struct work;
+	struct completion complete;
 };
+
+static void wdog_disable_work(struct work_struct *work)
+{
+	struct wdog_disable_work_data *work_data =
+		container_of(work, struct wdog_disable_work_data, work);
+	__raw_writel(0, msm_tmr0_base + WDT0_EN);
+	mb();
+	if (has_vic) {
+		free_irq(WDT0_ACCSCSSNBARK_INT, 0);
+	} else {
+		disable_percpu_irq(WDT0_ACCSCSSNBARK_INT);
+		if (!appsbark_fiq) {
+			free_percpu_irq(WDT0_ACCSCSSNBARK_INT,
+					percpu_pdata);
+			free_percpu(percpu_pdata);
+		}
+	}
+	enable = 0;
+	atomic_notifier_chain_unregister(&panic_notifier_list, &panic_blk);
+	cancel_delayed_work(&dogwork_struct);
+	/* may be suspended after the first write above */
+	__raw_writel(0, msm_tmr0_base + WDT0_EN);
+	complete(&work_data->complete);
+	pr_info("MSM Watchdog deactivated.\n");
+}
 
 static int wdog_enable_set(const char *val, struct kernel_param *kp)
 {
 	int ret = 0;
 	int old_val = runtime_disable;
+	struct wdog_disable_work_data work_data;
 
 	mutex_lock(&disable_lock);
-
 	if (!enable) {
 		printk(KERN_INFO "MSM Watchdog is not active.\n");
 		ret = -EINVAL;
@@ -152,70 +195,48 @@ static int wdog_enable_set(const char *val, struct kernel_param *kp)
 	}
 
 	ret = param_set_int(val, kp);
-
 	if (ret)
 		goto done;
 
-	switch (runtime_disable) {
-
-	case 1:
-		if (!old_val) {
-			__raw_writel(0, WDT0_EN);
-			unregister_pm_notifier(&msm_watchdog_power_notifier);
-
-			/* may be suspended after the first write above */
-			__raw_writel(0, WDT0_EN);
-			dsb();
-			secure_writel(0, MSM_TCSR_BASE + TCSR_WDT_CFG);
-			free_irq(WDT0_ACCSCSSNBARK_INT, 0);
-			enable = 0;
-			atomic_notifier_chain_unregister(&panic_notifier_list,
-			       &panic_blk);
-			cancel_delayed_work(&dogwork_struct);
-			printk(KERN_INFO "MSM Watchdog deactivated.\n");
-		}
-	break;
-
-	default:
+	if (runtime_disable == 1) {
+		if (old_val)
+			goto done;
+		init_completion(&work_data.complete);
+		INIT_WORK_ONSTACK(&work_data.work, wdog_disable_work);
+		schedule_work_on(0, &work_data.work);
+		wait_for_completion(&work_data.complete);
+	} else {
 		runtime_disable = old_val;
 		ret = -EINVAL;
-	break;
-
 	}
-
 done:
 	mutex_unlock(&disable_lock);
 	return ret;
 }
 
+unsigned min_slack_ticks = UINT_MAX;
+unsigned long long min_slack_ns = ULLONG_MAX;
+
 void pet_watchdog(void)
 {
-	__raw_writel(1, WDT0_RST);
-	last_pet = sched_clock();
+	int slack;
+	unsigned long long time_ns;
+	unsigned long long slack_ns;
+	unsigned long long bark_time_ns = bark_time * 1000000ULL;
 
-	forced_pets = 0;
-}
-
-static void force_pet_watchdog(void)
-{
-	__raw_writel(1, WDT0_RST);
-	last_pet = sched_clock();
-
-	forced_pets++;
-}
-
-void ratelimited_pet_watchdog(void)
-{
-	if (smp_processor_id())
+	if (!enable)
 		return;
 
-	if ((sched_clock() - last_pet) / 1000000 > PET_DELAY) {
-		force_pet_watchdog();
-		if (forced_pets == 20) {
-			pr_err("Watchdog force pet 20 times in a row!\n");
-			BUG();
-		}
-	}
+	slack = __raw_readl(msm_tmr0_base + WDT0_STS) >> 3;
+	slack = ((bark_time*WDT_HZ)/1000) - slack;
+	if (slack < min_slack_ticks)
+		min_slack_ticks = slack;
+	__raw_writel(1, msm_tmr0_base + WDT0_RST);
+	time_ns = sched_clock();
+	slack_ns = (last_pet + bark_time_ns) - time_ns;
+	if (slack_ns < min_slack_ns)
+		min_slack_ns = slack_ns;
+	last_pet = time_ns;
 }
 
 static void pet_watchdog_work(struct work_struct *work)
@@ -223,22 +244,7 @@ static void pet_watchdog_work(struct work_struct *work)
 	pet_watchdog();
 
 	if (enable)
-		schedule_delayed_work(&dogwork_struct, delay_time);
-}
-
-static void __exit exit_watchdog(void)
-{
-	if (enable) {
-		__raw_writel(0, WDT0_EN);
-		unregister_pm_notifier(&msm_watchdog_power_notifier);
-		__raw_writel(0, WDT0_EN); /* In case we got suspended
-					   * mid-exit */
-		dsb();
-		secure_writel(0, MSM_TCSR_BASE + TCSR_WDT_CFG);
-		free_irq(WDT0_ACCSCSSNBARK_INT, 0);
-		enable = 0;
-	}
-	printk(KERN_INFO "MSM Watchdog Exit - Deactivated\n");
+		schedule_delayed_work_on(0, &dogwork_struct, delay_time);
 }
 
 static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
@@ -258,7 +264,7 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 	if (print_all_stacks) {
 
 		/* Suspend wdog until all stacks are printed */
-		msm_watchdog_suspend();
+		msm_watchdog_suspend(NULL);
 
 		printk(KERN_INFO "Stack trace dump:\n");
 
@@ -268,7 +274,7 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 			show_stack(tsk, NULL);
 		}
 
-		msm_watchdog_resume();
+		msm_watchdog_resume(NULL);
 	}
 
 	panic("Apps watchdog bark received!");
@@ -277,32 +283,19 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 
 #define SCM_SET_REGSAVE_CMD 0x2
 
-static int __init init_watchdog(void)
+static void configure_bark_dump(void)
 {
 	int ret;
-	void *regsave;
 	struct {
 		unsigned addr;
 		int len;
 	} cmd_buf;
 
-	if (!enable) {
-		printk(KERN_INFO "MSM Watchdog Not Initialized\n");
-		return 0;
-	}
-
-	/* Must request irq before sending scm command */
-	ret = request_irq(WDT0_ACCSCSSNBARK_INT, wdog_bark_handler, 0,
-			  "apps_wdog_bark", NULL);
-	if (ret)
-		return ret;
-
-#ifdef CONFIG_MSM_SCM
 	if (!appsbark) {
-		regsave = (void *)__get_free_page(GFP_KERNEL);
+		scm_regsave = (void *)__get_free_page(GFP_KERNEL);
 
-		if (regsave) {
-			cmd_buf.addr = __pa(regsave);
+		if (scm_regsave) {
+			cmd_buf.addr = __pa(scm_regsave);
 			cmd_buf.len  = PAGE_SIZE;
 
 			ret = scm_call(SCM_SVC_UTIL, SCM_SET_REGSAVE_CMD,
@@ -311,7 +304,7 @@ static int __init init_watchdog(void)
 				pr_err("Setting register save address failed.\n"
 				       "Registers won't be dumped on a dog "
 				       "bite\n");
-		} else
+		} else {
 			pr_err("Allocating register save space failed\n"
 			       "Registers won't be dumped on a dog bite\n");
 			/*
@@ -319,37 +312,129 @@ static int __init init_watchdog(void)
 			 * send the command, and the secure side will reset
 			 * without saving registers.
 			 */
+		}
 	}
-#endif
-	secure_writel(1, MSM_TCSR_BASE + TCSR_WDT_CFG);
-	delay_time = msecs_to_jiffies(PET_DELAY);
+}
 
-	/* 32768 ticks = 1 second */
-	__raw_writel(32768*11, WDT0_BARK_TIME);
-	__raw_writel(32768*12, WDT0_BITE_TIME);
+struct fiq_handler wdog_fh = {
+	.name = MODULE_NAME,
+};
 
-	ret = register_pm_notifier(&msm_watchdog_power_notifier);
-	if (ret) {
-		free_irq(WDT0_ACCSCSSNBARK_INT, NULL);
-		return ret;
+static void init_watchdog_work(struct work_struct *work)
+{
+	u64 timeout = (bark_time * WDT_HZ)/1000;
+	void *stack;
+	int ret;
+
+	if (has_vic) {
+		ret = request_irq(WDT0_ACCSCSSNBARK_INT, wdog_bark_handler, 0,
+				  "apps_wdog_bark", NULL);
+		if (ret)
+			return;
+	} else if (appsbark_fiq) {
+		claim_fiq(&wdog_fh);
+		set_fiq_handler(&msm_wdog_fiq_start, msm_wdog_fiq_length);
+		stack = (void *)__get_free_pages(GFP_KERNEL, THREAD_SIZE_ORDER);
+		if (!stack) {
+			pr_info("No free pages available - %s fails\n",
+					__func__);
+			return;
+		}
+
+		msm_wdog_fiq_setup(stack);
+		gic_set_irq_secure(WDT0_ACCSCSSNBARK_INT);
+	} else {
+		percpu_pdata = alloc_percpu(struct msm_watchdog_pdata *);
+		if (!percpu_pdata) {
+			pr_err("%s: memory allocation failed for percpu data\n",
+					__func__);
+			return;
+		}
+
+		/* Must request irq before sending scm command */
+		ret = request_percpu_irq(WDT0_ACCSCSSNBARK_INT,
+			wdog_bark_handler, "apps_wdog_bark", percpu_pdata);
+		if (ret) {
+			free_percpu(percpu_pdata);
+			return;
+		}
 	}
 
-	schedule_delayed_work(&dogwork_struct, delay_time);
+	configure_bark_dump();
+
+	__raw_writel(timeout, msm_tmr0_base + WDT0_BARK_TIME);
+	__raw_writel(timeout + 3*WDT_HZ, msm_tmr0_base + WDT0_BITE_TIME);
+
+	schedule_delayed_work_on(0, &dogwork_struct, delay_time);
 
 	atomic_notifier_chain_register(&panic_notifier_list,
 				       &panic_blk);
 
-	__raw_writel(1, WDT0_EN);
-	__raw_writel(1, WDT0_RST);
+	__raw_writel(1, msm_tmr0_base + WDT0_EN);
+	__raw_writel(1, msm_tmr0_base + WDT0_RST);
 	last_pet = sched_clock();
+
+	if (!has_vic)
+		enable_percpu_irq(WDT0_ACCSCSSNBARK_INT, IRQ_TYPE_EDGE_RISING);
 
 	printk(KERN_INFO "MSM Watchdog Initialized\n");
 
+	return;
+}
+
+static int msm_watchdog_probe(struct platform_device *pdev)
+{
+	struct msm_watchdog_pdata *pdata = pdev->dev.platform_data;
+
+	if (!enable || !pdata || !pdata->pet_time || !pdata->bark_time) {
+		printk(KERN_INFO "MSM Watchdog Not Initialized\n");
+		return -ENODEV;
+	}
+
+	bark_time = pdata->bark_time;
+	has_vic = pdata->has_vic;
+	if (!pdata->has_secure) {
+		appsbark = 1;
+		appsbark_fiq = pdata->use_kernel_fiq;
+	}
+
+	msm_tmr0_base = msm_timer_get_timer0_base();
+
+	/*
+	 * This is only temporary till SBLs turn on the XPUs
+	 * This initialization will be done in SBLs on a later releases
+	 */
+	if (cpu_is_msm9615())
+		__raw_writel(0xF, MSM_TCSR_BASE + TCSR_WDT_CFG);
+
+	if (pdata->needs_expired_enable)
+		__raw_writel(0x1, MSM_CLK_CTL_BASE + 0x3820);
+
+	delay_time = msecs_to_jiffies(pdata->pet_time);
+	schedule_work_on(0, &init_dogwork_struct);
 	return 0;
 }
 
+static const struct dev_pm_ops msm_watchdog_dev_pm_ops = {
+	.suspend_noirq = msm_watchdog_suspend,
+	.resume_noirq = msm_watchdog_resume,
+};
+
+static struct platform_driver msm_watchdog_driver = {
+	.probe = msm_watchdog_probe,
+	.driver = {
+		.name = MODULE_NAME,
+		.owner = THIS_MODULE,
+		.pm = &msm_watchdog_dev_pm_ops,
+	},
+};
+
+static int init_watchdog(void)
+{
+	return platform_driver_register(&msm_watchdog_driver);
+}
+
 late_initcall(init_watchdog);
-module_exit(exit_watchdog);
 MODULE_DESCRIPTION("MSM Watchdog Driver");
 MODULE_VERSION("1.0");
 MODULE_LICENSE("GPL v2");

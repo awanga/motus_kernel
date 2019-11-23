@@ -21,6 +21,8 @@
 #include <mach/socinfo.h>
 #include <mach/vreg.h>
 
+#define MSM_USB_BASE	0xA0800000
+
 #define USB_LINK_RESET_TIMEOUT      (msecs_to_jiffies(10))
 
 #define SOC_ROC_2_0		0x10002 /* ROC 2.0 */
@@ -358,7 +360,7 @@ reset_phy:
 
 
 #ifdef CONFIG_USB_EHCI_MSM_72K
-static void hsusb_gpio_init(void)
+/*static void hsusb_gpio_init(void)
 {
 	if (gpio_request(111, "ulpi_data_0"))
 		pr_err("failed to request gpio ulpi_data_0\n");
@@ -382,7 +384,7 @@ static void hsusb_gpio_init(void)
 		pr_err("failed to request gpio ulpi_next\n");
 	if (gpio_request(121, "ulpi_stop"))
 		pr_err("failed to request gpio ulpi_stop\n");
-}
+}*/
 
 static unsigned usb_gpio_lpm_config[] = {
 	GPIO_CFG(111, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_8MA),	/* DATA 0 */
@@ -444,13 +446,18 @@ static int usb_config_gpio(int config)
 }
 #endif
 
+static struct msm_usb_host_platform_data msm_usb_host_pdata = {
+        .phy_info       = (USB_PHY_INTEGRATED | USB_PHY_MODEL_45NM),
+};
+
 void mot_hsusb_init(void)
 {
 #ifdef CONFIG_USB_EHCI_MSM_72K
 	memset(&ui, sizeof(struct usb_info), 0);
 	ui.soc_version = socinfo_get_version();
 
-	hsusb_gpio_init();
+        msm_add_host(0, &msm_usb_host_pdata);
+	//hsusb_gpio_init();
 #endif
 }
 
@@ -473,14 +480,11 @@ static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 		usb_vbus_offline(&ui);
 }
 
-static struct pm_qos_request_list msm_otg_pm_qos;
-
 struct msm_otg_platform_data msm_otg_pdata = {
 	.vbus_power		 = msm_hsusb_vbus_power,
 	.rpc_connect		 = hsusb_rpc_connect,
 	.init_gpio		 = usb_config_gpio,
 	.chg_connected		 = usb_chg_set_type,
-	.pm_qos_req_dma		 = &msm_otg_pm_qos,
 };
 #endif
 

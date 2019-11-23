@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -9,14 +9,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
  */
 
-#include "vidc_type.h"
+#include <media/msm/vidc_type.h>
 
 #include "vcd_ddl_utils.h"
 #include "vcd_ddl_metadata.h"
@@ -812,8 +807,13 @@ u32 ddl_decode_set_buffers(struct ddl_client_context *ddl)
 		}
 	case VCD_CODEC_H264:
 		{
-			comv_buf_no =
-			    decoder->client_output_buf_req.actual_count;
+			if (decoder->idr_only_decoding)
+				comv_buf_no = decoder->min_dpb_num;
+			else
+				comv_buf_no =
+					decoder->
+					client_output_buf_req.
+					actual_count;
 			break;
 		}
 	}

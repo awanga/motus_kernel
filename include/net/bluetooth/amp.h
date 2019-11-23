@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2010-2011 Code Aurora Forum.  All rights reserved.
+   Copyright (c) 2010-2012 Code Aurora Forum.  All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License version 2 and
@@ -16,7 +16,7 @@
 
 /* AMP defaults */
 
-#define A2MP_RSP_TIMEOUT        (20000)  /*  20 seconds */
+#define A2MP_RSP_TIMEOUT        (8000)  /*  8 seconds */
 
 /* A2MP Protocol */
 
@@ -39,35 +39,32 @@ struct a2mp_cmd_hdr {
 	__u8       code;
 	__u8       ident;
 	__le16     len;
-} __attribute__ ((packed));
+} __packed;
 
 struct a2mp_cmd_rej {
 	__le16     reason;
-} __attribute__ ((packed));
-
-#define HCI_A2MP_ID(id)     ((id)+0x10)  /* convert HCI dev index to AMP ID */
-#define A2MP_HCI_ID(id)     ((id)-0x10)  /* convert AMP ID to HCI dev index */
+} __packed;
 
 struct a2mp_discover_req {
 	__le16     mtu;
 	__le16     ext_feat;
-} __attribute__ ((packed));
+} __packed;
 
 struct a2mp_cl {
 	__u8       id;
 	__u8       type;
 	__u8       status;
-} __attribute__ ((packed));
+} __packed;
 
 struct a2mp_discover_rsp {
 	__le16     mtu;
 	__le16     ext_feat;
 	struct a2mp_cl cl[0];
-} __attribute__ ((packed));
+} __packed;
 
 struct a2mp_getinfo_req {
 	__u8       id;
-} __attribute__ ((packed));
+} __packed;
 
 struct a2mp_getinfo_rsp {
 	__u8       id;
@@ -77,40 +74,40 @@ struct a2mp_getinfo_rsp {
 	__le32     min_latency;
 	__le16     pal_cap;
 	__le16     assoc_size;
-} __attribute__ ((packed));
+} __packed;
 
 struct a2mp_getampassoc_req {
 	__u8       id;
-} __attribute__ ((packed));
+} __packed;
 
 struct a2mp_getampassoc_rsp {
 	__u8       id;
 	__u8       status;
 	__u8       amp_assoc[0];
-} __attribute__ ((packed));
+} __packed;
 
 struct a2mp_createphyslink_req {
 	__u8       local_id;
 	__u8       remote_id;
 	__u8       amp_assoc[0];
-} __attribute__ ((packed));
+} __packed;
 
 struct a2mp_createphyslink_rsp {
 	__u8       local_id;
 	__u8       remote_id;
 	__u8       status;
-} __attribute__ ((packed));
+} __packed;
 
 struct a2mp_disconnphyslink_req {
 	__u8       local_id;
 	__u8       remote_id;
-} __attribute__ ((packed));
+} __packed;
 
 struct a2mp_disconnphyslink_rsp {
 	__u8       local_id;
 	__u8       remote_id;
 	__u8       status;
-} __attribute__ ((packed));
+} __packed;
 
 
 /* L2CAP-AMP module interface */
@@ -118,7 +115,7 @@ int amp_init(void);
 void amp_exit(void);
 
 /* L2CAP-AMP fixed channel interface */
-void amp_conn_ind(struct l2cap_conn *conn, struct sk_buff *skb);
+void amp_conn_ind(struct hci_conn *hcon, struct sk_buff *skb);
 
 /* L2CAP-AMP link interface */
 void amp_create_physical(struct l2cap_conn *conn, struct sock *sk);
@@ -259,7 +256,7 @@ struct amp_work_state_change {
 };
 struct amp_work_conn_ind {
 	struct work_struct work;
-	struct l2cap_conn *conn;
+	struct hci_conn *hcon;
 	struct sk_buff *skb;
 };
 struct amp_work_create_physical {

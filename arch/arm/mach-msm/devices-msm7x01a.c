@@ -30,8 +30,6 @@
 #include <asm/mach/mmc.h>
 #include <mach/msm_hsusb.h>
 
-#include "clock-pcom.h"
-
 static struct resource resources_uart1[] = {
 	{
 		.start	= INT_UART1,
@@ -39,8 +37,8 @@ static struct resource resources_uart1[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
-		.start	= MSM_UART1_PHYS,
-		.end	= MSM_UART1_PHYS + MSM_UART1_SIZE - 1,
+		.start	= MSM7XXX_UART1_PHYS,
+		.end	= MSM7XXX_UART1_PHYS + MSM7XXX_UART1_SIZE - 1,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -52,8 +50,8 @@ static struct resource resources_uart2[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
-		.start	= MSM_UART2_PHYS,
-		.end	= MSM_UART2_PHYS + MSM_UART2_SIZE - 1,
+		.start	= MSM7XXX_UART2_PHYS,
+		.end	= MSM7XXX_UART2_PHYS + MSM7XXX_UART2_SIZE - 1,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -65,8 +63,8 @@ static struct resource resources_uart3[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
-		.start	= MSM_UART3_PHYS,
-		.end	= MSM_UART3_PHYS + MSM_UART3_SIZE - 1,
+		.start	= MSM7XXX_UART3_PHYS,
+		.end	= MSM7XXX_UART3_PHYS + MSM7XXX_UART3_SIZE - 1,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -92,12 +90,12 @@ struct platform_device msm_device_uart3 = {
 	.resource	= resources_uart3,
 };
 
-#define MSM_UART1DM_PHYS      0xA0200000
-#define MSM_UART2DM_PHYS      0xA0300000
-static struct resource msm_uart1_dm_resources[] = {
+#define MSM7XXX_UART1DM_PHYS      0xA0200000
+#define MSM7XXX_UART2DM_PHYS      0xA0300000
+static struct resource MSM7XXX_UART1_dm_resources[] = {
 	{
-		.start = MSM_UART1DM_PHYS,
-		.end   = MSM_UART1DM_PHYS + PAGE_SIZE - 1,
+		.start = MSM7XXX_UART1DM_PHYS,
+		.end   = MSM7XXX_UART1DM_PHYS + PAGE_SIZE - 1,
 		.flags = IORESOURCE_MEM,
 	},
 	{
@@ -124,23 +122,23 @@ static struct resource msm_uart1_dm_resources[] = {
 	},
 };
 
-static u64 msm_uart_dm1_dma_mask = DMA_BIT_MASK(32);
+static u64 MSM7XXX_UART_dm1_dma_mask = DMA_BIT_MASK(32);
 
 struct platform_device msm_device_uart_dm1 = {
 	.name = "msm_serial_hs",
 	.id = 0,
-	.num_resources = ARRAY_SIZE(msm_uart1_dm_resources),
-	.resource = msm_uart1_dm_resources,
+	.num_resources = ARRAY_SIZE(MSM7XXX_UART1_dm_resources),
+	.resource = MSM7XXX_UART1_dm_resources,
 	.dev		= {
-		.dma_mask = &msm_uart_dm1_dma_mask,
+		.dma_mask = &MSM7XXX_UART_dm1_dma_mask,
 		.coherent_dma_mask = DMA_BIT_MASK(32),
 	},
 };
 
-static struct resource msm_uart2_dm_resources[] = {
+static struct resource MSM7XXX_UART2_dm_resources[] = {
 	{
-		.start = MSM_UART2DM_PHYS,
-		.end   = MSM_UART2DM_PHYS + PAGE_SIZE - 1,
+		.start = MSM7XXX_UART2DM_PHYS,
+		.end   = MSM7XXX_UART2DM_PHYS + PAGE_SIZE - 1,
 		.flags = IORESOURCE_MEM,
 	},
 	{
@@ -167,15 +165,15 @@ static struct resource msm_uart2_dm_resources[] = {
 	},
 };
 
-static u64 msm_uart_dm2_dma_mask = DMA_BIT_MASK(32);
+static u64 MSM7XXX_UART_dm2_dma_mask = DMA_BIT_MASK(32);
 
 struct platform_device msm_device_uart_dm2 = {
 	.name = "msm_serial_hs",
 	.id = 1,
-	.num_resources = ARRAY_SIZE(msm_uart2_dm_resources),
-	.resource = msm_uart2_dm_resources,
+	.num_resources = ARRAY_SIZE(MSM7XXX_UART2_dm_resources),
+	.resource = MSM7XXX_UART2_dm_resources,
 	.dev		= {
-		.dma_mask = &msm_uart_dm2_dma_mask,
+		.dma_mask = &MSM7XXX_UART_dm2_dma_mask,
 		.coherent_dma_mask = DMA_BIT_MASK(32),
 	},
 };
@@ -408,12 +406,21 @@ struct platform_device msm_device_smd = {
 	.id	= -1,
 };
 
-struct resource msm_dmov_resource[] = {
+static struct resource msm_dmov_resource[] = {
 	{
 		.start = INT_ADM_AARM,
-		.end = (resource_size_t)MSM_DMOV_BASE,
 		.flags = IORESOURCE_IRQ,
 	},
+	{
+		.start = 0xA9700000,
+		.end = 0xA9700000 + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+};
+
+static struct msm_dmov_pdata msm_dmov_pdata = {
+	.sd = 3,
+	.sd_size = 0x400,
 };
 
 struct platform_device msm_device_dmov = {
@@ -421,6 +428,9 @@ struct platform_device msm_device_dmov = {
 	.id	= -1,
 	.resource = msm_dmov_resource,
 	.num_resources = ARRAY_SIZE(msm_dmov_resource),
+	.dev = {
+		.platform_data = &msm_dmov_pdata,
+	},
 };
 
 #define MSM_SDC1_BASE         0xA0400000
@@ -604,7 +614,12 @@ static struct resource msm_mdp_resources[] = {
 		.start  = MDP_BASE,
 		.end    = MDP_BASE + 0x000F0000 - 1,
 		.flags  = IORESOURCE_MEM,
-	}
+	},
+	{
+		.start  = INT_MDP,
+		.end    = INT_MDP,
+		.flags  = IORESOURCE_IRQ,
+	},
 };
 
 static struct resource msm_mddi_resources[] = {
@@ -809,51 +824,3 @@ void __init msm_camera_register_device(void *res, uint32_t num,
 
 	msm_register_device(&msm_camera_device, data);
 }
-
-struct clk_lookup msm_clocks_7x01a[] = {
-	CLK_PCOM("adm_clk",	ADM_CLK,	NULL, 0),
-	CLK_PCOM("adsp_clk",	ADSP_CLK,	NULL, 0),
-	CLK_PCOM("ebi1_clk",	EBI1_CLK,	NULL, CLK_MIN),
-	CLK_PCOM("ebi2_clk",	EBI2_CLK,	NULL, 0),
-	CLK_PCOM("ecodec_clk",	ECODEC_CLK,	NULL, 0),
-	CLK_PCOM("emdh_clk",	EMDH_CLK,	NULL, OFF | CLK_MINMAX),
-	CLK_PCOM("gp_clk",	GP_CLK,		NULL, 0),
-	CLK_PCOM("grp_clk",	GRP_3D_CLK,	NULL, OFF),
-	CLK_PCOM("i2c_clk",	I2C_CLK,	"msm_i2c.0", 0),
-	CLK_PCOM("icodec_rx_clk",	ICODEC_RX_CLK,	NULL, 0),
-	CLK_PCOM("icodec_tx_clk",	ICODEC_TX_CLK,	NULL, 0),
-	CLK_PCOM("imem_clk",	IMEM_CLK,	NULL, OFF),
-	CLK_PCOM("mdc_clk",	MDC_CLK,	NULL, 0),
-	CLK_PCOM("mddi_clk",	PMDH_CLK,	NULL, OFF | CLK_MINMAX),
-	CLK_PCOM("mdp_clk",	MDP_CLK,	NULL, OFF),
-	CLK_PCOM("pbus_clk",	PBUS_CLK,	NULL, CLK_MIN),
-	CLK_PCOM("pcm_clk",	PCM_CLK,	NULL, 0),
-	CLK_PCOM("sdac_clk",	SDAC_CLK,	NULL, OFF),
-	CLK_PCOM("sdc_clk",	SDC1_CLK,	"msm_sdcc.1", OFF),
-	CLK_PCOM("sdc_pclk",	SDC1_P_CLK,	"msm_sdcc.1", OFF),
-	CLK_PCOM("sdc_clk",	SDC2_CLK,	"msm_sdcc.2", OFF),
-	CLK_PCOM("sdc_pclk",	SDC2_P_CLK,	"msm_sdcc.2", OFF),
-	CLK_PCOM("sdc_clk",	SDC3_CLK,	"msm_sdcc.3", OFF),
-	CLK_PCOM("sdc_pclk",	SDC3_P_CLK,	"msm_sdcc.3", OFF),
-	CLK_PCOM("sdc_clk",	SDC4_CLK,	"msm_sdcc.4", OFF),
-	CLK_PCOM("sdc_pclk",	SDC4_P_CLK,	"msm_sdcc.4", OFF),
-	CLK_PCOM("tsif_clk",	TSIF_CLK,	NULL, 0),
-	CLK_PCOM("tsif_ref_clk",	TSIF_REF_CLK,	NULL, 0),
-	CLK_PCOM("tv_dac_clk",	TV_DAC_CLK,	NULL, 0),
-	CLK_PCOM("tv_enc_clk",	TV_ENC_CLK,	NULL, 0),
-	CLK_PCOM("uart_clk",	UART1_CLK,	"msm_serial.0", OFF),
-	CLK_PCOM("uart_clk",	UART2_CLK,	"msm_serial.1", 0),
-	CLK_PCOM("uart_clk",	UART3_CLK,	"msm_serial.2", OFF),
-	CLK_PCOM("uartdm_clk",	UART1DM_CLK,	"msm_serial_hs.0", OFF),
-	CLK_PCOM("uartdm_clk",	UART2DM_CLK,	"msm_serial_hs.1", 0),
-	CLK_PCOM("usb_hs_clk",	USB_HS_CLK,	"msm_otg", OFF),
-	CLK_PCOM("usb_hs_pclk",	USB_HS_P_CLK,	"msm_otg", OFF),
-	CLK_DUMMY("usb_phy_clk",USB_PHY_CLK,	NULL, OFF),
-	CLK_PCOM("usb_otg_clk",	USB_OTG_CLK,	NULL, 0),
-	CLK_PCOM("vdc_clk",	VDC_CLK,	NULL, OFF | CLK_MIN),
-	CLK_PCOM("vfe_clk",	VFE_CLK,	NULL, OFF),
-	CLK_PCOM("vfe_mdc_clk",	VFE_MDC_CLK,	NULL, OFF),
-};
-
-unsigned msm_num_clocks_7x01a = ARRAY_SIZE(msm_clocks_7x01a);
-

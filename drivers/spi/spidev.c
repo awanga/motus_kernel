@@ -741,7 +741,7 @@ static int __init spidev_init(void)
 		/* We create a virtual device that will sit on the bus */
 		spi = spi_new_device(master, &chip);
 		if (!spi) {
-			status = -ENOMEM;
+			status = -EBUSY;
 			goto error_mem;
 		}
 		dev_dbg(&spi->dev, "busnum=%d cs=%d bufsiz=%d maxspeed=%d",
@@ -762,7 +762,7 @@ module_init(spidev_init);
 static void __exit spidev_exit(void)
 {
 	if (spi) {
-		spi_dev_put(spi);
+		spi_unregister_device(spi);
 		spi = NULL;
 	}
 	spi_unregister_driver(&spidev_spi_driver);

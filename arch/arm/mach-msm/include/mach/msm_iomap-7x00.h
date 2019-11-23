@@ -1,7 +1,6 @@
 /* arch/arm/mach-msm/include/mach/msm_iomap.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -56,15 +55,8 @@
 #define MSM_TMR_BASE          MSM_CSR_BASE
 #define MSM_TMR_SIZE          SZ_4K
 
-#define MSM7X00_CSR_PHYS      0xC0100000
-#define MSM7X00_CSR_SIZE      SZ_4K
-
 #define MSM_GPT_BASE          MSM_TMR_BASE
 #define MSM_DGT_BASE          (MSM_TMR_BASE + 0x10)
-
-#define MSM_DMOV_BASE         IOMEM(0xF8002000)
-#define MSM_DMOV_PHYS         0xA9700000
-#define MSM_DMOV_SIZE         SZ_4K
 
 #define MSM_GPIO1_BASE        IOMEM(0xF8003000)
 #define MSM_GPIO1_PHYS        0xA9200000
@@ -90,18 +82,6 @@
 
 #define MSM_UART3_PHYS        0xA9C00000
 #define MSM_UART3_SIZE        SZ_4K
-
-#ifdef CONFIG_MSM_DEBUG_UART
-#define MSM_DEBUG_UART_BASE   0xF9000000
-#if CONFIG_MSM_DEBUG_UART == 1
-#define MSM_DEBUG_UART_PHYS   MSM_UART1_PHYS
-#elif CONFIG_MSM_DEBUG_UART == 2
-#define MSM_DEBUG_UART_PHYS   MSM_UART2_PHYS
-#elif CONFIG_MSM_DEBUG_UART == 3
-#define MSM_DEBUG_UART_PHYS   MSM_UART3_PHYS
-#endif
-#define MSM_DEBUG_UART_SIZE   SZ_4K
-#endif
 
 #define MSM_SDC1_PHYS         0xA0400000
 #define MSM_SDC1_SIZE         SZ_4K
@@ -152,5 +132,11 @@
 
 #define MSM_TSSC_PHYS         0xAA300000
 #define MSM_TSSC_SIZE         SZ_4K
+
+#if defined(CONFIG_ARCH_MSM7X30)
+#define MSM_GCC_BASE          IOMEM(0xF8009000)
+#define MSM_GCC_PHYS          0xC0182000
+#define MSM_GCC_SIZE          SZ_4K
+#endif
 
 #endif

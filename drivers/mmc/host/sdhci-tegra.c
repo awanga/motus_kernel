@@ -20,6 +20,7 @@
 #include <linux/gpio.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
+#include <linux/module.h>
 
 #include <mach/gpio.h>
 #include <mach/sdhci.h>
@@ -183,6 +184,8 @@ static int tegra_sdhci_pltfm_init(struct sdhci_host *host,
 	}
 	clk_enable(clk);
 	pltfm_host->clk = clk;
+
+	host->mmc->pm_caps = plat->pm_flags;
 
 	if (plat->is_8bit)
 		host->mmc->caps |= MMC_CAP_8_BIT_DATA;

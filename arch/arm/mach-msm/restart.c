@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,11 +8,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  *
  */
 
@@ -28,25 +23,24 @@
 #include <linux/interrupt.h>
 #include <linux/mfd/pmic8058.h>
 #include <linux/mfd/pmic8901.h>
+#include <linux/mfd/pm8xxx/misc.h>
+
+#include <asm/mach-types.h>
 
 #include <mach/msm_iomap.h>
 #include <mach/restart.h>
-#include <mach/scm-io.h>
-#include <asm/mach-types.h>
+#include <mach/socinfo.h>
 #include <mach/irqs.h>
 #include <mach/scm.h>
-#include <mach/msm_watchdog.h>
+#include "msm_watchdog.h"
+#include "timer.h"
 
-#define TCSR_WDT_CFG 0x30
-
-#define WDT0_RST       (MSM_TMR0_BASE + 0x38)
-#define WDT0_EN        (MSM_TMR0_BASE + 0x40)
-#define WDT0_BARK_TIME (MSM_TMR0_BASE + 0x4C)
-#define WDT0_BITE_TIME (MSM_TMR0_BASE + 0x5C)
+#define WDT0_RST	0x38
+#define WDT0_EN		0x40
+#define WDT0_BARK_TIME	0x4C
+#define WDT0_BITE_TIME	0x5C
 
 #define PSHOLD_CTL_SU (MSM_TLMM_BASE + 0x820)
-
-#define IMEM_BASE           0x2A05F000
 
 #define RESTART_REASON_ADDR 0x65C
 #define DLOAD_MODE_ADDR     0x0
@@ -57,6 +51,7 @@ static int restart_mode;
 void *restart_reason;
 
 int pmic_reset_irq;
+static void __iomem *msm_tmr0_base;
 
 #ifdef CONFIG_MSM_DLOAD_MODE
 static int in_panic;
@@ -82,8 +77,8 @@ static struct notifier_block panic_blk = {
 static void set_dload_mode(int on)
 {
 	if (dload_mode_addr) {
-		writel(on ? 0xE47B337D : 0, dload_mode_addr);
-		writel(on ? 0xCE14091A : 0,
+		__raw_writel(on ? 0xE47B337D : 0, dload_mode_addr);
+		__raw_writel(on ? 0xCE14091A : 0,
 		       dload_mode_addr + sizeof(unsigned int));
 		mb();
 	}
@@ -125,14 +120,13 @@ static void __msm_power_off(int lower_pshold)
 #ifdef CONFIG_MSM_DLOAD_MODE
 	set_dload_mode(0);
 #endif
-	pm8058_reset_pwr_off(0);
-	pm8901_reset_pwr_off(0);
+	pm8xxx_reset_pwr_off(0);
+
 	if (lower_pshold) {
-		writel(0, PSHOLD_CTL_SU);
+		__raw_writel(0, PSHOLD_CTL_SU);
 		mdelay(10000);
 		printk(KERN_ERR "Powering off has failed\n");
 	}
-
 	return;
 }
 
@@ -205,56 +199,42 @@ void arch_reset(char mode, const char *cmd)
 
 	printk(KERN_NOTICE "Going down for restart now\n");
 
-	pm8058_reset_pwr_off(1);
+	pm8xxx_reset_pwr_off(1);
 
 	if (cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {
-			writel(0x77665500, restart_reason);
+			__raw_writel(0x77665500, restart_reason);
 		} else if (!strncmp(cmd, "recovery", 8)) {
-			writel(0x77665502, restart_reason);
+			__raw_writel(0x77665502, restart_reason);
 		} else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned long code;
-			strict_strtoul(cmd + 4, 16, &code);
-			code = code & 0xff;
-			writel(0x6f656d00 | code, restart_reason);
+			code = simple_strtoul(cmd + 4, NULL, 16) & 0xff;
+			__raw_writel(0x6f656d00 | code, restart_reason);
 		} else {
-			writel(0x77665501, restart_reason);
+			__raw_writel(0x77665501, restart_reason);
 		}
 	}
 
-	writel(0, WDT0_EN);
-	if (!(machine_is_msm8x60_charm_surf() ||
-	      machine_is_msm8x60_charm_ffa())) {
-		dsb();
-		writel(0, PSHOLD_CTL_SU); /* Actually reset the chip */
+	__raw_writel(0, msm_tmr0_base + WDT0_EN);
+	if (!(machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa())) {
+		mb();
+		__raw_writel(0, PSHOLD_CTL_SU); /* Actually reset the chip */
 		mdelay(5000);
 		pr_notice("PS_HOLD didn't work, falling back to watchdog\n");
 	}
 
-	__raw_writel(1, WDT0_RST);
-	__raw_writel(5*0x31F3, WDT0_BARK_TIME);
-	__raw_writel(0x31F3, WDT0_BITE_TIME);
-	__raw_writel(3, WDT0_EN);
-	secure_writel(3, MSM_TCSR_BASE + TCSR_WDT_CFG);
+	__raw_writel(1, msm_tmr0_base + WDT0_RST);
+	__raw_writel(5*0x31F3, msm_tmr0_base + WDT0_BARK_TIME);
+	__raw_writel(0x31F3, msm_tmr0_base + WDT0_BITE_TIME);
+	__raw_writel(1, msm_tmr0_base + WDT0_EN);
 
 	mdelay(10000);
 	printk(KERN_ERR "Restarting has failed\n");
 }
 
-static int __init msm_restart_init(void)
+static int __init msm_pmic_restart_init(void)
 {
-	void *imem = ioremap_nocache(IMEM_BASE, SZ_4K);
 	int rc;
-
-#ifdef CONFIG_MSM_DLOAD_MODE
-	atomic_notifier_chain_register(&panic_notifier_list, &panic_blk);
-	dload_mode_addr = imem + DLOAD_MODE_ADDR;
-
-	/* Reset detection is switched on below.*/
-	set_dload_mode(1);
-#endif
-	restart_reason = imem + RESTART_REASON_ADDR;
-	pm_power_off = msm_power_off;
 
 	if (pmic_reset_irq != 0) {
 		rc = request_any_context_irq(pmic_reset_irq,
@@ -269,4 +249,19 @@ static int __init msm_restart_init(void)
 	return 0;
 }
 
-late_initcall(msm_restart_init);
+late_initcall(msm_pmic_restart_init);
+
+static int __init msm_restart_init(void)
+{
+#ifdef CONFIG_MSM_DLOAD_MODE
+	atomic_notifier_chain_register(&panic_notifier_list, &panic_blk);
+	dload_mode_addr = MSM_IMEM_BASE + DLOAD_MODE_ADDR;
+	set_dload_mode(download_mode);
+#endif
+	msm_tmr0_base = msm_timer_get_timer0_base();
+	restart_reason = MSM_IMEM_BASE + RESTART_REASON_ADDR;
+	pm_power_off = msm_power_off;
+
+	return 0;
+}
+early_initcall(msm_restart_init);

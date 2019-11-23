@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,7 +30,7 @@ struct sirc_cascade_regs {
 
 void msm_init_sirc(void);
 
-#if defined(CONFIG_ARCH_MSM_SCORPION)
+#if defined(CONFIG_ARCH_MSM_SCORPION) && !defined(CONFIG_MSM_SMP)
 
 #include <mach/msm_iomap.h>
 
@@ -39,6 +39,10 @@ void msm_init_sirc(void);
  */
 
 #define FIRST_SIRC_IRQ (NR_MSM_IRQS + NR_GPIO_IRQS)
+
+#if defined(CONFIG_ARCH_FSM9XXX)
+#include <mach/sirc-fsm9xxx.h>
+#else /* CONFIG_ARCH_FSM9XXX */
 
 #define INT_UART1                     (FIRST_SIRC_IRQ + 0)
 #define INT_UART2                     (FIRST_SIRC_IRQ + 1)
@@ -77,8 +81,6 @@ void msm_init_sirc(void);
 #define SIRC_MASK                     0x007FFFFF
 #endif
 
-#define LAST_SIRC_IRQ                 (FIRST_SIRC_IRQ + NR_SIRC_IRQS - 1)
-
 #define SPSS_SIRC_INT_SELECT          (MSM_SIRC_BASE + 0x00)
 #define SPSS_SIRC_INT_ENABLE          (MSM_SIRC_BASE + 0x04)
 #define SPSS_SIRC_INT_ENABLE_CLEAR    (MSM_SIRC_BASE + 0x08)
@@ -92,6 +94,10 @@ void msm_init_sirc(void);
 #define SPSS_SIRC_INT_CLEAR           (MSM_SIRC_BASE + 0x28)
 #define SPSS_SIRC_SOFT_INT            (MSM_SIRC_BASE + 0x2C)
 
-#endif
+#endif /* CONFIG_ARCH_FSM9XXX */
+
+#define LAST_SIRC_IRQ                 (FIRST_SIRC_IRQ + NR_SIRC_IRQS - 1)
+
+#endif /* CONFIG_ARCH_MSM_SCORPION */
 
 #endif

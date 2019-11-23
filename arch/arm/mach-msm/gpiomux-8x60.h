@@ -8,21 +8,15 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  */
 #ifndef __ARCH_ARM_MACH_MSM_GPIOMUX_8X60_H
 #define __ARCH_ARM_MACH_MSM_GPIOMUX_8X60_H
 
 void __init msm8x60_init_gpiomux(struct msm_gpiomux_configs *cfgs);
 
-extern struct msm_gpiomux_configs msm8x60_qrdc_gpiomux_cfgs[] __initdata;
 extern struct msm_gpiomux_configs msm8x60_surf_ffa_gpiomux_cfgs[] __initdata;
 extern struct msm_gpiomux_configs msm8x60_fluid_gpiomux_cfgs[] __initdata;
 extern struct msm_gpiomux_configs msm8x60_charm_gpiomux_cfgs[] __initdata;
-extern struct msm_gpiomux_configs msm8x60_qt_gpiomux_cfgs[] __initdata;
+extern struct msm_gpiomux_configs msm8x60_dragon_gpiomux_cfgs[] __initdata;
 
 #endif

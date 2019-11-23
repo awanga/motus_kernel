@@ -25,7 +25,7 @@ extern void s390_backtrace(struct pt_regs * const regs, unsigned int depth);
 
 #include "hwsampler.h"
 
-#define DEFAULT_INTERVAL	4096
+#define DEFAULT_INTERVAL	4127518
 
 #define DEFAULT_SDBT_BLOCKS	1
 #define DEFAULT_SDB_BLOCKS	511
@@ -90,7 +90,7 @@ static ssize_t hwsampler_write(struct file *file, char const __user *buf,
 		return -EINVAL;
 
 	retval = oprofilefs_ulong_from_user(&val, buf, count);
-	if (retval)
+	if (retval <= 0)
 		return retval;
 
 	if (oprofile_started)
@@ -150,6 +150,12 @@ static int oprofile_hwsampler_init(struct oprofile_operations *ops)
 	oprofile_max_interval = hwsampler_query_max_interval();
 	if (oprofile_max_interval == 0)
 		return -ENODEV;
+
+	/* The initial value should be sane */
+	if (oprofile_hw_interval < oprofile_min_interval)
+		oprofile_hw_interval = oprofile_min_interval;
+	if (oprofile_hw_interval > oprofile_max_interval)
+		oprofile_hw_interval = oprofile_max_interval;
 
 	if (oprofile_timer_init(ops))
 		return -ENODEV;

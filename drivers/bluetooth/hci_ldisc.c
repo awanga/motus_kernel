@@ -359,6 +359,7 @@ static void hci_uart_tty_wakeup(struct tty_struct *tty)
  */
 static void hci_uart_tty_receive(struct tty_struct *tty, const u8 *data, char *flags, int count)
 {
+	int ret;
 	struct hci_uart *hu = (void *)tty->disc_data;
 
 	if (!hu || tty != hu->tty)
@@ -368,8 +369,9 @@ static void hci_uart_tty_receive(struct tty_struct *tty, const u8 *data, char *f
 		return;
 
 	spin_lock(&hu->rx_lock);
-	hu->proto->recv(hu, (void *) data, count);
-	hu->hdev->stat.byte_rx += count;
+	ret = hu->proto->recv(hu, (void *) data, count);
+	if (ret > 0)
+		hu->hdev->stat.byte_rx += count;
 	spin_unlock(&hu->rx_lock);
 
 	tty_unthrottle(tty);
@@ -569,11 +571,11 @@ static int __init hci_uart_init(void)
 #ifdef CONFIG_BT_HCIUART_LL
 	ll_init();
 #endif
-#ifdef CONFIG_BT_HCIUART_IBS
-	ibs_init();
-#endif
 #ifdef CONFIG_BT_HCIUART_ATH3K
 	ath_init();
+#endif
+#ifdef CONFIG_BT_HCIUART_IBS
+	ibs_init();
 #endif
 #ifdef CONFIG_BT_HCIUART_BRCM
 	brcm_init();
@@ -600,6 +602,9 @@ static void __exit hci_uart_exit(void)
 #endif
 #ifdef CONFIG_BT_HCIUART_ATH3K
 	ath_deinit();
+#endif
+#ifdef CONFIG_BT_HCIUART_IBS
+	ibs_deinit();
 #endif
 #ifdef CONFIG_BT_HCIUART_BRCM
         brcm_deinit();

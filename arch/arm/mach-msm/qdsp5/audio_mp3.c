@@ -4,7 +4,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -16,6 +16,9 @@
  * GNU General Public License for more details.
  *
  */
+
+#include <asm/atomic.h>
+#include <asm/ioctls.h>
 
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -30,20 +33,21 @@
 #include <linux/list.h>
 #include <linux/android_pmem.h>
 #include <linux/slab.h>
-#include <asm/atomic.h>
-#include <asm/ioctls.h>
-#include <mach/msm_adsp.h>
-
 #include <linux/msm_audio.h>
+#include <linux/memory_alloc.h>
 
-#include "audmgr.h"
-
+#include <mach/msm_adsp.h>
+#include <mach/iommu.h>
+#include <mach/iommu_domains.h>
+#include <mach/msm_memtypes.h>
 #include <mach/qdsp5/qdsp5audppcmdi.h>
 #include <mach/qdsp5/qdsp5audppmsg.h>
 #include <mach/qdsp5/qdsp5audplaycmdi.h>
 #include <mach/qdsp5/qdsp5audplaymsg.h>
 #include <mach/qdsp5/qdsp5rmtcmdi.h>
 #include <mach/debug_mm.h>
+
+#include "audmgr.h"
 
 #define ADRV_STATUS_AIO_INTF 0x00000001
 #define ADRV_STATUS_OBUF_GIVEN 0x00000002
@@ -108,6 +112,8 @@
 	int res = (IN_RANGE(__r1, __v) || IN_RANGE(__r1, __e));	\
 	res;							\
 })
+
+struct audio;
 
 struct buffer {
 	void *data;
@@ -195,6 +201,8 @@ struct audio {
 	/* data allocated for various buffers */
 	char *data;
 	int32_t phys; /* physical address of write buffer */
+	void *map_v_read;
+	void *map_v_write;
 
 	uint32_t drv_status;
 	int mfield; /* meta field embedded in data */
@@ -245,11 +253,9 @@ struct audio {
 static int auddec_dsp_config(struct audio *audio, int enable);
 static void audpp_cmd_cfg_adec_params(struct audio *audio);
 static void audpp_cmd_cfg_routing_mode(struct audio *audio);
-#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
 static void audplay_send_data(struct audio *audio, unsigned needed);
-static void audplay_buffer_refresh(struct audio *audio);
-#endif
 static void audplay_config_hostpcm(struct audio *audio);
+static void audplay_buffer_refresh(struct audio *audio);
 static void audio_dsp_event(void *private, unsigned id, uint16_t *msg);
 static void audmp3_post_event(struct audio *audio, int type,
 	union msm_audio_event_payload payload);
@@ -361,6 +367,7 @@ static int audio_disable(struct audio *audio)
 			rc = -EFAULT;
 		else
 			rc = 0;
+		audio->stopped = 1;
 		wake_up(&audio->write_wait);
 		wake_up(&audio->read_wait);
 		msm_adsp_disable(audio->audplay);
@@ -374,7 +381,6 @@ static int audio_disable(struct audio *audio)
 	return rc;
 }
 
-#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
 /* ------------------- dsp --------------------- */
 static void audmp3_async_pcm_buf_update(struct audio *audio, uint32_t *payload)
 {
@@ -449,7 +455,6 @@ static void audio_update_pcm_buf_entry(struct audio *audio, uint32_t *payload)
 	spin_unlock_irqrestore(&audio->dsp_lock, flags);
 
 }
-#endif
 
 static void audplay_dsp_event(void *data, unsigned id, size_t len,
 			      void (*getevent) (void *ptr, size_t len))
@@ -632,7 +637,6 @@ static void audpp_cmd_cfg_routing_mode(struct audio *audio)
 	audpp_send_queue1(&cmd, sizeof(cmd));
 }
 
-#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
 static int audplay_dsp_send_data_avail(struct audio *audio,
 					unsigned idx, unsigned len)
 {
@@ -698,7 +702,6 @@ static void audplay_buffer_refresh(struct audio *audio)
 			refresh_cmd.buf0_length);
 	(void)audplay_send_queue0(audio, &refresh_cmd, sizeof(refresh_cmd));
 }
-#endif
 
 static void audplay_config_hostpcm(struct audio *audio)
 {
@@ -715,7 +718,6 @@ static void audplay_config_hostpcm(struct audio *audio)
 
 }
 
-#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
 static void audmp3_async_send_data(struct audio *audio, unsigned needed)
 {
 	unsigned long flags;
@@ -834,7 +836,9 @@ static void audmp3_async_flush(struct audio *audio)
 	struct audmp3_buffer_node *buf_node;
 	struct list_head *ptr, *next;
 	union msm_audio_event_payload payload;
+	unsigned long flags;
 
+	spin_lock_irqsave(&audio->dsp_lock, flags);
 	MM_DBG("\n"); /* Macro prints the file name and function */
 	list_for_each_safe(ptr, next, &audio->out_queue) {
 		buf_node = list_entry(ptr, struct audmp3_buffer_node, list);
@@ -847,16 +851,21 @@ static void audmp3_async_flush(struct audio *audio)
 	audio->drv_status &= ~ADRV_STATUS_OBUF_GIVEN;
 	audio->out_needed = 0;
 	atomic_set(&audio->out_bytes, 0);
+	spin_unlock_irqrestore(&audio->dsp_lock, flags);
 }
 
 static void audio_flush(struct audio *audio)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&audio->dsp_lock, flags);
 	audio->out[0].used = 0;
 	audio->out[1].used = 0;
 	audio->out_head = 0;
 	audio->out_tail = 0;
 	audio->reserved = 0;
 	audio->out_needed = 0;
+	spin_unlock_irqrestore(&audio->dsp_lock, flags);
 	atomic_set(&audio->out_bytes, 0);
 }
 
@@ -883,15 +892,16 @@ static void audmp3_async_flush_pcm_buf(struct audio *audio)
 static void audio_flush_pcm_buf(struct audio *audio)
 {
 	uint8_t index;
+	unsigned long flags;
 
+	spin_lock_irqsave(&audio->dsp_lock, flags);
 	for (index = 0; index < PCM_BUF_MAX_COUNT; index++)
 		audio->in[index].used = 0;
-
 	audio->buf_refresh = 0;
 	audio->read_next = 0;
 	audio->fill_next = 0;
+	spin_unlock_irqrestore(&audio->dsp_lock, flags);
 }
-#endif
 
 static void audio_ioport_reset(struct audio *audio)
 {
@@ -1365,7 +1375,6 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case AUDIO_STOP:
 		MM_DBG("AUDIO_STOP\n");
 		rc = audio_disable(audio);
-		audio->stopped = 1;
 		audio_ioport_reset(audio);
 		audio->stopped = 0;
 		break;
@@ -1472,25 +1481,30 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				MM_DBG("allocate PCM buffer %d\n",
 					config.buffer_count *
 					config.buffer_size);
-				audio->read_phys = pmem_kalloc(
+				audio->read_phys =
+						allocate_contiguous_ebi_nomap(
 							config.buffer_size *
 							config.buffer_count,
-							PMEM_MEMTYPE_EBI1|
-							PMEM_ALIGNMENT_4K);
-				if (IS_ERR((void *)audio->read_phys)) {
+							SZ_4K);
+				if (!audio->read_phys) {
 					rc = -ENOMEM;
 					break;
 				}
-				audio->read_data = ioremap(audio->read_phys,
+				audio->map_v_read = ioremap(
+							audio->read_phys,
 							config.buffer_size *
 							config.buffer_count);
-				if (!audio->read_data) {
-					MM_ERR("malloc read buf failed\n");
+
+				if (IS_ERR(audio->map_v_read)) {
+					MM_ERR("map of read buf failed\n");
 					rc = -ENOMEM;
-					pmem_kfree(audio->read_phys);
+					free_contiguous_memory_by_paddr(
+							audio->read_phys);
 				} else {
 					uint8_t index;
 					uint32_t offset = 0;
+					audio->read_data =
+						audio->map_v_read;
 					audio->buf_refresh = 0;
 					audio->pcm_buf_count =
 					    config.buffer_count;
@@ -1965,12 +1979,12 @@ static int audio_release(struct inode *inode, struct file *file)
 	audmp3_reset_event_queue(audio);
 	MM_DBG("pmem area = 0x%8x\n", (unsigned int)audio->data);
 	if (audio->data) {
-		iounmap(audio->data);
-		pmem_kfree(audio->phys);
+		iounmap(audio->map_v_write);
+		free_contiguous_memory_by_paddr(audio->phys);
 	}
 	if (audio->read_data) {
-		iounmap(audio->read_data);
-		pmem_kfree(audio->read_phys);
+		iounmap(audio->map_v_read);
+		free_contiguous_memory_by_paddr(audio->read_phys);
 	}
 	mutex_unlock(&audio->lock);
 #ifdef CONFIG_DEBUG_FS
@@ -2113,12 +2127,9 @@ static int audio_open(struct inode *inode, struct file *file)
 {
 
 	struct audio *audio = NULL;
-	int rc, i;
+	int rc, i, dec_attrb, decid;
 	struct audmp3_event *e_node = NULL;
-#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
-	int dec_attrb, decid;
 	unsigned pmem_sz = DMASZ_MAX;
-#endif
 #ifdef CONFIG_DEBUG_FS
 	/* 4 bytes represents decoder number, 1 byte for terminate string */
 	char name[sizeof "msm_mp3_" + 5];
@@ -2133,7 +2144,6 @@ static int audio_open(struct inode *inode, struct file *file)
 	}
 	MM_INFO("audio instance 0x%08x created\n", (int)audio);
 
-#if !defined(CONFIG_MACH_MOT) && !defined(CONFIG_MACH_PITTSBURGH)
 	/* Allocate the decoder */
 	dec_attrb = AUDDEC_DEC_MP3;
 	if ((file->f_mode & FMODE_WRITE) &&
@@ -2164,21 +2174,24 @@ static int audio_open(struct inode *inode, struct file *file)
 	/* Non AIO interface */
 	if (!(file->f_flags & O_NONBLOCK)) {
 		while (pmem_sz >= DMASZ_MIN) {
-			MM_DBG("pmemsz = %d \n", pmem_sz);
-			audio->phys = pmem_kalloc(pmem_sz, PMEM_MEMTYPE_EBI1|
-						PMEM_ALIGNMENT_4K);
-			if (!IS_ERR((void *)audio->phys)) {
-				audio->data = ioremap(audio->phys, pmem_sz);
-				if (!audio->data) {
-					MM_ERR("could not allocate write \
+			MM_DBG("pmemsz = %d\n", pmem_sz);
+			audio->phys = allocate_contiguous_ebi_nomap(pmem_sz,
+								SZ_4K);
+			if (audio->phys) {
+				audio->map_v_write = ioremap(
+							audio->phys, pmem_sz);
+				if (IS_ERR(audio->map_v_write)) {
+					MM_ERR("could not map write \
 						buffers, freeing instance \
 						0x%08x\n", (int)audio);
 					rc = -ENOMEM;
-					pmem_kfree(audio->phys);
+					free_contiguous_memory_by_paddr(
+								audio->phys);
 					audpp_adec_free(audio->dec_id);
 					kfree(audio);
 					goto done;
 				}
+				audio->data = audio->map_v_write;
 				MM_DBG("write buf: phy addr 0x%08x kernel addr\
 					0x%08x\n", audio->phys,\
 					(int)audio->data);
@@ -2252,19 +2265,6 @@ static int audio_open(struct inode *inode, struct file *file)
 		audio->out[1].addr = audio->phys + audio->out[0].size;
 		audio->out[1].size = audio->out[0].size;
 	}
-#else /* defined(CONFIG_MACH_MOT) || defined(CONFIG_MACH_PITTSBURGH) */
-	rc = audmgr_open(&audio->audmgr);
-	if (rc)
-		goto err;
-
-	rc = msm_adsp_get("AUDPLAY0TASK", &audio->audplay, &audplay_adsp_ops,
-			  audio);
-	if (rc) {
-		pr_err("audio: failed to get audplay0 dsp module\n");
-		audmgr_close(&audio->audmgr);
-		goto err;
-	}
-#endif
 
 	/* Initialize all locks of audio instance */
 	mutex_init(&audio->lock);
@@ -2319,8 +2319,8 @@ done:
 	return rc;
 err:
 	if (audio->data) {
-		iounmap(audio->data);
-		pmem_kfree(audio->phys);
+		iounmap(audio->map_v_write);
+		free_contiguous_memory_by_paddr(audio->phys);
 	}
 	audpp_adec_free(audio->dec_id);
 	kfree(audio);
@@ -2345,7 +2345,6 @@ struct miscdevice audio_mp3_misc = {
 
 static int __init audio_init(void)
 {
-
 	return misc_register(&audio_mp3_misc);
 }
 

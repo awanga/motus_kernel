@@ -75,8 +75,8 @@ struct hci_uart {
 };
 
 /* HCI_UART proto flag bits */
-#define HCI_UART_PROTO_SET                      0
-#define HCI_UART_PROTO_SET_IN_PROGRESS          1
+#define HCI_UART_PROTO_SET			0
+#define HCI_UART_PROTO_SET_IN_PROGRESS		1
 
 /* TX states  */
 #define HCI_UART_SENDING	1
@@ -109,6 +109,11 @@ int ibs_deinit(void);
 #ifdef CONFIG_BT_HCIUART_ATH3K
 int ath_init(void);
 int ath_deinit(void);
+#endif
+
+#ifdef CONFIG_BT_HCIUART_IBS
+int ibs_init(void);
+int ibs_deinit(void);
 #endif
 
 #ifdef CONFIG_BT_HCIUART_BRCM

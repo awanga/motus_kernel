@@ -66,71 +66,6 @@ source "drivers/tty/serial/Kconfig"
 
 source "drivers/char/diag/Kconfig"
 
-config UNIX98_PTYS
-	bool "Unix98 PTY support" if EXPERT
-	default y
-	---help---
-	  A pseudo terminal (PTY) is a software device consisting of two
-	  halves: a master and a slave. The slave device behaves identical to
-	  a physical terminal; the master device is used by a process to
-	  read data from and write data to the slave, thereby emulating a
-	  terminal. Typical programs for the master side are telnet servers
-	  and xterms.
-
-	  Linux has traditionally used the BSD-like names /dev/ptyxx for
-	  masters and /dev/ttyxx for slaves of pseudo terminals. This scheme
-	  has a number of problems. The GNU C library glibc 2.1 and later,
-	  however, supports the Unix98 naming standard: in order to acquire a
-	  pseudo terminal, a process opens /dev/ptmx; the number of the pseudo
-	  terminal is then made available to the process and the pseudo
-	  terminal slave can be accessed as /dev/pts/<number>. What was
-	  traditionally /dev/ttyp2 will then be /dev/pts/2, for example.
-
-	  All modern Linux systems use the Unix98 ptys.  Say Y unless
-	  you're on an embedded system and want to conserve memory.
-
-config DEVPTS_MULTIPLE_INSTANCES
-	bool "Support multiple instances of devpts"
-	depends on UNIX98_PTYS
-	default n
-	---help---
-	  Enable support for multiple instances of devpts filesystem.
-	  If you want to have isolated PTY namespaces (eg: in containers),
-	  say Y here.  Otherwise, say N. If enabled, each mount of devpts
-	  filesystem with the '-o newinstance' option will create an
-	  independent PTY namespace.
-
-config LEGACY_PTYS
-	bool "Legacy (BSD) PTY support"
-	default y
-	---help---
-	  A pseudo terminal (PTY) is a software device consisting of two
-	  halves: a master and a slave. The slave device behaves identical to
-	  a physical terminal; the master device is used by a process to
-	  read data from and write data to the slave, thereby emulating a
-	  terminal. Typical programs for the master side are telnet servers
-	  and xterms.
-
-	  Linux has traditionally used the BSD-like names /dev/ptyxx
-	  for masters and /dev/ttyxx for slaves of pseudo
-	  terminals. This scheme has a number of problems, including
-	  security.  This option enables these legacy devices; on most
-	  systems, it is safe to say N.
-
-
-config LEGACY_PTY_COUNT
-	int "Maximum number of legacy PTY in use"
-	depends on LEGACY_PTYS
-	range 0 256
-	default "256"
-	---help---
-	  The maximum number of legacy PTYs that can be used at any one time.
-	  The default is 256, and should be more than enough.  Embedded
-	  systems may want to reduce this to save memory.
-
-	  When not in use, each legacy PTY occupies 12 bytes on 32-bit
-	  architectures and 24 bytes on 64-bit architectures.
-
 config TTY_PRINTK
 	bool "TTY driver to output user messages via printk"
 	depends on EXPERT
@@ -603,7 +538,7 @@ config RAW_DRIVER
           with the O_DIRECT flag.
 
 config MAX_RAW_DEVS
-	int "Maximum number of RAW devices to support (1-8192)"
+	int "Maximum number of RAW devices to support (1-65536)"
 	depends on RAW_DRIVER
 	default "256"
 	help
@@ -742,5 +677,46 @@ config MSM_SMD_PKT
 	  Enables userspace clients to read and write to some packet SMD
 	  ports via device interface for MSM chipset.
 
+config MSM_ROTATOR
+        tristate "MSM Offline Image Rotator Driver"
+        depends on (ARCH_MSM7X30 || ARCH_MSM8X60 || ARCH_MSM8960) && ANDROID_PMEM
+        default y
+        help
+          This driver provides support for the image rotator HW block in the
+          MSM 7x30 SoC.
+
+config MSM_ROTATOR_USE_IMEM
+        bool "Enable rotator driver to use iMem"
+        depends on ARCH_MSM7X30 && MSM_ROTATOR
+        default y
+        help
+          This option enables the msm_rotator driver to use the move efficient
+          iMem.  Some MSM platforms may not have iMem available for the rotator
+          block.  Or some systems may want the iMem to be dedicated to a
+          different function.
+
+config MMC_GENERIC_CSDIO
+	tristate "Generic sdio driver"
+	default n
+	help
+	  SDIO function driver that extends SDIO card as character device
+	  in user space.
+
+config CSDIO_VENDOR_ID
+	hex "Card VendorId"
+	depends on MMC_GENERIC_CSDIO
+	default "0"
+	help
+	  Enter vendor id for targeted sdio device, this may be overwritten by
+	  module parameters.
+
+config CSDIO_DEVICE_ID
+	hex "CardDeviceId"
+	depends on MMC_GENERIC_CSDIO
+	default "0"
+	help
+	  Enter device id for targeted sdio device, this may be overwritten by
+	  module parameters.
+.
 endmenu
 

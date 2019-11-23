@@ -80,14 +80,13 @@ struct gpio_event_matrix_info {
 	const unsigned short *keymap;
 	unsigned int *input_gpios;
 	unsigned int *output_gpios;
-	int (*sw_fixup)(int index);
 	unsigned int ninputs;
 	unsigned int noutputs;
 	/* time to wait before reading inputs after driving each output */
-	ktime_t settle_time;
+	struct timespec settle_time;
 	/* time to wait before scanning the keypad a second time */
-	ktime_t debounce_delay;
-	ktime_t poll_time;
+	struct timespec debounce_delay;
+	struct timespec poll_time;
 	unsigned flags;
 };
 
@@ -99,6 +98,7 @@ enum gpio_event_direct_flags {
 /*	GPIOEDF_USE_IRQ             = (1U << 2) | GPIOIDF_USE_DOWN_IRQ, */
 	GPIOEDF_PRINT_KEYS          = 1U << 8,
 	GPIOEDF_PRINT_KEY_DEBOUNCE  = 1U << 9,
+	GPIOEDF_PRINT_KEY_UNSTABLE  = 1U << 10,
 };
 
 struct gpio_event_direct_entry {

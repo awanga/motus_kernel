@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,11 +8,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  *
  */
 
@@ -198,10 +193,17 @@ static int get_battery_temperature(void)
 
 static int get_prop_batt_capacity(void)
 {
-	if (msm_batt_gauge && msm_batt_gauge->get_batt_remaining_capacity)
-		return msm_batt_gauge->get_batt_remaining_capacity();
+	int capacity;
 
-	return msm_chg.get_batt_capacity_percent();
+	if (msm_batt_gauge && msm_batt_gauge->get_batt_remaining_capacity)
+		capacity = msm_batt_gauge->get_batt_remaining_capacity();
+	else
+		capacity = msm_chg.get_batt_capacity_percent();
+
+	if (capacity <= 10)
+		pr_err("battery capacity very low = %d\n", capacity);
+
+	return capacity;
 }
 
 static int get_prop_batt_health(void)
@@ -989,10 +991,8 @@ void msm_charger_vbus_draw(unsigned int mA)
 		usb_chg_current = mA;
 }
 
-static int __init determine_initial_batt_status(void)
+static int determine_initial_batt_status(void)
 {
-	int rc;
-
 	if (is_battery_present())
 		if (is_battery_id_valid())
 			if (is_battery_temp_within_range())
@@ -1007,13 +1007,6 @@ static int __init determine_initial_batt_status(void)
 
 	if (is_batt_status_capable_of_charging())
 		handle_battery_inserted();
-
-	rc = power_supply_register(msm_chg.dev, &msm_psy_batt);
-	if (rc < 0) {
-		dev_err(msm_chg.dev, "%s: power_supply_register failed"
-			" rc=%d\n", __func__, rc);
-		return rc;
-	}
 
 	/* start updaing the battery powersupply every msm_chg.update_time
 	 * milliseconds */
@@ -1154,11 +1147,20 @@ EXPORT_SYMBOL(msm_charger_register);
 
 void msm_battery_gauge_register(struct msm_battery_gauge *batt_gauge)
 {
+	int rc;
+
 	if (msm_batt_gauge) {
 		msm_batt_gauge = batt_gauge;
 		pr_err("msm-charger %s multiple battery gauge called\n",
 								__func__);
 	} else {
+		rc = power_supply_register(msm_chg.dev, &msm_psy_batt);
+		if (rc < 0) {
+			dev_err(msm_chg.dev, "%s: power_supply_register failed"
+					" rc=%d\n", __func__, rc);
+			return;
+		}
+
 		msm_batt_gauge = batt_gauge;
 		determine_initial_batt_status();
 	}

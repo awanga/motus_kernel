@@ -6,6 +6,7 @@ obj-$(CONFIG_IBM_ASM)		+= ibmasm/
 obj-$(CONFIG_AD525X_DPOT)	+= ad525x_dpot.o
 obj-$(CONFIG_AD525X_DPOT_I2C)	+= ad525x_dpot-i2c.o
 obj-$(CONFIG_AD525X_DPOT_SPI)	+= ad525x_dpot-spi.o
+0bj-$(CONFIG_INTEL_MID_PTI)	+= pti.o
 obj-$(CONFIG_ATMEL_PWM)		+= atmel_pwm.o
 obj-$(CONFIG_ATMEL_SSC)		+= atmel-ssc.o
 obj-$(CONFIG_ATMEL_TCLIB)	+= atmel_tclib.o
@@ -19,6 +20,7 @@ obj-$(CONFIG_ANDROID_PMEM)	+= pmem.o
 obj-$(CONFIG_SENSORS_BH1780)	+= bh1780gli.o
 obj-$(CONFIG_SENSORS_BH1770)	+= bh1770glc.o
 obj-$(CONFIG_SENSORS_APDS990X)	+= apds990x.o
+obj-$(CONFIG_ANDROID_PMEM)	+= pmem.o
 obj-$(CONFIG_SGI_IOC4)		+= ioc4.o
 obj-$(CONFIG_OMAP_STI)		+= sti/
 obj-$(CONFIG_ENCLOSURE_SERVICES) += enclosure.o
@@ -31,6 +33,7 @@ obj-$(CONFIG_HP_ILO)		+= hpilo.o
 obj-$(CONFIG_APDS9802ALS)	+= apds9802als.o
 obj-$(CONFIG_ISL29003)		+= isl29003.o
 obj-$(CONFIG_ISL29020)		+= isl29020.o
+obj-$(CONFIG_USB_HSIC_SMSC_HUB) += smsc_hub.o
 obj-$(CONFIG_SENSORS_TSL2550)	+= tsl2550.o
 obj-$(CONFIG_EP93XX_PWM)	+= ep93xx_pwm.o
 obj-$(CONFIG_DS1682)		+= ds1682.o
@@ -41,6 +44,7 @@ obj-$(CONFIG_IWMC3200TOP)      += iwmc3200top/
 obj-$(CONFIG_HMC6352)		+= hmc6352.o
 obj-y				+= eeprom/
 obj-y				+= cb710/
+obj-y				+= ts27010mux/
 obj-$(CONFIG_SPEAR13XX_PCIE_GADGET)	+= spear13xx_pcie_gadget.o
 obj-$(CONFIG_VMWARE_BALLOON)	+= vmw_balloon.o
 obj-$(CONFIG_ARM_CHARLCD)	+= arm-charlcd.o
@@ -48,49 +52,43 @@ obj-$(CONFIG_PCH_PHUB)		+= pch_phub.o
 obj-y				+= ti-st/
 obj-$(CONFIG_AB8500_PWM)	+= ab8500-pwm.o
 obj-y				+= lis3lv02d/
-
+obj-y				+= carma/
 obj-$(CONFIG_WL127X_RFKILL)	+= wl127x-rfkill.o
 obj-$(CONFIG_APANIC)		+= apanic.o
 obj-$(CONFIG_SENSORS_AK8975)	+= akm8975.o
 obj-$(CONFIG_TSIF) += msm_tsif.o
 msm_tsif-objs := tsif.o
 obj-$(CONFIG_TSIF_CHRDEV) += tsif_chrdev.o
+
+obj-$(CONFIG_TSPP) += tspp.o
 obj-$(CONFIG_HAPTIC_ISA1200)		+= isa1200.o
 obj-$(CONFIG_PMIC8058_PWM) += pmic8058-pwm.o
-obj-$(CONFIG_PMIC8058_VIBRATOR) += pmic8058-vibrator.o
-obj-$(CONFIG_PMIC8058_NFC) += pmic8058-nfc.o
-obj-$(CONFIG_PMIC8058_UPL) += pmic8058-upl.o
+obj-$(CONFIG_PMIC8XXX_VIBRATOR) += pm8xxx-vibrator.o
+obj-$(CONFIG_PMIC8XXX_NFC) += pm8xxx-nfc.o
+obj-$(CONFIG_PMIC8XXX_UPL) += pm8xxx-upl.o
 obj-$(CONFIG_MSM_MEMORY_LOW_POWER_MODE_SUSPEND_DEEP_POWER_DOWN) \
 	+= msm_migrate_pages.o
 obj-$(CONFIG_PMIC8058_XOADC) += pmic8058-xoadc.o
-obj-$(CONFIG_PMIC8058_MISC) += pmic8058-misc.o
-obj-$(CONFIG_PMIC8058_BATTALARM) += pmic8058-batt-alarm.o
 obj-$(CONFIG_TZCOM) += tzcom.o
+obj-$(CONFIG_QSEECOM) += qseecom.o
+obj-$(CONFIG_QFP_FUSE) += qfp_fuse.o
 
 obj-$(CONFIG_SENSORS_AKM8973)	+= akm8973.o
 obj-$(CONFIG_SENSORS_AKM8973_AKMD)	+= akm8973_akmd.o
-ifneq (y, $(findstring y, $(CONFIG_MACH_CALGARY) $(CONFIG_MACH_MOT)))
+ifneq ($(CONFIG_MACH_MOT),y)
 obj-$(CONFIG_SENSORS_LIS331DLH)	+= lis331dlh.o
 endif
 obj-$(CONFIG_SENSORS_KXTF9)	+= kxtf9.o
 obj-$(CONFIG_SENSORS_AIRC)	+= airc.o
 
-obj-y				+= eeprom/
-obj-y				+= ts27010mux/
 obj-$(CONFIG_VIB_PWM)		+= vib-pwm.o
 obj-$(CONFIG_NETMUX_DRIVER)	+= netmux/
 obj-$(CONFIG_NETMUX_LINKDRIVER)	+= netmux_linkdriver/
 obj-$(CONFIG_VIB_GPIO)		+= vib-gpio.o
-obj-$(CONFIG_TSIF) += msm_tsif.o
-msm_tsif-objs := tsif.o
-obj-$(CONFIG_APANIC)           += apanic.o
 obj-$(CONFIG_MOT_CAMERA_MISC)   += mot_camera_misc/
-
-obj-$(CONFIG_TSIF_CHRDEV) += tsif_chrdev.o
 
 obj-$(CONFIG_MODEM_PM_DRIVER)   += modem_pm_driver/
 obj-$(CONFIG_SMC_DRIVER)	+= smc/
 obj-$(CONFIG_SEC_DRIVER)        += sec/
-obj-$(CONFIG_APANIC)		+= apanic.o
 obj-$(CONFIG_MOT_CAMERA_MISC)   += mot_camera_misc/
 obj-$(CONFIG_MOT_CAMERA_MISC_MSM) += mot_camera_misc_msm/

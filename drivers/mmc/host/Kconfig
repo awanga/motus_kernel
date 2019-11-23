@@ -154,7 +154,7 @@ config MMC_SDHCI_DOVE
 	  If unsure, say N.
 
 config MMC_SDHCI_TEGRA
-	tristate "SDHCI platform support for the Tegra SD/MMC Controller"
+	bool "SDHCI platform support for the Tegra SD/MMC Controller"
 	depends on MMC_SDHCI_PLTFM && ARCH_TEGRA
 	select MMC_SDHCI_IO_ACCESSORS
 	help
@@ -615,6 +615,104 @@ config MMC_MSM_SDC5_DUMMY52_REQUIRED
 config MMC_TMIO_CORE
 	tristate
 
+config MMC_MSM
+	tristate "Qualcomm SDCC Controller Support"
+	depends on MMC && ARCH_MSM
+	help
+	  This provides support for the SD/MMC cell found in the
+          MSM and QSD SOCs from Qualcomm.
+
+config MMC_MSM_CARD_HW_DETECTION
+	boolean "Qualcomm MMC Hardware detection support"
+	depends on MMC_MSM
+	default n
+	help
+	  Select Y if the hardware has support to detect card insertion/removal.
+
+config MMC_MSM_SDC1_SUPPORT
+	boolean "Qualcomm SDC1 support"
+	depends on MMC_MSM
+	default y
+	help
+	  Select Y to enable Slot 1.
+
+config MMC_MSM_SDC1_8_BIT_SUPPORT
+	boolean "Qualcomm SDC1 8bit support"
+	depends on MMC_MSM_SDC1_SUPPORT
+	default n
+	help
+	  Select Y to enable 8bit support for Slot 1.
+
+config MMC_MSM_SDC2_SUPPORT
+	boolean "Qualcomm SDC2 support"
+	depends on MMC_MSM
+	default y
+	help
+	  Select Y to enable Slot 2.
+
+config MMC_MSM_SDC2_8_BIT_SUPPORT
+	boolean "Qualcomm SDC2 8bit support"
+	depends on MMC_MSM_SDC2_SUPPORT
+	default n
+	help
+	  Select Y to enable 8bit support for Slot 2.
+
+config MMC_MSM_SDC3_SUPPORT
+	boolean "Qualcomm SDC3 support"
+	depends on MMC_MSM
+	default n
+	help
+	  Select Y to enable Slot 3.
+
+config MMC_MSM_SDC3_8_BIT_SUPPORT
+	boolean "Qualcomm SDC3 8bit support"
+	depends on MMC_MSM_SDC3_SUPPORT
+	default n
+	help
+	  Select Y to enable 8bit support for Slot 3.
+
+config MMC_MSM_SDC3_WP_SUPPORT
+	boolean "Qualcomm SDC3 write protection support"
+	depends on MMC_MSM_SDC3_SUPPORT
+	default n
+	help
+	  Select Y to enable write protection support for Slot 3.
+
+config MMC_MSM_SDC4_SUPPORT
+	boolean "Qualcomm SDC4 support"
+	depends on MMC_MSM
+	default n
+	help
+	  Select Y to enable Slot 4.
+
+config MMC_MSM_SDC4_8_BIT_SUPPORT
+	boolean "Qualcomm SDC4 8bit support"
+	depends on MMC_MSM_SDC4_SUPPORT
+	default n
+	help
+	  Select Y to enable 8bit support for Slot 4.
+
+config MMC_MSM_SDC5_SUPPORT
+	boolean "Qualcomm SDC5 support"
+	depends on MMC_MSM
+	default n
+	help
+	  Select Y to enable Slot 5.
+
+config MMC_MSM_SDC5_8_BIT_SUPPORT
+	boolean "Qualcomm SDC5 8bit support"
+	depends on MMC_MSM_SDC5_SUPPORT
+	default n
+	help
+	  Select Y to enable 8bit support for Slot 5.
+
+config MMC_MSM_SPS_SUPPORT
+	bool "Use SPS BAM as data mover"
+	depends on MMC_MSM && SPS
+	default n
+	help
+	  Select Y to use SPS BAM as data mover
+
 config MMC_TMIO
 	tristate "Toshiba Mobile IO Controller (TMIO) MMC/SD function support"
 	depends on MFD_TMIO || MFD_ASIC3
@@ -707,6 +805,37 @@ config MMC_JZ4740
 	  SoCs.
 	  If you have a board based on such a SoC and with a SD/MMC slot,
 	  say Y or M here.
+
+config MMC_VUB300
+	tristate "VUB300 USB to SDIO/SD/MMC Host Controller support"
+	depends on USB
+	help
+	  This selects support for Elan Digital Systems' VUB300 chip.
+
+	  The VUB300 is a USB-SDIO Host Controller Interface chip
+	  that enables the host computer to use SDIO/SD/MMC cards
+	  via a USB 2.0 or USB 1.1 host.
+
+	  The VUB300 chip will be found in both physically separate
+	  USB to SDIO/SD/MMC adapters and embedded on some motherboards.
+
+	  The VUB300 chip supports SD and MMC memory cards in addition
+	  to single and multifunction SDIO cards.
+
+	  Some SDIO cards will need a firmware file to be loaded and
+	  sent to VUB300 chip in order to achieve better data throughput.
+	  Download these "Offload Pseudocode" from Elan Digital Systems'
+	  web-site http://www.elandigitalsystems.com/support/downloads.php
+	  and put them in /lib/firmware. Note that without these additional
+	  firmware files the VUB300 chip will still function, but not at
+	  the best obtainable data rate.
+
+	  To compile this mmc host controller driver as a module,
+	  choose M here: the module will be called vub300.
+
+	  If you have a computer with an embedded VUB300 chip
+	  or if you intend connecting a USB adapter based on a
+	  VUB300 chip say Y or M here.
 
 config MMC_USHC
 	tristate "USB SD Host Controller (USHC) support"

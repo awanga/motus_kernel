@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,12 +8,9 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  */
+
+#define pr_fmt(fmt) "subsys-restart: %s(): " fmt, __func__
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -25,6 +22,9 @@
 #include <linux/list.h>
 #include <linux/io.h>
 #include <linux/kthread.h>
+#include <linux/time.h>
+#include <linux/wakelock.h>
+#include <linux/suspend.h>
 
 #include <asm/current.h>
 
@@ -36,12 +36,6 @@
 
 #include "smd_private.h"
 
-#if defined(SUBSYS_RESTART_DEBUG)
-#define dprintk(msg...) printk(msg)
-#else
-#define dprintk(msg...)
-#endif
-
 struct subsys_soc_restart_order {
 	const char * const *subsystem_list;
 	int count;
@@ -51,17 +45,29 @@ struct subsys_soc_restart_order {
 	struct subsys_data *subsys_ptrs[];
 };
 
-struct restart_thread_data {
+struct restart_wq_data {
 	struct subsys_data *subsys;
-	int coupled;
+	struct wake_lock ssr_wake_lock;
+	char wlname[64];
+	int use_restart_order;
+	struct work_struct work;
+};
+
+struct restart_log {
+	struct timeval time;
+	struct subsys_data *subsys;
+	struct list_head list;
 };
 
 static int restart_level;
 static int enable_ramdumps;
+struct workqueue_struct *ssr_wq;
 
+static LIST_HEAD(restart_log_list);
 static LIST_HEAD(subsystem_list);
 static DEFINE_MUTEX(subsystem_list_lock);
 static DEFINE_MUTEX(soc_order_reg_lock);
+static DEFINE_MUTEX(restart_log_mutex);
 
 /* SOC specific restart orders go here */
 
@@ -84,6 +90,19 @@ DEFINE_SINGLE_RESTART_ORDER(orders_8x60_all, _order_8x60_all);
 static const char * const _order_8x60_modems[] = {"external_modem", "modem"};
 DEFINE_SINGLE_RESTART_ORDER(orders_8x60_modems, _order_8x60_modems);
 
+/* MSM 8960 restart ordering info */
+static const char * const order_8960[] = {"modem", "lpass"};
+
+static struct subsys_soc_restart_order restart_orders_8960_one = {
+	.subsystem_list = order_8960,
+	.count = ARRAY_SIZE(order_8960),
+	.subsys_ptrs = {[ARRAY_SIZE(order_8960)] = NULL}
+	};
+
+static struct subsys_soc_restart_order *restart_orders_8960[] = {
+	&restart_orders_8960_one,
+};
+
 /* These will be assigned to one of the sets above after
  * runtime SoC identification.
  */
@@ -101,30 +120,15 @@ int get_restart_level()
 }
 EXPORT_SYMBOL(get_restart_level);
 
-static void restart_level_changed(void)
-{
-	struct subsys_data *subsys;
-
-	if (cpu_is_msm8x60() && restart_level == RESET_SUBSYS_COUPLED) {
-		restart_orders = orders_8x60_all;
-		n_restart_orders = ARRAY_SIZE(orders_8x60_all);
-	}
-
-	if (cpu_is_msm8x60() && restart_level == RESET_SUBSYS_MIXED) {
-		restart_orders = orders_8x60_modems;
-		n_restart_orders = ARRAY_SIZE(orders_8x60_modems);
-	}
-
-	mutex_lock(&subsystem_list_lock);
-	list_for_each_entry(subsys, &subsystem_list, list)
-		subsys->restart_order = _update_restart_order(subsys);
-	mutex_unlock(&subsystem_list_lock);
-}
-
 static int restart_level_set(const char *val, struct kernel_param *kp)
 {
 	int ret;
 	int old_val = restart_level;
+
+	if (cpu_is_msm9615()) {
+		pr_err("Only Phase 1 subsystem restart is supported\n");
+		return -EINVAL;
+	}
 
 	ret = param_set_int(val, kp);
 	if (ret)
@@ -135,12 +139,7 @@ static int restart_level_set(const char *val, struct kernel_param *kp)
 	case RESET_SOC:
 	case RESET_SUBSYS_COUPLED:
 	case RESET_SUBSYS_INDEPENDENT:
-		pr_info("Subsystem Restart: Phase %d behavior activated.\n",
-				restart_level);
-	break;
-
-	case RESET_SUBSYS_MIXED:
-		pr_info("Subsystem Restart: Phase 2+ behavior activated.\n");
+		pr_info("Phase %d behavior activated.\n", restart_level);
 	break;
 
 	default:
@@ -149,10 +148,6 @@ static int restart_level_set(const char *val, struct kernel_param *kp)
 	break;
 
 	}
-
-	if (restart_level != old_val)
-		restart_level_changed();
-
 	return 0;
 }
 
@@ -216,9 +211,74 @@ static void _send_notification_to_order(struct subsys_data
 				restart_list[i]->notif_handle, notif_type);
 }
 
-static int subsystem_restart_thread(void *data)
+static int max_restarts;
+module_param(max_restarts, int, 0644);
+
+static long max_history_time = 3600;
+module_param(max_history_time, long, 0644);
+
+static void do_epoch_check(struct subsys_data *subsys)
 {
-	struct restart_thread_data *r_work = data;
+	int n = 0;
+	struct timeval *time_first = NULL, *curr_time;
+	struct restart_log *r_log, *temp;
+	static int max_restarts_check;
+	static long max_history_time_check;
+
+	mutex_lock(&restart_log_mutex);
+
+	max_restarts_check = max_restarts;
+	max_history_time_check = max_history_time;
+
+	/* Check if epoch checking is enabled */
+	if (!max_restarts_check)
+		goto out;
+
+	r_log = kmalloc(sizeof(struct restart_log), GFP_KERNEL);
+	if (!r_log)
+		goto out;
+	r_log->subsys = subsys;
+	do_gettimeofday(&r_log->time);
+	curr_time = &r_log->time;
+	INIT_LIST_HEAD(&r_log->list);
+
+	list_add_tail(&r_log->list, &restart_log_list);
+
+	list_for_each_entry_safe(r_log, temp, &restart_log_list, list) {
+
+		if ((curr_time->tv_sec - r_log->time.tv_sec) >
+				max_history_time_check) {
+
+			pr_debug("Deleted node with restart_time = %ld\n",
+					r_log->time.tv_sec);
+			list_del(&r_log->list);
+			kfree(r_log);
+			continue;
+		}
+		if (!n) {
+			time_first = &r_log->time;
+			pr_debug("Time_first: %ld\n", time_first->tv_sec);
+		}
+		n++;
+		pr_debug("Restart_time: %ld\n", r_log->time.tv_sec);
+	}
+
+	if (time_first && n >= max_restarts_check) {
+		if ((curr_time->tv_sec - time_first->tv_sec) <
+				max_history_time_check)
+			panic("Subsystems have crashed %d times in less than "
+				"%ld seconds!", max_restarts_check,
+				max_history_time_check);
+	}
+
+out:
+	mutex_unlock(&restart_log_mutex);
+}
+
+static void subsystem_restart_wq_func(struct work_struct *work)
+{
+	struct restart_wq_data *r_work = container_of(work,
+						struct restart_wq_data, work);
 	struct subsys_data **restart_list;
 	struct subsys_data *subsys = r_work->subsys;
 	struct subsys_soc_restart_order *soc_restart_order = NULL;
@@ -229,7 +289,7 @@ static int subsystem_restart_thread(void *data)
 	int i;
 	int restart_list_count = 0;
 
-	if (r_work->coupled)
+	if (r_work->use_restart_order)
 		soc_restart_order = subsys->restart_order;
 
 	/* It's OK to not take the registration lock at this point.
@@ -248,19 +308,15 @@ static int subsystem_restart_thread(void *data)
 		shutdown_lock = &soc_restart_order->shutdown_lock;
 	}
 
-	dprintk("%s[%p]: Attempting to get shutdown lock!\n", __func__,
-		current);
+	pr_debug("[%p]: Attempting to get shutdown lock!\n", current);
 
 	/* Try to acquire shutdown_lock. If this fails, these subsystems are
 	 * already being restarted - return.
 	 */
-	if (!mutex_trylock(shutdown_lock)) {
-		kfree(data);
-		do_exit(0);
-	}
+	if (!mutex_trylock(shutdown_lock))
+		goto out;
 
-	dprintk("%s[%p]: Attempting to get powerup lock!\n", __func__,
-			current);
+	pr_debug("[%p]: Attempting to get powerup lock!\n", current);
 
 	/* Now that we've acquired the shutdown lock, either we're the first to
 	 * restart these subsystems or some other thread is doing the powerup
@@ -268,7 +324,10 @@ static int subsystem_restart_thread(void *data)
 	 * out, since a subsystem died in its powerup sequence.
 	 */
 	if (!mutex_trylock(powerup_lock))
-		panic("%s: Subsystem died during powerup!", __func__);
+		panic("%s[%p]: Subsystem died during powerup!",
+						__func__, current);
+
+	do_epoch_check(subsys);
 
 	/* Now it is necessary to take the registration lock. This is because
 	 * the subsystem list in the SoC restart order will be traversed
@@ -276,8 +335,8 @@ static int subsystem_restart_thread(void *data)
 	 */
 	mutex_lock(&soc_order_reg_lock);
 
-	dprintk("%s: Starting restart sequence for %s\n", __func__,
-		r_work->subsys->name);
+	pr_debug("[%p]: Starting restart sequence for %s\n", current,
+			r_work->subsys->name);
 
 	_send_notification_to_order(restart_list,
 				restart_list_count,
@@ -288,12 +347,12 @@ static int subsystem_restart_thread(void *data)
 		if (!restart_list[i])
 			continue;
 
-		pr_info("subsys-restart: Shutting down %s\n",
+		pr_info("[%p]: Shutting down %s\n", current,
 			restart_list[i]->name);
 
-		if (restart_list[i]->shutdown(subsys->name) < 0)
-			panic("%s: Failed to shutdown %s!\n", __func__,
-				restart_list[i]->name);
+		if (restart_list[i]->shutdown(subsys) < 0)
+			panic("subsys-restart: %s[%p]: Failed to shutdown %s!",
+				__func__, current, restart_list[i]->name);
 	}
 
 	_send_notification_to_order(restart_list, restart_list_count,
@@ -313,9 +372,9 @@ static int subsystem_restart_thread(void *data)
 
 		if (restart_list[i]->ramdump)
 			if (restart_list[i]->ramdump(enable_ramdumps,
-							subsys->name) < 0)
-				pr_warn("%s(%s): Ramdump failed.", __func__,
-					restart_list[i]->name);
+							subsys) < 0)
+				pr_warn("%s[%p]: Ramdump failed.\n",
+						restart_list[i]->name, current);
 	}
 
 	_send_notification_to_order(restart_list,
@@ -327,44 +386,73 @@ static int subsystem_restart_thread(void *data)
 		if (!restart_list[i])
 			continue;
 
-		pr_info("subsys-restart: Powering up %s\n",
-			restart_list[i]->name);
+		pr_info("[%p]: Powering up %s\n", current,
+					restart_list[i]->name);
 
-		if (restart_list[i]->powerup(subsys->name) < 0)
-			panic("%s: Failed to powerup %s!", __func__,
-				restart_list[i]->name);
+		if (restart_list[i]->powerup(subsys) < 0)
+			panic("%s[%p]: Failed to powerup %s!", __func__,
+				current, restart_list[i]->name);
 	}
 
 	_send_notification_to_order(restart_list,
 				restart_list_count,
 				SUBSYS_AFTER_POWERUP);
 
-	pr_info("%s: Restart sequence for %s completed.", __func__,
-			r_work->subsys->name);
+	pr_info("[%p]: Restart sequence for %s completed.\n",
+			current, r_work->subsys->name);
 
 	mutex_unlock(powerup_lock);
 
 	mutex_unlock(&soc_order_reg_lock);
 
-	dprintk("%s: Released powerup lock!\n", __func__);
+	pr_debug("[%p]: Released powerup lock!\n", current);
 
-	kfree(data);
-	do_exit(0);
+out:
+	wake_unlock(&r_work->ssr_wake_lock);
+	wake_lock_destroy(&r_work->ssr_wake_lock);
+	kfree(r_work);
+}
+
+static void __subsystem_restart(struct subsys_data *subsys)
+{
+	struct restart_wq_data *data = NULL;
+	int rc;
+
+	pr_debug("Restarting %s [level=%d]!\n", subsys->name,
+				restart_level);
+
+	data = kzalloc(sizeof(struct restart_wq_data), GFP_ATOMIC);
+	if (!data)
+		panic("%s: Unable to allocate memory to restart %s.",
+		      __func__, subsys->name);
+
+	data->subsys = subsys;
+
+	if (restart_level != RESET_SUBSYS_INDEPENDENT)
+		data->use_restart_order = 1;
+
+	snprintf(data->wlname, sizeof(data->wlname), "ssr(%s)", subsys->name);
+	wake_lock_init(&data->ssr_wake_lock, WAKE_LOCK_SUSPEND, data->wlname);
+	wake_lock(&data->ssr_wake_lock);
+
+	INIT_WORK(&data->work, subsystem_restart_wq_func);
+	rc = queue_work(ssr_wq, &data->work);
+	if (rc < 0)
+		panic("%s: Unable to schedule work to restart %s (%d).",
+		     __func__, subsys->name, rc);
 }
 
 int subsystem_restart(const char *subsys_name)
 {
 	struct subsys_data *subsys;
-	struct task_struct *tsk;
-	struct restart_thread_data *data = NULL;
 
 	if (!subsys_name) {
-		pr_err("%s: Invalid subsystem name.", __func__);
+		pr_err("Invalid subsystem name.\n");
 		return -EINVAL;
 	}
 
-	pr_info("Subsystem Restart: Restart sequence requested for  %s\n",
-		subsys_name);
+	pr_info("Restart sequence requested for %s, restart_level = %d.\n",
+		subsys_name, restart_level);
 
 	/* List of subsystems is protected by a lock. New subsystems can
 	 * still come in.
@@ -372,52 +460,20 @@ int subsystem_restart(const char *subsys_name)
 	subsys = _find_subsystem(subsys_name);
 
 	if (!subsys) {
-		pr_warn("%s: Unregistered subsystem %s!", __func__,
-				subsys_name);
+		pr_warn("Unregistered subsystem %s!\n", subsys_name);
 		return -EINVAL;
-	}
-
-	if (restart_level != RESET_SOC) {
-		data = kzalloc(sizeof(struct restart_thread_data), GFP_KERNEL);
-		if (!data) {
-			restart_level = RESET_SOC;
-			pr_warn("%s: Failed to alloc restart data. Resetting.",
-				__func__);
-		} else {
-			if (restart_level == RESET_SUBSYS_COUPLED ||
-					restart_level == RESET_SUBSYS_MIXED)
-				data->coupled = 1;
-			else
-				data->coupled = 0;
-
-			data->subsys = subsys;
-		}
 	}
 
 	switch (restart_level) {
 
 	case RESET_SUBSYS_COUPLED:
-	case RESET_SUBSYS_MIXED:
 	case RESET_SUBSYS_INDEPENDENT:
-		dprintk("%s: Restarting %s [level=%d]!\n", __func__,
-			subsys_name, restart_level);
-
-		/* Let the kthread handle the actual restarting. Using a
-		 * workqueue will not work since all restart requests are
-		 * serialized and it prevents the short circuiting of
-		 * restart requests for subsystems already in a restart
-		 * sequence.
-		 */
-		tsk = kthread_run(subsystem_restart_thread, data,
-				"subsystem_subsystem_restart_thread");
-		if (IS_ERR(tsk))
-			panic("%s: Unable to create thread to restart %s",
-				__func__, subsys->name);
-
+		__subsystem_restart(subsys);
 		break;
 
 	case RESET_SOC:
-		panic("subsys-restart: Resetting the SoC");
+		panic("subsys-restart: Resetting the SoC - %s crashed.",
+			subsys->name);
 		break;
 
 	default:
@@ -466,7 +522,7 @@ static int ssr_panic_handler(struct notifier_block *this,
 
 	list_for_each_entry(subsys, &subsystem_list, list)
 		if (subsys->crash_shutdown)
-			subsys->crash_shutdown(subsys->name);
+			subsys->crash_shutdown(subsys);
 	return NOTIFY_DONE;
 }
 
@@ -496,6 +552,12 @@ static int __init ssr_init_soc_restart_orders(void)
 		n_restart_orders = ARRAY_SIZE(orders_8x60_all);
 	}
 
+	if (cpu_is_msm8960() || cpu_is_msm8930() || cpu_is_msm9615() ||
+			cpu_is_apq8064()) {
+		restart_orders = restart_orders_8960;
+		n_restart_orders = ARRAY_SIZE(restart_orders_8960);
+	}
+
 	if (restart_orders == NULL || n_restart_orders < 1) {
 		WARN_ON(1);
 		return -EINVAL;
@@ -509,6 +571,11 @@ static int __init subsys_restart_init(void)
 	int ret = 0;
 
 	restart_level = RESET_SOC;
+
+	ssr_wq = alloc_workqueue("ssr_wq", 0, 0);
+
+	if (!ssr_wq)
+		panic("Couldn't allocate workqueue for subsystem restart.\n");
 
 	ret = ssr_init_soc_restart_orders();
 

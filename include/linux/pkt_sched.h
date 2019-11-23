@@ -118,6 +118,7 @@ struct tc_fifo_qopt {
 struct tc_prio_qopt {
 	int	bands;			/* Number of bands */
 	__u8	priomap[TC_PRIO_MAX+1];	/* Map: logical priority -> PRIO band */
+	__u8	enable_flow;		/* Enable dequeue */
 };
 
 /* MULTIQ section */
@@ -587,5 +588,20 @@ struct tc_sfb_xstats {
 };
 
 #define SFB_MAX_PROB 0xFFFF
+
+/* QFQ */
+enum {
+	TCA_QFQ_UNSPEC,
+	TCA_QFQ_WEIGHT,
+	TCA_QFQ_LMAX,
+	__TCA_QFQ_MAX
+};
+
+#define TCA_QFQ_MAX	(__TCA_QFQ_MAX - 1)
+
+struct tc_qfq_stats {
+	__u32 weight;
+	__u32 lmax;
+};
 
 #endif

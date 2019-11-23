@@ -22,11 +22,12 @@
 #include <linux/sched.h>
 #include <linux/wait.h>
 #include <linux/delay.h>
+#include <linux/platform_device.h>
 #include <asm/atomic.h>
 
 #include "../proc_comm.h"
 #include <mach/debug_mm.h>
-#include "dsp_debug.h"
+#include <mach/qdsp6v2/dsp_debug.h>
 
 static wait_queue_head_t dsp_wait;
 static int dsp_has_crashed;
@@ -56,8 +57,6 @@ void q6audio_dsp_not_responding(void)
 	}
 	if (cb_ptr)
 		cb_ptr(DSP_STATE_CRASH_DUMP_DONE);
-
-	BUG();
 }
 
 static int dsp_open(struct inode *inode, struct file *file)
@@ -72,6 +71,7 @@ static ssize_t dsp_write(struct file *file, const char __user *buf,
 {
 	char cmd[32];
 	void __iomem *ptr;
+	void *mem_buffer;
 
 	if (count >= sizeof(cmd))
 		return -EINVAL;
@@ -94,13 +94,19 @@ static ssize_t dsp_write(struct file *file, const char __user *buf,
 			}
 		}
 		/* assert DSP NMI */
-		ptr = ioremap(DSP_NMI_ADDR, 0x16);
+		mem_buffer = ioremap(DSP_NMI_ADDR, 0x16);
+		if (IS_ERR((void *)mem_buffer)) {
+			pr_err("%s:map_buffer failed, error = %ld\n", __func__,
+				   PTR_ERR((void *)mem_buffer));
+			return -ENOMEM;
+		}
+		ptr = mem_buffer;
 		if (!ptr) {
 			pr_err("Unable to map DSP NMI\n");
 			return -EFAULT;
 		}
 		writel(0x1, (void *)ptr);
-		iounmap(ptr);
+		iounmap(mem_buffer);
 	} else if (!strcmp(cmd, "boom")) {
 		q6audio_dsp_not_responding();
 	} else if (!strcmp(cmd, "continue-crash")) {
@@ -114,10 +120,9 @@ static ssize_t dsp_write(struct file *file, const char __user *buf,
 	return count;
 }
 
-#define DSP_RAM_BASE 0x46700000
-#define DSP_RAM_SIZE 0x2000000
-
 static unsigned copy_ok_count;
+static uint32_t dsp_ram_size;
+static uint32_t dsp_ram_base;
 
 static ssize_t dsp_read(struct file *file, char __user *buf,
 			size_t count, loff_t *pos)
@@ -126,34 +131,48 @@ static ssize_t dsp_read(struct file *file, char __user *buf,
 	size_t mapsize = PAGE_SIZE;
 	unsigned addr;
 	void __iomem *ptr;
+	void *mem_buffer;
 
-	if (*pos >= DSP_RAM_SIZE)
+	if ((dsp_ram_base == 0) || (dsp_ram_size == 0)) {
+		pr_err("[%s:%s] Memory Invalid or not initialized, Base = 0x%x,"
+			   " size = 0x%x\n", __MM_FILE__,
+				__func__, dsp_ram_base, dsp_ram_size);
+		return -EINVAL;
+	}
+
+	if (*pos >= dsp_ram_size)
 		return 0;
 
 	if (*pos & (PAGE_SIZE - 1))
 		return -EINVAL;
 
-	addr = (*pos + DSP_RAM_BASE);
+	addr = (*pos + dsp_ram_base);
 
 	/* don't blow up if we're unaligned */
 	if (addr & (PAGE_SIZE - 1))
 		mapsize *= 2;
 
 	while (count >= PAGE_SIZE) {
-		ptr = ioremap(addr, mapsize);
+		mem_buffer = ioremap(addr, mapsize);
+		if (IS_ERR((void *)mem_buffer)) {
+			pr_err("%s:map_buffer failed, error = %ld\n",
+				__func__, PTR_ERR((void *)mem_buffer));
+			return -ENOMEM;
+		}
+		ptr = mem_buffer;
 		if (!ptr) {
 			pr_err("[%s:%s] map error @ %x\n", __MM_FILE__,
 					__func__, addr);
 			return -EFAULT;
 		}
 		if (copy_to_user(buf, ptr, PAGE_SIZE)) {
-			iounmap(ptr);
+			iounmap(mem_buffer);
 			pr_err("[%s:%s] copy error @ %p\n", __MM_FILE__,
 					__func__, buf);
 			return -EFAULT;
 		}
 		copy_ok_count += PAGE_SIZE;
-		iounmap(ptr);
+		iounmap(mem_buffer);
 		addr += PAGE_SIZE;
 		buf += PAGE_SIZE;
 		actual += PAGE_SIZE;
@@ -178,6 +197,28 @@ int dsp_debug_register(dsp_state_cb ptr)
 	return 0;
 }
 
+static int dspcrashd_probe(struct platform_device *pdev)
+{
+	int rc = 0;
+	struct resource *res;
+	int *pdata;
+
+	pdata = pdev->dev.platform_data;
+	res = platform_get_resource_byname(pdev, IORESOURCE_DMA,
+						"msm_dspcrashd");
+	if (!res) {
+		pr_err("%s: failed to get resources for dspcrashd\n", __func__);
+		return -ENODEV;
+	}
+
+	dsp_ram_base = res->start;
+	dsp_ram_size = res->end - res->start;
+	pr_info("%s: Platform driver values: Base = 0x%x, Size = 0x%x,"
+		 "pdata = 0x%x\n", __func__,
+		dsp_ram_base, dsp_ram_size, *pdata);
+	return rc;
+}
+
 static const struct file_operations dsp_fops = {
 	.owner		= THIS_MODULE,
 	.open		= dsp_open,
@@ -192,11 +233,27 @@ static struct miscdevice dsp_misc = {
 	.fops	= &dsp_fops,
 };
 
+static struct platform_driver dspcrashd_driver = {
+	.probe = dspcrashd_probe,
+	.driver = { .name = "msm_dspcrashd"}
+};
 
 static int __init dsp_init(void)
 {
+	int rc = 0;
 	init_waitqueue_head(&dsp_wait);
+	rc = platform_driver_register(&dspcrashd_driver);
+	if (IS_ERR_VALUE(rc)) {
+		pr_err("%s: platform_driver_register for dspcrashd failed\n",
+			__func__);
+	}
 	return misc_register(&dsp_misc);
+}
+
+static int __exit dsp_exit(void)
+{
+	platform_driver_unregister(&dspcrashd_driver);
+	return 0;
 }
 
 device_initcall(dsp_init);

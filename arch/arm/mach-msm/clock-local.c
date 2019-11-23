@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -9,12 +9,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
  */
+
+#define pr_fmt(fmt) "%s: " fmt, __func__
 
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -24,6 +21,8 @@
 #include <linux/io.h>
 #include <linux/spinlock.h>
 #include <linux/delay.h>
+#include <linux/clk.h>
+
 #include <mach/msm_iomap.h>
 #include <mach/clk.h>
 #include <mach/scm-io.h>
@@ -32,247 +31,229 @@
 #include "clock-local.h"
 
 #ifdef CONFIG_MSM_SECURE_IO
-#undef readl
-#undef writel
-#define readl secure_readl
-#define writel secure_writel
+#undef readl_relaxed
+#undef writel_relaxed
+#define readl_relaxed secure_readl
+#define writel_relaxed secure_writel
 #endif
 
-/* When enabling/disabling a clock, check the halt bit up to this number
- * number of times (with a 1 us delay in between) before continuing. */
-#define HALT_CHECK_MAX_LOOPS	100
+/*
+ * When enabling/disabling a clock, check the halt bit up to this number
+ * number of times (with a 1 us delay in between) before continuing.
+ */
+#define HALT_CHECK_MAX_LOOPS	200
 /* For clock without halt checking, wait this long after enables/disables. */
 #define HALT_CHECK_DELAY_US	10
 
 DEFINE_SPINLOCK(local_clock_reg_lock);
-struct clk_freq_tbl local_dummy_freq = F_END;
-
-#define MAX_SOURCES 20
-static int src_votes[MAX_SOURCES];
-static DEFINE_SPINLOCK(src_vote_lock);
-
-unsigned local_sys_vdd_votes[NUM_SYS_VDD_LEVELS];
-static DEFINE_SPINLOCK(sys_vdd_vote_lock);
-
-static int local_clk_enable_nolock(unsigned id);
-static int local_clk_disable_nolock(unsigned id);
-static int local_src_enable_nolock(int src);
-static int local_src_disable_nolock(int src);
+struct clk_freq_tbl rcg_dummy_freq = F_END;
 
 /*
  * Common Set-Rate Functions
  */
 
 /* For clocks with MND dividers. */
-void set_rate_mnd(struct clk_local *clk, struct clk_freq_tbl *nf)
+void set_rate_mnd(struct rcg_clk *clk, struct clk_freq_tbl *nf)
 {
-	uint32_t ns_reg_val, cc_reg_val;
+	uint32_t ns_reg_val, ctl_reg_val;
 
 	/* Assert MND reset. */
-	ns_reg_val = readl(clk->ns_reg);
+	ns_reg_val = readl_relaxed(clk->ns_reg);
 	ns_reg_val |= BIT(7);
-	writel(ns_reg_val, clk->ns_reg);
+	writel_relaxed(ns_reg_val, clk->ns_reg);
 
 	/* Program M and D values. */
-	writel(nf->md_val, clk->md_reg);
+	writel_relaxed(nf->md_val, clk->md_reg);
 
 	/* If the clock has a separate CC register, program it. */
-	if (clk->ns_reg != clk->cc_reg) {
-		cc_reg_val = readl(clk->cc_reg);
-		cc_reg_val &= ~(clk->cc_mask);
-		cc_reg_val |= nf->cc_val;
-		writel(cc_reg_val, clk->cc_reg);
+	if (clk->ns_reg != clk->b.ctl_reg) {
+		ctl_reg_val = readl_relaxed(clk->b.ctl_reg);
+		ctl_reg_val &= ~(clk->ctl_mask);
+		ctl_reg_val |= nf->ctl_val;
+		writel_relaxed(ctl_reg_val, clk->b.ctl_reg);
 	}
 
 	/* Deassert MND reset. */
 	ns_reg_val &= ~BIT(7);
-	writel(ns_reg_val, clk->ns_reg);
+	writel_relaxed(ns_reg_val, clk->ns_reg);
 }
 
-void set_rate_nop(struct clk_local *clk, struct clk_freq_tbl *nf)
+void set_rate_nop(struct rcg_clk *clk, struct clk_freq_tbl *nf)
 {
-	/* Nothing to do for fixed-rate or integer-divider clocks. Any settings
+	/*
+	 * Nothing to do for fixed-rate or integer-divider clocks. Any settings
 	 * in NS registers are applied in the enable path, since power can be
 	 * saved by leaving an un-clocked or slowly-clocked source selected
-	 * until the clock is enabled. */
+	 * until the clock is enabled.
+	 */
 }
 
-/*
- * SYS_VDD voting functions
- */
-
-/* Update system voltage level given the current votes. */
-static int local_update_sys_vdd(void)
+void set_rate_mnd_8(struct rcg_clk *clk, struct clk_freq_tbl *nf)
 {
-	static int cur_level = NUM_SYS_VDD_LEVELS;
-	int level, rc = 0;
+	uint32_t ctl_reg_val;
 
-	if (local_sys_vdd_votes[HIGH])
-		level = HIGH;
-	else if (local_sys_vdd_votes[NOMINAL])
-		level = NOMINAL;
-	else if (local_sys_vdd_votes[LOW])
-		level = LOW;
+	/* Assert MND reset. */
+	ctl_reg_val = readl_relaxed(clk->b.ctl_reg);
+	ctl_reg_val |= BIT(8);
+	writel_relaxed(ctl_reg_val, clk->b.ctl_reg);
+
+	/* Program M and D values. */
+	writel_relaxed(nf->md_val, clk->md_reg);
+
+	/* Program MN counter Enable and Mode. */
+	ctl_reg_val &= ~(clk->ctl_mask);
+	ctl_reg_val |= nf->ctl_val;
+	writel_relaxed(ctl_reg_val, clk->b.ctl_reg);
+
+	/* Deassert MND reset. */
+	ctl_reg_val &= ~BIT(8);
+	writel_relaxed(ctl_reg_val, clk->b.ctl_reg);
+}
+
+void set_rate_mnd_banked(struct rcg_clk *clk, struct clk_freq_tbl *nf)
+{
+	struct bank_masks *banks = clk->bank_info;
+	const struct bank_mask_info *new_bank_masks;
+	const struct bank_mask_info *old_bank_masks;
+	uint32_t ns_reg_val, ctl_reg_val;
+	uint32_t bank_sel;
+
+	/*
+	 * Determine active bank and program the other one. If the clock is
+	 * off, program the active bank since bank switching won't work if
+	 * both banks aren't running.
+	 */
+	ctl_reg_val = readl_relaxed(clk->b.ctl_reg);
+	bank_sel = !!(ctl_reg_val & banks->bank_sel_mask);
+	 /* If clock isn't running, don't switch banks. */
+	bank_sel ^= (!clk->enabled || clk->current_freq->freq_hz == 0);
+	if (bank_sel == 0) {
+		new_bank_masks = &banks->bank1_mask;
+		old_bank_masks = &banks->bank0_mask;
+	} else {
+		new_bank_masks = &banks->bank0_mask;
+		old_bank_masks = &banks->bank1_mask;
+	}
+
+	ns_reg_val = readl_relaxed(clk->ns_reg);
+
+	/* Assert bank MND reset. */
+	ns_reg_val |= new_bank_masks->rst_mask;
+	writel_relaxed(ns_reg_val, clk->ns_reg);
+
+	/*
+	 * Program NS only if the clock is enabled, since the NS will be set
+	 * as part of the enable procedure and should remain with a low-power
+	 * MUX input selected until then.
+	 */
+	if (clk->enabled) {
+		ns_reg_val &= ~(new_bank_masks->ns_mask);
+		ns_reg_val |= (nf->ns_val & new_bank_masks->ns_mask);
+		writel_relaxed(ns_reg_val, clk->ns_reg);
+	}
+
+	writel_relaxed(nf->md_val, new_bank_masks->md_reg);
+
+	/* Enable counter only if clock is enabled. */
+	if (clk->enabled)
+		ctl_reg_val |= new_bank_masks->mnd_en_mask;
 	else
-		level = NONE;
+		ctl_reg_val &= ~(new_bank_masks->mnd_en_mask);
 
-	if (level == cur_level)
-		return rc;
+	ctl_reg_val &= ~(new_bank_masks->mode_mask);
+	ctl_reg_val |= (nf->ctl_val & new_bank_masks->mode_mask);
+	writel_relaxed(ctl_reg_val, clk->b.ctl_reg);
 
-	rc = soc_update_sys_vdd(level);
-	if (!rc)
-		cur_level = level;
+	/* Deassert bank MND reset. */
+	ns_reg_val &= ~(new_bank_masks->rst_mask);
+	writel_relaxed(ns_reg_val, clk->ns_reg);
 
-	return rc;
-}
+	/*
+	 * Switch to the new bank if clock is running.  If it isn't, then
+	 * no switch is necessary since we programmed the active bank.
+	 */
+	if (clk->enabled && clk->current_freq->freq_hz) {
+		ctl_reg_val ^= banks->bank_sel_mask;
+		writel_relaxed(ctl_reg_val, clk->b.ctl_reg);
+		/*
+		 * Wait at least 6 cycles of slowest bank's clock
+		 * for the glitch-free MUX to fully switch sources.
+		 */
+		mb();
+		udelay(1);
 
-/* Vote for a system voltage level. */
-int local_vote_sys_vdd(unsigned level)
-{
-	int rc = 0;
-	unsigned long flags;
+		/* Disable old bank's MN counter. */
+		ctl_reg_val &= ~(old_bank_masks->mnd_en_mask);
+		writel_relaxed(ctl_reg_val, clk->b.ctl_reg);
 
-	/* Bounds checking. */
-	if (level >= ARRAY_SIZE(local_sys_vdd_votes))
-		return -EINVAL;
-
-	spin_lock_irqsave(&sys_vdd_vote_lock, flags);
-	local_sys_vdd_votes[level]++;
-	rc = local_update_sys_vdd();
-	if (rc)
-		local_sys_vdd_votes[level]--;
-	spin_unlock_irqrestore(&sys_vdd_vote_lock, flags);
-
-	return rc;
-}
-
-/* Remove vote for a system voltage level. */
-int local_unvote_sys_vdd(unsigned level)
-{
-	int rc = 0;
-	unsigned long flags;
-
-	/* Bounds checking. */
-	if (level >= ARRAY_SIZE(local_sys_vdd_votes))
-		return -EINVAL;
-
-	spin_lock_irqsave(&sys_vdd_vote_lock, flags);
-	if (local_sys_vdd_votes[level])
-		local_sys_vdd_votes[level]--;
-	else {
-		pr_warning("%s: Reference counts are incorrect for level %d!\n",
-			__func__, level);
-		goto out;
+		/* Program old bank to a low-power source and divider. */
+		ns_reg_val &= ~(old_bank_masks->ns_mask);
+		ns_reg_val |= (clk->freq_tbl->ns_val & old_bank_masks->ns_mask);
+		writel_relaxed(ns_reg_val, clk->ns_reg);
 	}
 
-	rc = local_update_sys_vdd();
-	if (rc)
-		local_sys_vdd_votes[level]++;
-out:
-	spin_unlock_irqrestore(&sys_vdd_vote_lock, flags);
-	return rc;
+	/* Update the MND_EN and NS masks to match the current bank. */
+	clk->mnd_en_mask = new_bank_masks->mnd_en_mask;
+	clk->ns_mask = new_bank_masks->ns_mask;
 }
 
-/*
- * Clock source (PLL/XO) control functions
- */
-
-/* Enable clock source without taking the lock. */
-static int local_src_enable_nolock(int src)
+void set_rate_div_banked(struct rcg_clk *clk, struct clk_freq_tbl *nf)
 {
-	int rc = 0;
+	struct bank_masks *banks = clk->bank_info;
+	const struct bank_mask_info *new_bank_masks;
+	const struct bank_mask_info *old_bank_masks;
+	uint32_t ns_reg_val, bank_sel;
 
-	if (!src_votes[src]) {
-		if (soc_clk_sources[src].par != SRC_NONE)
-			rc = local_src_enable_nolock(soc_clk_sources[src].par);
-			if (rc)
-				goto err_par;
-		/* Perform source-specific enable operations. */
-		if (soc_clk_sources[src].enable_func)
-			rc = soc_clk_sources[src].enable_func(src, 1);
-			if (rc)
-				goto err_enable;
-	}
-	src_votes[src]++;
-
-	return rc;
-
-err_enable:
-	if (soc_clk_sources[src].par != SRC_NONE)
-		local_src_disable_nolock(soc_clk_sources[src].par);
-err_par:
-	return rc;
-}
-
-/* Enable clock source. */
-int local_src_enable(int src)
-{
-	int rc = 0;
-	unsigned long flags;
-
-	if (src == SRC_NONE)
-		return 0;
-	if (src < 0 || src >= MAX_SOURCES)
-		return -EINVAL;
-
-	spin_lock_irqsave(&src_vote_lock, flags);
-	rc = local_src_enable_nolock(src);
-	spin_unlock_irqrestore(&src_vote_lock, flags);
-
-	return rc;
-}
-
-/* Disable clock source without taking the lock. */
-static int local_src_disable_nolock(int src)
-{
-	int rc = 0;
-
-	if (src_votes[src] > 0)
-		src_votes[src]--;
-	else {
-		pr_warning("%s: Reference counts are incorrect for "
-			   "src %d!\n", __func__, src);
-		return rc;
+	/*
+	 * Determine active bank and program the other one. If the clock is
+	 * off, program the active bank since bank switching won't work if
+	 * both banks aren't running.
+	 */
+	ns_reg_val = readl_relaxed(clk->ns_reg);
+	bank_sel = !!(ns_reg_val & banks->bank_sel_mask);
+	 /* If clock isn't running, don't switch banks. */
+	bank_sel ^= (!clk->enabled || clk->current_freq->freq_hz == 0);
+	if (bank_sel == 0) {
+		new_bank_masks = &banks->bank1_mask;
+		old_bank_masks = &banks->bank0_mask;
+	} else {
+		new_bank_masks = &banks->bank0_mask;
+		old_bank_masks = &banks->bank1_mask;
 	}
 
-	if (src_votes[src] == 0) {
-		/* Perform source-specific disable operations. */
-		if (soc_clk_sources[src].enable_func)
-			rc = soc_clk_sources[src].enable_func(src, 0);
-			if (rc)
-				goto err_disable;
-		if (soc_clk_sources[src].par != SRC_NONE)
-			rc = local_src_disable_nolock(soc_clk_sources[src].par);
-			if (rc)
-				goto err_disable_par;
-
+	/*
+	 * Program NS only if the clock is enabled, since the NS will be set
+	 * as part of the enable procedure and should remain with a low-power
+	 * MUX input selected until then.
+	 */
+	if (clk->enabled) {
+		ns_reg_val &= ~(new_bank_masks->ns_mask);
+		ns_reg_val |= (nf->ns_val & new_bank_masks->ns_mask);
+		writel_relaxed(ns_reg_val, clk->ns_reg);
 	}
 
-	return rc;
+	/*
+	 * Switch to the new bank if clock is running.  If it isn't, then
+	 * no switch is necessary since we programmed the active bank.
+	 */
+	if (clk->enabled && clk->current_freq->freq_hz) {
+		ns_reg_val ^= banks->bank_sel_mask;
+		writel_relaxed(ns_reg_val, clk->ns_reg);
+		/*
+		 * Wait at least 6 cycles of slowest bank's clock
+		 * for the glitch-free MUX to fully switch sources.
+		 */
+		mb();
+		udelay(1);
 
-err_disable_par:
-	soc_clk_sources[src].enable_func(src, 1);
-err_disable:
-	src_votes[src]++;
-	return rc;
-}
+		/* Program old bank to a low-power source and divider. */
+		ns_reg_val &= ~(old_bank_masks->ns_mask);
+		ns_reg_val |= (clk->freq_tbl->ns_val & old_bank_masks->ns_mask);
+		writel_relaxed(ns_reg_val, clk->ns_reg);
+	}
 
-/* Disable clock source. */
-int local_src_disable(int src)
-{
-	int rc = 0;
-	unsigned long flags;
-
-	if (src == SRC_NONE)
-		return 0;
-	if (src < 0 || src >= MAX_SOURCES)
-		return -EINVAL;
-
-	spin_lock_irqsave(&src_vote_lock, flags);
-	rc = local_src_disable_nolock(src);
-	spin_unlock_irqrestore(&src_vote_lock, flags);
-
-	return rc;
+	/* Update the NS mask to match the current bank. */
+	clk->ns_mask = new_bank_masks->ns_mask;
 }
 
 /*
@@ -280,51 +261,42 @@ int local_src_disable(int src)
  */
 
 /* Return non-zero if a clock status registers shows the clock is halted. */
-static int local_clk_is_halted(unsigned id)
+static int branch_clk_is_halted(const struct branch *clk)
 {
-	struct clk_local *clk = &soc_clk_local_tbl[id];
 	int invert = (clk->halt_check == ENABLE);
-	int status_bit = readl(clk->halt_reg) & BIT(clk->halt_bit);
+	int status_bit = readl_relaxed(clk->halt_reg) & BIT(clk->halt_bit);
 	return invert ? !status_bit : status_bit;
 }
 
-/* Perform any register operations required to enable the clock. */
-void local_clk_enable_reg(unsigned id)
+static int branch_in_hwcg_mode(const struct branch *b)
 {
-	struct clk_local *clk = &soc_clk_local_tbl[id];
-	void *reg = clk->cc_reg;
-	uint32_t reg_val;
+	if (!b->hwcg_mask)
+		return 0;
 
-	WARN((clk->type != NORATE) && (clk->current_freq == &local_dummy_freq),
-		"Attempting to enable clock %d before setting its rate. "
-		"Set the rate first!\n", id);
+	return !!(readl_relaxed(b->hwcg_reg) & b->hwcg_mask);
+}
 
-	/* Program the NS register, if applicable. NS registers are not
-	 * set in the set_rate path because power can be saved by deferring
-	 * the selection of a clocked source until the clock is enabled. */
-	if (clk->ns_mask) {
-		reg_val = readl(clk->ns_reg);
-		reg_val &= ~(clk->ns_mask);
-		reg_val |= (clk->current_freq->ns_val & clk->ns_mask);
-		writel(reg_val, clk->ns_reg);
+void __branch_clk_enable_reg(const struct branch *clk, const char *name)
+{
+	u32 reg_val;
+
+	if (clk->en_mask) {
+		reg_val = readl_relaxed(clk->ctl_reg);
+		reg_val |= clk->en_mask;
+		writel_relaxed(reg_val, clk->ctl_reg);
 	}
 
-	/* Enable MN counter, if applicable. */
-	reg_val = readl(reg);
-	if (clk->type == MND) {
-		reg_val |= clk->current_freq->mnd_en_mask;
-		writel(reg_val, reg);
-	}
-	/* Enable root. */
-	if (clk->root_en_mask) {
-		reg_val |= clk->root_en_mask;
-		writel(reg_val, reg);
-	}
-	/* Enable branch. */
-	if (clk->br_en_mask) {
-		reg_val |= clk->br_en_mask;
-		writel(reg_val, reg);
-	}
+	/*
+	 * Use a memory barrier since some halt status registers are
+	 * not within the same 1K segment as the branch/root enable
+	 * registers.  It's also needed in the udelay() case to ensure
+	 * the delay starts after the branch enable.
+	 */
+	mb();
+
+	/* Skip checking halt bit if the clock is in hardware gated mode */
+	if (branch_in_hwcg_mode(clk))
+		return;
 
 	/* Wait for clock to enable before returning. */
 	if (clk->halt_check == DELAY)
@@ -333,35 +305,73 @@ void local_clk_enable_reg(unsigned id)
 			|| clk->halt_check == ENABLE_VOTED
 			|| clk->halt_check == HALT_VOTED) {
 		int count;
-		/* Use a memory barrier since some halt status registers are
-		 * not within the same 1K segment as the branch/root enable
-		 * registers. */
-		mb();
 
 		/* Wait up to HALT_CHECK_MAX_LOOPS for clock to enable. */
-		for (count = HALT_CHECK_MAX_LOOPS; local_clk_is_halted(id)
+		for (count = HALT_CHECK_MAX_LOOPS; branch_clk_is_halted(clk)
 					&& count > 0; count--)
 			udelay(1);
-		if (count == 0)
-			pr_warning("%s: clock %d status stuck at 'off' (bit %d "
-				   "of 0x%p).\n", __func__, id, clk->halt_bit,
-				   clk->halt_reg);
+		WARN(count == 0, "%s status stuck at 'off'", name);
 	}
 }
 
 /* Perform any register operations required to enable the clock. */
-void local_clk_disable_reg(unsigned id)
+static void __rcg_clk_enable_reg(struct rcg_clk *clk)
 {
-	struct clk_local *clk = &soc_clk_local_tbl[id];
-	void *reg = clk->cc_reg;
-	uint32_t reg_val;
+	u32 reg_val;
+	void __iomem *const reg = clk->b.ctl_reg;
 
-	/* Disable branch. */
-	reg_val = readl(reg);
-	if (clk->br_en_mask) {
-		reg_val &= ~(clk->br_en_mask);
-		writel(reg_val, reg);
+	WARN(clk->current_freq == &rcg_dummy_freq,
+		"Attempting to enable %s before setting its rate. "
+		"Set the rate first!\n", clk->c.dbg_name);
+
+	/*
+	 * Program the NS register, if applicable. NS registers are not
+	 * set in the set_rate path because power can be saved by deferring
+	 * the selection of a clocked source until the clock is enabled.
+	 */
+	if (clk->ns_mask) {
+		reg_val = readl_relaxed(clk->ns_reg);
+		reg_val &= ~(clk->ns_mask);
+		reg_val |= (clk->current_freq->ns_val & clk->ns_mask);
+		writel_relaxed(reg_val, clk->ns_reg);
 	}
+
+	/* Enable MN counter, if applicable. */
+	reg_val = readl_relaxed(reg);
+	if (clk->current_freq->md_val) {
+		reg_val |= clk->mnd_en_mask;
+		writel_relaxed(reg_val, reg);
+	}
+	/* Enable root. */
+	if (clk->root_en_mask) {
+		reg_val |= clk->root_en_mask;
+		writel_relaxed(reg_val, reg);
+	}
+	__branch_clk_enable_reg(&clk->b, clk->c.dbg_name);
+}
+
+/* Perform any register operations required to disable the branch. */
+u32 __branch_clk_disable_reg(const struct branch *clk, const char *name)
+{
+	u32 reg_val;
+
+	reg_val = readl_relaxed(clk->ctl_reg);
+	if (clk->en_mask) {
+		reg_val &= ~(clk->en_mask);
+		writel_relaxed(reg_val, clk->ctl_reg);
+	}
+
+	/*
+	 * Use a memory barrier since some halt status registers are
+	 * not within the same K segment as the branch/root enable
+	 * registers.  It's also needed in the udelay() case to ensure
+	 * the delay starts after the branch disable.
+	 */
+	mb();
+
+	/* Skip checking halt bit if the clock is in hardware gated mode */
+	if (branch_in_hwcg_mode(clk))
+		return reg_val;
 
 	/* Wait for clock to disable before continuing. */
 	if (clk->halt_check == DELAY || clk->halt_check == ENABLE_VOTED
@@ -369,166 +379,69 @@ void local_clk_disable_reg(unsigned id)
 		udelay(HALT_CHECK_DELAY_US);
 	else if (clk->halt_check == ENABLE || clk->halt_check == HALT) {
 		int count;
-		/* Use a memory barrier since some halt status registers are
-		 * not within the same 1K segment as the branch/root enable
-		 * registers. */
-		mb();
 
 		/* Wait up to HALT_CHECK_MAX_LOOPS for clock to disable. */
-		for (count = HALT_CHECK_MAX_LOOPS; !local_clk_is_halted(id)
+		for (count = HALT_CHECK_MAX_LOOPS; !branch_clk_is_halted(clk)
 					&& count > 0; count--)
 			udelay(1);
-		if (count == 0)
-			pr_warning("%s: clock %d status stuck at 'on' (bit %d "
-				   "of 0x%p).\n", __func__, id, clk->halt_bit,
-				   clk->halt_reg);
+		WARN(count == 0, "%s status stuck at 'on'", name);
 	}
 
+	return reg_val;
+}
+
+/* Perform any register operations required to disable the generator. */
+static void __rcg_clk_disable_reg(struct rcg_clk *clk)
+{
+	void __iomem *const reg = clk->b.ctl_reg;
+	uint32_t reg_val;
+
+	reg_val = __branch_clk_disable_reg(&clk->b, clk->c.dbg_name);
 	/* Disable root. */
 	if (clk->root_en_mask) {
 		reg_val &= ~(clk->root_en_mask);
-		writel(reg_val, reg);
+		writel_relaxed(reg_val, reg);
 	}
 	/* Disable MN counter, if applicable. */
-	if (clk->type == MND) {
-		reg_val &= ~(clk->current_freq->mnd_en_mask);
-		writel(reg_val, reg);
+	if (clk->current_freq->md_val) {
+		reg_val &= ~(clk->mnd_en_mask);
+		writel_relaxed(reg_val, reg);
 	}
-	/* Program NS register to low-power value with an un-clocked or
-	 * slowly-clocked source selected. */
+	/*
+	 * Program NS register to low-power value with an un-clocked or
+	 * slowly-clocked source selected.
+	 */
 	if (clk->ns_mask) {
-		reg_val = readl(clk->ns_reg);
+		reg_val = readl_relaxed(clk->ns_reg);
 		reg_val &= ~(clk->ns_mask);
 		reg_val |= (clk->freq_tbl->ns_val & clk->ns_mask);
-		writel(reg_val, clk->ns_reg);
+		writel_relaxed(reg_val, clk->ns_reg);
 	}
 }
 
-/* Enable a clock with no locking, enabling parent clocks as needed. */
-static int local_clk_enable_nolock(unsigned id)
+/* Enable a rate-settable clock. */
+static int rcg_clk_enable(struct clk *c)
 {
-	struct clk_local *clk = &soc_clk_local_tbl[id];
-	int rc = 0;
-
-	if (clk->type == NOENABLE)
-		return -EPERM;
-
-	if (!clk->count) {
-		rc = local_vote_sys_vdd(clk->current_freq->sys_vdd);
-		if (rc)
-			goto err_vdd;
-		if (clk->parent != C(NONE)) {
-			rc = local_clk_enable_nolock(clk->parent);
-			if (rc)
-				goto err_par;
-		}
-		rc = local_src_enable(clk->current_freq->src);
-		if (rc)
-			goto err_src;
-		local_clk_enable_reg(id);
-		/*
-		 * With remote rail control, the remote processor might modify
-		 * the clock control register when the rail is enabled/disabled.
-		 * Enable the rail inside the lock to protect against this.
-		 */
-		rc = soc_set_pwr_rail(id, 1);
-		if (rc)
-			goto err_pwr;
-	}
-	clk->count++;
-
-	return rc;
-
-err_pwr:
-	local_clk_disable_reg(id);
-err_src:
-	if (clk->parent != C(NONE))
-		rc = local_clk_disable_nolock(clk->parent);
-err_par:
-	local_unvote_sys_vdd(clk->current_freq->sys_vdd);
-err_vdd:
-	return rc;
-}
-
-/* Disable a clock with no locking, disabling unused parents, too. */
-static int local_clk_disable_nolock(unsigned id)
-{
-	struct clk_local *clk = &soc_clk_local_tbl[id];
-	int rc = 0;
-
-	if (clk->count > 0)
-		clk->count--;
-	else {
-		pr_warning("%s: Reference counts are incorrect for clock %d!\n",
-			__func__, id);
-		return rc;
-	}
-
-	if (clk->count == 0) {
-		soc_set_pwr_rail(id, 0);
-		local_clk_disable_reg(id);
-		rc = local_src_disable(clk->current_freq->src);
-		if (rc)
-			goto err_src;
-		if (clk->parent != C(NONE)) {
-			rc = local_clk_disable_nolock(clk->parent);
-			if (rc)
-				goto err_par;
-		}
-		rc = local_unvote_sys_vdd(clk->current_freq->sys_vdd);
-		if (rc)
-			goto err_vdd;
-	}
-
-	return rc;
-
-err_vdd:
-	if (clk->parent != C(NONE))
-		rc = local_clk_enable_nolock(clk->parent);
-err_par:
-	local_src_enable(clk->current_freq->src);
-err_src:
-	local_clk_enable_reg(id);
-	clk->count++;
-
-	return rc;
-}
-
-/* Enable a clock and any related power rail. */
-int local_clk_enable(unsigned id)
-{
-	int rc = 0;
 	unsigned long flags;
+	struct rcg_clk *clk = to_rcg_clk(c);
 
 	spin_lock_irqsave(&local_clock_reg_lock, flags);
-	rc = local_clk_enable_nolock(id);
+	__rcg_clk_enable_reg(clk);
+	clk->enabled = true;
 	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
 
-	return rc;
+	return 0;
 }
 
-/* Disable a clock and any related power rail. */
-void local_clk_disable(unsigned id)
+/* Disable a rate-settable clock. */
+static void rcg_clk_disable(struct clk *c)
 {
 	unsigned long flags;
+	struct rcg_clk *clk = to_rcg_clk(c);
 
 	spin_lock_irqsave(&local_clock_reg_lock, flags);
-	local_clk_disable_nolock(id);
-	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
-}
-
-/* Turn off a clock at boot, without checking refcounts or disabling parents. */
-void local_clk_auto_off(unsigned id)
-{
-	struct clk_local *clk = &soc_clk_local_tbl[id];
-	unsigned long flags;
-
-	if (clk->type == NOENABLE)
-		return;
-
-	spin_lock_irqsave(&local_clock_reg_lock, flags);
-	if (clk->count == 0)
-		local_clk_disable_reg(id);
+	__rcg_clk_disable_reg(clk);
+	clk->enabled = false;
 	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
 }
 
@@ -536,90 +449,13 @@ void local_clk_auto_off(unsigned id)
  * Frequency-related functions
  */
 
-/* Set a clock's frequency. */
-static int _local_clk_set_rate(unsigned id, struct clk_freq_tbl *nf)
-{
-	struct clk_local *clk = &soc_clk_local_tbl[id];
-	struct clk_freq_tbl *cf;
-	const int32_t *chld = clk->children;
-	int i, rc = 0;
-	unsigned long flags;
-
-	spin_lock_irqsave(&local_clock_reg_lock, flags);
-
-	/* Check if frequency is actually changed. */
-	cf = clk->current_freq;
-	if (nf == cf)
-		goto release_lock;
-
-	/* Disable branch if clock isn't dual-banked with a glitch-free MUX. */
-	if (clk->bank_masks == NULL) {
-		/* Disable all branches to prevent glitches. */
-		for (i = 0; chld && chld[i] != C(NONE); i++) {
-			struct clk_local *ch = &soc_clk_local_tbl[chld[i]];
-			/* Don't bother turning off if it is already off.
-			 * Checking ch->count is cheaper (cache) than reading
-			 * and writing to a register (uncached/unbuffered). */
-			if (ch->count)
-				local_clk_disable_reg(chld[i]);
-		}
-		if (clk->count)
-			local_clk_disable_reg(id);
-	}
-
-	if (clk->count) {
-		/* Vote for voltage and source for new freq. */
-		rc = local_vote_sys_vdd(nf->sys_vdd);
-		if (rc)
-			goto sys_vdd_vote_failed;
-		rc = local_src_enable(nf->src);
-		if (rc) {
-			local_unvote_sys_vdd(nf->sys_vdd);
-			goto src_enable_failed;
-		}
-	}
-
-	/* Perform clock-specific frequency switch operations. */
-	BUG_ON(!clk->set_rate);
-	clk->set_rate(clk, nf);
-
-	/* Release requirements of the old freq. */
-	if (clk->count) {
-		local_src_disable(cf->src);
-		local_unvote_sys_vdd(cf->sys_vdd);
-	}
-
-	/* Current freq must be updated before local_clk_enable_reg()
-	 * is called to make sure the MNCNTR_EN bit is set correctly. */
-	clk->current_freq = nf;
-
-src_enable_failed:
-sys_vdd_vote_failed:
-	/* Enable any clocks that were disabled. */
-	if (clk->bank_masks == NULL) {
-		if (clk->count)
-			local_clk_enable_reg(id);
-		/* Enable only branches that were ON before. */
-		for (i = 0; chld && chld[i] != C(NONE); i++) {
-			struct clk_local *ch = &soc_clk_local_tbl[chld[i]];
-			if (ch->count)
-				local_clk_enable_reg(chld[i]);
-		}
-	}
-
-release_lock:
-	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
-	return rc;
-}
-
 /* Set a clock to an exact rate. */
-int local_clk_set_rate(unsigned id, unsigned rate)
+static int rcg_clk_set_rate(struct clk *c, unsigned long rate)
 {
-	struct clk_local *clk = &soc_clk_local_tbl[id];
-	struct clk_freq_tbl *nf;
-
-	if (clk->type == NORATE || clk->type == NOENABLE)
-		return -EPERM;
+	struct rcg_clk *clk = to_rcg_clk(c);
+	struct clk_freq_tbl *nf, *cf;
+	struct clk *chld;
+	int rc = 0;
 
 	for (nf = clk->freq_tbl; nf->freq_hz != FREQ_END
 			&& nf->freq_hz != rate; nf++)
@@ -628,75 +464,79 @@ int local_clk_set_rate(unsigned id, unsigned rate)
 	if (nf->freq_hz == FREQ_END)
 		return -EINVAL;
 
-	return _local_clk_set_rate(id, nf);
-}
-
-/* Set a clock to a rate greater than some minimum. */
-int local_clk_set_min_rate(unsigned id, unsigned rate)
-{
-	struct clk_local *clk = &soc_clk_local_tbl[id];
-	struct clk_freq_tbl *nf;
-
-	if (clk->type == NORATE || clk->type == NOENABLE)
-		return -EPERM;
-
-	for (nf = clk->freq_tbl; nf->freq_hz != FREQ_END
-			&& nf->freq_hz < rate; nf++)
-		;
-
-	if (nf->freq_hz == FREQ_END)
-		return -EINVAL;
-
-	return _local_clk_set_rate(id, nf);
-}
-
-/* Set a clock to a maximum rate. */
-int local_clk_set_max_rate(unsigned id, unsigned rate)
-{
-	return -EPERM;
-}
-
-/* Get the currently-set rate of a clock in Hz. */
-unsigned local_clk_get_rate(unsigned id)
-{
-	struct clk_local *clk = &soc_clk_local_tbl[id];
-	unsigned long flags;
-	unsigned ret = 0;
-
-	if (clk->type == NORATE || clk->type == NOENABLE)
+	/* Check if frequency is actually changed. */
+	cf = clk->current_freq;
+	if (nf == cf)
 		return 0;
 
-	spin_lock_irqsave(&local_clock_reg_lock, flags);
-	ret = clk->current_freq->freq_hz;
-	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
+	if (clk->enabled) {
+		/* Enable source clock dependency for the new freq. */
+		rc = clk_enable(nf->src_clk);
+		if (rc)
+			return rc;
+	}
 
-	/* Return 0 if the rate has never been set. Might not be correct,
-	 * but it's good enough. */
-	if (ret == FREQ_END)
-		ret = 0;
+	spin_lock(&local_clock_reg_lock);
 
-	return ret;
+	/* Disable branch if clock isn't dual-banked with a glitch-free MUX. */
+	if (!clk->bank_info) {
+		/* Disable all branches to prevent glitches. */
+		list_for_each_entry(chld, &clk->c.children, siblings) {
+			struct branch_clk *x = to_branch_clk(chld);
+			/*
+			 * We don't need to grab the child's lock because
+			 * we hold the local_clock_reg_lock and 'enabled' is
+			 * only modified within lock.
+			 */
+			if (x->enabled)
+				__branch_clk_disable_reg(&x->b, x->c.dbg_name);
+		}
+		if (clk->enabled)
+			__rcg_clk_disable_reg(clk);
+	}
+
+	/* Perform clock-specific frequency switch operations. */
+	BUG_ON(!clk->set_rate);
+	clk->set_rate(clk, nf);
+
+	/*
+	 * Current freq must be updated before __rcg_clk_enable_reg()
+	 * is called to make sure the MNCNTR_EN bit is set correctly.
+	 */
+	clk->current_freq = nf;
+
+	/* Enable any clocks that were disabled. */
+	if (!clk->bank_info) {
+		if (clk->enabled)
+			__rcg_clk_enable_reg(clk);
+		/* Enable only branches that were ON before. */
+		list_for_each_entry(chld, &clk->c.children, siblings) {
+			struct branch_clk *x = to_branch_clk(chld);
+			if (x->enabled)
+				__branch_clk_enable_reg(&x->b, x->c.dbg_name);
+		}
+	}
+
+	spin_unlock(&local_clock_reg_lock);
+
+	/* Release source requirements of the old freq. */
+	if (clk->enabled)
+		clk_disable(cf->src_clk);
+
+	return rc;
 }
 
 /* Check if a clock is currently enabled. */
-int local_clk_is_enabled(unsigned id)
+static int rcg_clk_is_enabled(struct clk *clk)
 {
-	struct clk_local *clk = &soc_clk_local_tbl[id];
-
-	if (clk->type == NOENABLE)
-		return -EPERM;
-
-	return !!(soc_clk_local_tbl[id].count);
+	return to_rcg_clk(clk)->enabled;
 }
 
 /* Return a supported rate that's at least the specified rate. */
-long local_clk_round_rate(unsigned id, unsigned rate)
+static long rcg_clk_round_rate(struct clk *c, unsigned long rate)
 {
-	struct clk_local *clk = &soc_clk_local_tbl[id];
+	struct rcg_clk *clk = to_rcg_clk(c);
 	struct clk_freq_tbl *f;
-
-	if (clk->type == NORATE || clk->type == NOENABLE)
-		return -EINVAL;
 
 	for (f = clk->freq_tbl; f->freq_hz != FREQ_END; f++)
 		if (f->freq_hz >= rate)
@@ -706,12 +546,427 @@ long local_clk_round_rate(unsigned id, unsigned rate)
 }
 
 /* Return the nth supported frequency for a given clock. */
-int local_clk_list_rate(unsigned id, unsigned n)
+static int rcg_clk_list_rate(struct clk *c, unsigned n)
 {
-	struct clk_local *clk = &soc_clk_local_tbl[id];
+	struct rcg_clk *clk = to_rcg_clk(c);
 
 	if (!clk->freq_tbl || clk->freq_tbl->freq_hz == FREQ_END)
 		return -ENXIO;
 
 	return (clk->freq_tbl + n)->freq_hz;
 }
+
+static struct clk *rcg_clk_get_parent(struct clk *clk)
+{
+	return to_rcg_clk(clk)->current_freq->src_clk;
+}
+
+/* Disable hw clock gating if not set at boot */
+enum handoff branch_handoff(struct branch *clk, struct clk *c)
+{
+	if (!branch_in_hwcg_mode(clk)) {
+		clk->hwcg_mask = 0;
+		c->flags &= ~CLKFLAG_HWCG;
+		if (readl_relaxed(clk->ctl_reg) & clk->en_mask)
+			return HANDOFF_ENABLED_CLK;
+	} else {
+		c->flags |= CLKFLAG_HWCG;
+	}
+	return HANDOFF_DISABLED_CLK;
+}
+
+static enum handoff branch_clk_handoff(struct clk *c)
+{
+	struct branch_clk *clk = to_branch_clk(c);
+	return branch_handoff(&clk->b, &clk->c);
+}
+
+static enum handoff rcg_clk_handoff(struct clk *c)
+{
+	struct rcg_clk *clk = to_rcg_clk(c);
+	uint32_t ctl_val, ns_val, md_val, ns_mask;
+	struct clk_freq_tbl *freq;
+	enum handoff ret;
+
+	ctl_val = readl_relaxed(clk->b.ctl_reg);
+	ret = branch_handoff(&clk->b, &clk->c);
+	if (ret == HANDOFF_DISABLED_CLK)
+		return HANDOFF_DISABLED_CLK;
+
+	if (clk->bank_info) {
+		const struct bank_masks *bank_masks = clk->bank_info;
+		const struct bank_mask_info *bank_info;
+		if (!(ctl_val & bank_masks->bank_sel_mask))
+			bank_info = &bank_masks->bank0_mask;
+		else
+			bank_info = &bank_masks->bank1_mask;
+
+		ns_mask = bank_info->ns_mask;
+		md_val = bank_info->md_reg ?
+				readl_relaxed(bank_info->md_reg) : 0;
+	} else {
+		ns_mask = clk->ns_mask;
+		md_val = clk->md_reg ? readl_relaxed(clk->md_reg) : 0;
+	}
+	if (!ns_mask)
+		return HANDOFF_UNKNOWN_RATE;
+	ns_val = readl_relaxed(clk->ns_reg) & ns_mask;
+	for (freq = clk->freq_tbl; freq->freq_hz != FREQ_END; freq++) {
+		if ((freq->ns_val & ns_mask) == ns_val &&
+		    (!freq->md_val || freq->md_val == md_val)) {
+			pr_info("%s rate=%d\n", clk->c.dbg_name, freq->freq_hz);
+			break;
+		}
+	}
+	if (freq->freq_hz == FREQ_END)
+		return HANDOFF_UNKNOWN_RATE;
+
+	clk->current_freq = freq;
+	c->rate = freq->freq_hz;
+
+	return HANDOFF_ENABLED_CLK;
+}
+
+struct clk_ops clk_ops_empty;
+
+struct fixed_clk gnd_clk = {
+	.c = {
+		.dbg_name = "ground_clk",
+		.ops = &clk_ops_empty,
+		CLK_INIT(gnd_clk.c),
+	},
+};
+
+static int branch_clk_enable(struct clk *clk)
+{
+	unsigned long flags;
+	struct branch_clk *branch = to_branch_clk(clk);
+
+	spin_lock_irqsave(&local_clock_reg_lock, flags);
+	__branch_clk_enable_reg(&branch->b, branch->c.dbg_name);
+	branch->enabled = true;
+	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
+
+	return 0;
+}
+
+static void branch_clk_disable(struct clk *clk)
+{
+	unsigned long flags;
+	struct branch_clk *branch = to_branch_clk(clk);
+
+	spin_lock_irqsave(&local_clock_reg_lock, flags);
+	__branch_clk_disable_reg(&branch->b, branch->c.dbg_name);
+	branch->enabled = false;
+	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
+}
+
+static struct clk *branch_clk_get_parent(struct clk *clk)
+{
+	struct branch_clk *branch = to_branch_clk(clk);
+	return branch->parent;
+}
+
+static int branch_clk_is_enabled(struct clk *clk)
+{
+	struct branch_clk *branch = to_branch_clk(clk);
+	return branch->enabled;
+}
+
+static void branch_enable_hwcg(struct branch *b)
+{
+	unsigned long flags;
+	u32 reg_val;
+
+	spin_lock_irqsave(&local_clock_reg_lock, flags);
+	reg_val = readl_relaxed(b->hwcg_reg);
+	reg_val |= b->hwcg_mask;
+	writel_relaxed(reg_val, b->hwcg_reg);
+	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
+}
+
+static void branch_disable_hwcg(struct branch *b)
+{
+	unsigned long flags;
+	u32 reg_val;
+
+	spin_lock_irqsave(&local_clock_reg_lock, flags);
+	reg_val = readl_relaxed(b->hwcg_reg);
+	reg_val &= ~b->hwcg_mask;
+	writel_relaxed(reg_val, b->hwcg_reg);
+	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
+}
+
+static void branch_clk_enable_hwcg(struct clk *clk)
+{
+	struct branch_clk *branch = to_branch_clk(clk);
+	branch_enable_hwcg(&branch->b);
+}
+
+static void branch_clk_disable_hwcg(struct clk *clk)
+{
+	struct branch_clk *branch = to_branch_clk(clk);
+	branch_disable_hwcg(&branch->b);
+}
+
+static int branch_set_flags(struct branch *b, unsigned flags)
+{
+	unsigned long irq_flags;
+	u32 reg_val;
+	int ret = 0;
+
+	if (!b->retain_reg)
+		return -EPERM;
+
+	spin_lock_irqsave(&local_clock_reg_lock, irq_flags);
+	reg_val = readl_relaxed(b->retain_reg);
+	switch (flags) {
+	case CLKFLAG_RETAIN:
+		reg_val |= b->retain_mask;
+		break;
+	case CLKFLAG_NORETAIN:
+		reg_val &= ~b->retain_mask;
+		break;
+	default:
+		ret = -EINVAL;
+	}
+	writel_relaxed(reg_val, b->retain_reg);
+	spin_unlock_irqrestore(&local_clock_reg_lock, irq_flags);
+
+	return ret;
+}
+
+static int branch_clk_set_flags(struct clk *clk, unsigned flags)
+{
+	return branch_set_flags(&to_branch_clk(clk)->b, flags);
+}
+
+static int branch_clk_in_hwcg_mode(struct clk *c)
+{
+	struct branch_clk *clk = to_branch_clk(c);
+	return branch_in_hwcg_mode(&clk->b);
+}
+
+static void rcg_clk_enable_hwcg(struct clk *clk)
+{
+	struct rcg_clk *rcg = to_rcg_clk(clk);
+	branch_enable_hwcg(&rcg->b);
+}
+
+static void rcg_clk_disable_hwcg(struct clk *clk)
+{
+	struct rcg_clk *rcg = to_rcg_clk(clk);
+	branch_disable_hwcg(&rcg->b);
+}
+
+static int rcg_clk_in_hwcg_mode(struct clk *c)
+{
+	struct rcg_clk *clk = to_rcg_clk(c);
+	return branch_in_hwcg_mode(&clk->b);
+}
+
+static int rcg_clk_set_flags(struct clk *clk, unsigned flags)
+{
+	return branch_set_flags(&to_rcg_clk(clk)->b, flags);
+}
+
+int branch_reset(struct branch *b, enum clk_reset_action action)
+{
+	int ret = 0;
+	u32 reg_val;
+	unsigned long flags;
+
+	if (!b->reset_reg)
+		return -EPERM;
+
+	/* Disable hw gating when asserting a reset */
+	if (b->hwcg_mask && action == CLK_RESET_ASSERT)
+		branch_disable_hwcg(b);
+
+	spin_lock_irqsave(&local_clock_reg_lock, flags);
+	/* Assert/Deassert reset */
+	reg_val = readl_relaxed(b->reset_reg);
+	switch (action) {
+	case CLK_RESET_ASSERT:
+		reg_val |= b->reset_mask;
+		break;
+	case CLK_RESET_DEASSERT:
+		reg_val &= ~b->reset_mask;
+		break;
+	default:
+		ret = -EINVAL;
+	}
+	writel_relaxed(reg_val, b->reset_reg);
+	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
+
+	/* Enable hw gating when deasserting a reset */
+	if (b->hwcg_mask && action == CLK_RESET_DEASSERT)
+		branch_enable_hwcg(b);
+	/* Make sure write is issued before returning. */
+	mb();
+	return ret;
+}
+
+static int branch_clk_reset(struct clk *clk, enum clk_reset_action action)
+{
+	return branch_reset(&to_branch_clk(clk)->b, action);
+}
+
+struct clk_ops clk_ops_branch = {
+	.enable = branch_clk_enable,
+	.disable = branch_clk_disable,
+	.enable_hwcg = branch_clk_enable_hwcg,
+	.disable_hwcg = branch_clk_disable_hwcg,
+	.in_hwcg_mode = branch_clk_in_hwcg_mode,
+	.auto_off = branch_clk_disable,
+	.is_enabled = branch_clk_is_enabled,
+	.reset = branch_clk_reset,
+	.get_parent = branch_clk_get_parent,
+	.handoff = branch_clk_handoff,
+	.set_flags = branch_clk_set_flags,
+};
+
+struct clk_ops clk_ops_reset = {
+	.reset = branch_clk_reset,
+};
+
+static int rcg_clk_reset(struct clk *clk, enum clk_reset_action action)
+{
+	return branch_reset(&to_rcg_clk(clk)->b, action);
+}
+
+struct clk_ops clk_ops_rcg = {
+	.enable = rcg_clk_enable,
+	.disable = rcg_clk_disable,
+	.enable_hwcg = rcg_clk_enable_hwcg,
+	.disable_hwcg = rcg_clk_disable_hwcg,
+	.in_hwcg_mode = rcg_clk_in_hwcg_mode,
+	.auto_off = rcg_clk_disable,
+	.handoff = rcg_clk_handoff,
+	.set_rate = rcg_clk_set_rate,
+	.list_rate = rcg_clk_list_rate,
+	.is_enabled = rcg_clk_is_enabled,
+	.round_rate = rcg_clk_round_rate,
+	.reset = rcg_clk_reset,
+	.get_parent = rcg_clk_get_parent,
+	.set_flags = rcg_clk_set_flags,
+};
+
+static int cdiv_clk_enable(struct clk *c)
+{
+	unsigned long flags;
+	struct cdiv_clk *clk = to_cdiv_clk(c);
+
+	spin_lock_irqsave(&local_clock_reg_lock, flags);
+	__branch_clk_enable_reg(&clk->b, clk->c.dbg_name);
+	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
+
+	return 0;
+}
+
+static void cdiv_clk_disable(struct clk *c)
+{
+	unsigned long flags;
+	struct cdiv_clk *clk = to_cdiv_clk(c);
+
+	spin_lock_irqsave(&local_clock_reg_lock, flags);
+	__branch_clk_disable_reg(&clk->b, clk->c.dbg_name);
+	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
+}
+
+static int cdiv_clk_set_rate(struct clk *c, unsigned long rate)
+{
+	struct cdiv_clk *clk = to_cdiv_clk(c);
+	u32 reg_val;
+
+	if (rate > clk->max_div)
+		return -EINVAL;
+	/* Check if frequency is actually changed. */
+	if (rate == clk->cur_div)
+		return 0;
+
+	spin_lock(&local_clock_reg_lock);
+	reg_val = readl_relaxed(clk->ns_reg);
+	reg_val &= ~(clk->ext_mask | (clk->max_div - 1) << clk->div_offset);
+	/* Non-zero rates mean set a divider, zero means use external input */
+	if (rate)
+		reg_val |= (rate - 1) << clk->div_offset;
+	else
+		reg_val |= clk->ext_mask;
+	writel_relaxed(reg_val, clk->ns_reg);
+	spin_unlock(&local_clock_reg_lock);
+
+	clk->cur_div = rate;
+	return 0;
+}
+
+static unsigned long cdiv_clk_get_rate(struct clk *c)
+{
+	struct cdiv_clk *clk = to_cdiv_clk(c);
+	return clk->cur_div;
+}
+
+static long cdiv_clk_round_rate(struct clk *c, unsigned long rate)
+{
+	struct cdiv_clk *clk = to_cdiv_clk(c);
+	return rate > clk->max_div ? -EPERM : rate;
+}
+
+static int cdiv_clk_list_rate(struct clk *c, unsigned n)
+{
+	struct cdiv_clk *clk = to_cdiv_clk(c);
+	return n > clk->max_div ? -ENXIO : n;
+}
+
+static enum handoff cdiv_clk_handoff(struct clk *c)
+{
+	struct cdiv_clk *clk = to_cdiv_clk(c);
+	enum handoff ret;
+	u32 reg_val;
+
+	ret = branch_handoff(&clk->b, &clk->c);
+	if (ret == HANDOFF_DISABLED_CLK)
+		return ret;
+
+	reg_val = readl_relaxed(clk->ns_reg);
+	if (reg_val & clk->ext_mask) {
+		clk->cur_div = 0;
+	} else {
+		reg_val >>= clk->div_offset;
+		clk->cur_div = (reg_val & (clk->max_div - 1)) + 1;
+	}
+
+	return HANDOFF_ENABLED_CLK;
+}
+
+static void cdiv_clk_enable_hwcg(struct clk *c)
+{
+	struct cdiv_clk *clk = to_cdiv_clk(c);
+	branch_enable_hwcg(&clk->b);
+}
+
+static void cdiv_clk_disable_hwcg(struct clk *c)
+{
+	struct cdiv_clk *clk = to_cdiv_clk(c);
+	branch_disable_hwcg(&clk->b);
+}
+
+static int cdiv_clk_in_hwcg_mode(struct clk *c)
+{
+	struct cdiv_clk *clk = to_cdiv_clk(c);
+	return branch_in_hwcg_mode(&clk->b);
+}
+
+struct clk_ops clk_ops_cdiv = {
+	.enable = cdiv_clk_enable,
+	.disable = cdiv_clk_disable,
+	.in_hwcg_mode = cdiv_clk_in_hwcg_mode,
+	.enable_hwcg = cdiv_clk_enable_hwcg,
+	.disable_hwcg = cdiv_clk_disable_hwcg,
+	.auto_off = cdiv_clk_disable,
+	.handoff = cdiv_clk_handoff,
+	.set_rate = cdiv_clk_set_rate,
+	.get_rate = cdiv_clk_get_rate,
+	.list_rate = cdiv_clk_list_rate,
+	.round_rate = cdiv_clk_round_rate,
+};

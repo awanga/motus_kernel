@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,6 +18,7 @@
 #include <linux/types.h>	/* u32 */
 #include <linux/io.h>		/* ioread32() */
 #include <linux/bitops.h>	/* find_first_bit() */
+#include "spsi.h"
 
 /* Pipe mode */
 enum bam_pipe_mode {
@@ -38,6 +39,13 @@ enum bam_stream_mode {
 	BAM_STREAM_MODE_DISABLE = 0,
 	BAM_STREAM_MODE_ENABLE = 1,
 };
+
+/* NWD written Type */
+enum bam_write_nwd {
+	BAM_WRITE_NWD_DISABLE = 0,
+	BAM_WRITE_NWD_ENABLE = 1,
+};
+
 
 /* Enable Type */
 enum bam_enable {
@@ -63,8 +71,10 @@ struct bam_pipe_parameters {
 	u32 pipe_irq_mask;
 	enum bam_pipe_dir dir;
 	enum bam_pipe_mode mode;
+	enum bam_write_nwd write_nwd;
 	u32 desc_base;	/* Physical address of descriptor FIFO */
 	u32 desc_size;	/* Size (bytes) of descriptor FIFO */
+	u32 lock_group;	/* The lock group this pipe belongs to */
 	enum bam_stream_mode stream_mode;
 	u32 ee;		/* BAM execution environment index */
 
@@ -101,6 +111,22 @@ int bam_init(void *base,
 		u32 irq_mask, u32 *version, u32 *num_pipes);
 
 /**
+ * Initialize BAM device security execution environment
+ *
+ * @base - BAM virtual base address.
+ *
+ * @ee - BAM execution environment index
+ *
+ * @vmid - virtual master identifier
+ *
+ * @pipe_mask - bit mask of pipes to assign to EE
+ *
+ * @return 0 on success, negative value on error
+ *
+ */
+int bam_security_init(void *base, u32 ee, u32 vmid, u32 pipe_mask);
+
+/**
  * Check a BAM device
  *
  * This function verifies that a BAM device is enabled and gathers
@@ -130,9 +156,10 @@ int bam_check(void *base, u32 *version, u32 *num_pipes);
 void bam_exit(void *base, u32 ee);
 
 /**
- * Get and Clear BAM global IRQ status
+ * Get BAM IRQ source and clear global IRQ status
  *
- * This function gets and clears BAM global IRQ status.
+ * This function gets BAM IRQ source.
+ * Clear global IRQ status if it is non-zero.
  *
  * @base - BAM virtual base address.
  *
@@ -140,10 +167,13 @@ void bam_exit(void *base, u32 ee);
  *
  * @mask - active pipes mask.
  *
+ * @case - callback case.
+ *
  * @return IRQ status
  *
  */
-u32 bam_get_and_clear_irq_status(void *base, u32 ee, u32 mask);
+u32 bam_check_irq_source(void *base, u32 ee, u32 mask,
+				enum sps_callback_case *cb_case);
 
 /**
  * Initialize a BAM pipe
@@ -156,10 +186,13 @@ u32 bam_get_and_clear_irq_status(void *base, u32 ee, u32 mask);
  *
  * @param - bam pipe parameters.
  *
+ * @ee - BAM execution environment index
+ *
  * @return 0 on success, negative value on error
  *
  */
-int bam_pipe_init(void *base, u32 pipe, struct bam_pipe_parameters *param);
+int bam_pipe_init(void *base, u32 pipe, struct bam_pipe_parameters *param,
+					u32 ee);
 
 /**
  * Reset the BAM pipe

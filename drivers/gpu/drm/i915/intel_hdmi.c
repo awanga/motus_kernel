@@ -45,7 +45,6 @@ struct intel_hdmi {
 	bool has_hdmi_sink;
 	bool has_audio;
 	int force_audio;
-	struct drm_property *force_audio_property;
 };
 
 static struct intel_hdmi *enc_to_intel_hdmi(struct drm_encoder *encoder)
@@ -159,6 +158,10 @@ static void intel_hdmi_dpms(struct drm_encoder *encoder, int mode)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
 	u32 temp;
+	u32 enable_bits = SDVO_ENABLE;
+
+	if (intel_hdmi->has_audio)
+		enable_bits |= SDVO_AUDIO_ENABLE;
 
 	temp = I915_READ(intel_hdmi->sdvox_reg);
 
@@ -171,9 +174,9 @@ static void intel_hdmi_dpms(struct drm_encoder *encoder, int mode)
 	}
 
 	if (mode != DRM_MODE_DPMS_ON) {
-		temp &= ~SDVO_ENABLE;
+		temp &= ~enable_bits;
 	} else {
-		temp |= SDVO_ENABLE;
+		temp |= enable_bits;
 	}
 
 	I915_WRITE(intel_hdmi->sdvox_reg, temp);
@@ -194,7 +197,7 @@ static int intel_hdmi_mode_valid(struct drm_connector *connector,
 	if (mode->clock > 165000)
 		return MODE_CLOCK_HIGH;
 	if (mode->clock < 20000)
-		return MODE_CLOCK_HIGH;
+		return MODE_CLOCK_LOW;
 
 	if (mode->flags & DRM_MODE_FLAG_DBLSCAN)
 		return MODE_NO_DBLESCAN;
@@ -287,7 +290,7 @@ intel_hdmi_set_property(struct drm_connector *connector,
 	if (ret)
 		return ret;
 
-	if (property == intel_hdmi->force_audio_property) {
+	if (property == dev_priv->force_audio_property) {
 		int i = val;
 		bool has_audio;
 
@@ -365,16 +368,7 @@ static const struct drm_encoder_funcs intel_hdmi_enc_funcs = {
 static void
 intel_hdmi_add_properties(struct intel_hdmi *intel_hdmi, struct drm_connector *connector)
 {
-	struct drm_device *dev = connector->dev;
-
-	intel_hdmi->force_audio_property =
-		drm_property_create(dev, DRM_MODE_PROP_RANGE, "force_audio", 2);
-	if (intel_hdmi->force_audio_property) {
-		intel_hdmi->force_audio_property->values[0] = -1;
-		intel_hdmi->force_audio_property->values[1] = 1;
-		drm_connector_attach_property(connector, intel_hdmi->force_audio_property, 0);
-	}
-
+	intel_attach_force_audio_property(connector);
 	intel_attach_broadcast_rgb_property(connector);
 }
 

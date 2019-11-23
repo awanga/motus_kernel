@@ -20,6 +20,8 @@
 #include <linux/kernel.h>
 #include "smd_private.h"
 
+#define SMEM_BATTERY_INFO SMEM_ID_VENDOR0
+
 void get_mot_battery_info(mot_battery_info *batt_info)
 {
 	memcpy(batt_info, smem_alloc(SMEM_BATTERY_INFO,

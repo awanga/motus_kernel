@@ -69,6 +69,3 @@ obj-$(CONFIG_IP_NF_ARP_MANGLE) += arpt_mangle.o
 obj-$(CONFIG_IP_NF_ARPFILTER) += arptable_filter.o
 
 obj-$(CONFIG_IP_NF_QUEUE) += ip_queue.o
-
-# Ignore warnings to prevent build breaks when using gcc 4.5.0
-CFLAGS_REMOVE_nf_nat_standalone.o = -Werror

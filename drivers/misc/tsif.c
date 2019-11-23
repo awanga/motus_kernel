@@ -1,7 +1,7 @@
 /*
  * TSIF Driver
  *
- * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,11 +11,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  *
  */
 #include <linux/module.h>       /* Needed by all modules */
@@ -214,7 +209,8 @@ static int tsif_get_clocks(struct msm_tsif_device *tsif_device)
 	int rc = 0;
 
 	if (pdata->tsif_clk) {
-		tsif_device->tsif_clk = clk_get(NULL, pdata->tsif_clk);
+		tsif_device->tsif_clk = clk_get(&tsif_device->pdev->dev,
+						pdata->tsif_clk);
 		if (IS_ERR(tsif_device->tsif_clk)) {
 			dev_err(&tsif_device->pdev->dev, "failed to get %s\n",
 				pdata->tsif_clk);
@@ -224,7 +220,8 @@ static int tsif_get_clocks(struct msm_tsif_device *tsif_device)
 		}
 	}
 	if (pdata->tsif_pclk) {
-		tsif_device->tsif_pclk = clk_get(NULL, pdata->tsif_pclk);
+		tsif_device->tsif_pclk = clk_get(&tsif_device->pdev->dev,
+						 pdata->tsif_pclk);
 		if (IS_ERR(tsif_device->tsif_pclk)) {
 			dev_err(&tsif_device->pdev->dev, "failed to get %s\n",
 				pdata->tsif_pclk);
@@ -234,7 +231,8 @@ static int tsif_get_clocks(struct msm_tsif_device *tsif_device)
 		}
 	}
 	if (pdata->tsif_ref_clk) {
-		tsif_device->tsif_ref_clk = clk_get(NULL, pdata->tsif_ref_clk);
+		tsif_device->tsif_ref_clk = clk_get(&tsif_device->pdev->dev,
+						    pdata->tsif_ref_clk);
 		if (IS_ERR(tsif_device->tsif_ref_clk)) {
 			dev_err(&tsif_device->pdev->dev, "failed to get %s\n",
 				pdata->tsif_ref_clk);
@@ -682,7 +680,7 @@ static void tsif_dma_flush(struct msm_tsif_device *tsif_device)
 		tsif_device->state = tsif_state_flushing;
 		while (tsif_device->xfer[0].busy ||
 		       tsif_device->xfer[1].busy) {
-			msm_dmov_flush(tsif_device->dma);
+			msm_dmov_flush(tsif_device->dma, 1);
 			msleep(10);
 		}
 	}
@@ -762,7 +760,7 @@ static int tsif_dma_init(struct msm_tsif_device *tsif_device)
 			      offsetof(struct tsif_dmov_cmd, box_ptr));
 		hdr->complete_func = tsif_dmov_complete_func;
 	}
-	msm_dmov_flush(tsif_device->dma);
+	msm_dmov_flush(tsif_device->dma, 1);
 	return 0;
 err:
 	dev_err(&tsif_device->pdev->dev, "Failed to allocate DMA buffers\n");

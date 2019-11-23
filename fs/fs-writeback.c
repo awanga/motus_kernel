@@ -36,6 +36,7 @@ struct wb_writeback_work {
 	long nr_pages;
 	struct super_block *sb;
 	enum writeback_sync_modes sync_mode;
+	unsigned int tagged_writepages:1;
 	unsigned int for_kupdate:1;
 	unsigned int range_cyclic:1;
 	unsigned int for_background:1;
@@ -418,6 +419,15 @@ writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
 	spin_lock(&inode->i_lock);
 	inode->i_state &= ~I_SYNC;
 	if (!(inode->i_state & I_FREEING)) {
+		/*
+		 * Sync livelock prevention. Each inode is tagged and synced in
+		 * one shot. If still dirty, it will be redirty_tail()'ed below.
+		 * Update the dirty time to prevent enqueue and sync it again.
+		 */
+		if ((inode->i_state & I_DIRTY) &&
+		    (wbc->sync_mode == WB_SYNC_ALL || wbc->tagged_writepages))
+			inode->dirtied_when = jiffies;
+
 		if (mapping_tagged(mapping, PAGECACHE_TAG_DIRTY)) {
 			/*
 			 * We didn't write back all the pages.  nfs_writepages()
@@ -650,6 +660,7 @@ static long wb_writeback(struct bdi_writeback *wb,
 {
 	struct writeback_control wbc = {
 		.sync_mode		= work->sync_mode,
+		.tagged_writepages	= work->tagged_writepages,
 		.older_than_this	= NULL,
 		.for_kupdate		= work->for_kupdate,
 		.for_background		= work->for_background,
@@ -657,7 +668,7 @@ static long wb_writeback(struct bdi_writeback *wb,
 	};
 	unsigned long oldest_jif;
 	long wrote = 0;
-	long write_chunk;
+	long write_chunk = MAX_WRITEBACK_PAGES;
 	struct inode *inode;
 
 	if (wbc.for_kupdate) {
@@ -683,9 +694,7 @@ static long wb_writeback(struct bdi_writeback *wb,
 	 *                   (quickly) tag currently dirty pages
 	 *                   (maybe slowly) sync all tagged pages
 	 */
-	if (wbc.sync_mode == WB_SYNC_NONE)
-		write_chunk = MAX_WRITEBACK_PAGES;
-	else
+	if (wbc.sync_mode == WB_SYNC_ALL || wbc.tagged_writepages)
 		write_chunk = LONG_MAX;
 
 	wbc.wb_start = jiffies; /* livelock avoidance */
@@ -1007,9 +1016,6 @@ static noinline void block_dump___mark_inode_dirty(struct inode *inode)
  * In short, make sure you hash any inodes _before_ you start marking
  * them dirty.
  *
- * This function *must* be atomic for the I_DIRTY_PAGES case -
- * set_page_dirty() is called under spinlock in several places.
- *
  * Note that for blockdevs, inode->dirtied_when represents the dirtying time of
  * the block-special inode (/dev/hda1) itself.  And the ->dirtied_when field of
  * the kernel-internal blockdev inode represents the dirtying time of the
@@ -1028,7 +1034,7 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 	 */
 	if (flags & (I_DIRTY_SYNC | I_DIRTY_DATASYNC)) {
 		if (sb->s_op->dirty_inode)
-			sb->s_op->dirty_inode(inode);
+			sb->s_op->dirty_inode(inode, flags);
 	}
 
 	/*
@@ -1191,10 +1197,11 @@ void writeback_inodes_sb_nr(struct super_block *sb, unsigned long nr)
 {
 	DECLARE_COMPLETION_ONSTACK(done);
 	struct wb_writeback_work work = {
-		.sb		= sb,
-		.sync_mode	= WB_SYNC_NONE,
-		.done		= &done,
-		.nr_pages	= nr,
+		.sb			= sb,
+		.sync_mode		= WB_SYNC_NONE,
+		.tagged_writepages	= 1,
+		.done			= &done,
+		.nr_pages		= nr,
 	};
 
 	WARN_ON(!rwsem_is_locked(&sb->s_umount));

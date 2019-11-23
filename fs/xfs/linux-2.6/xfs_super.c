@@ -110,8 +110,10 @@ mempool_t *xfs_ioend_pool;
 #define MNTOPT_GQUOTANOENF "gqnoenforce"/* group quota limit enforcement */
 #define MNTOPT_PQUOTANOENF "pqnoenforce"/* project quota limit enforcement */
 #define MNTOPT_QUOTANOENF  "qnoenforce"	/* same as uqnoenforce */
-#define MNTOPT_DELAYLOG   "delaylog"	/* Delayed loging enabled */
-#define MNTOPT_NODELAYLOG "nodelaylog"	/* Delayed loging disabled */
+#define MNTOPT_DELAYLOG    "delaylog"	/* Delayed logging enabled */
+#define MNTOPT_NODELAYLOG  "nodelaylog"	/* Delayed logging disabled */
+#define MNTOPT_DISCARD	   "discard"	/* Discard unused blocks */
+#define MNTOPT_NODISCARD   "nodiscard"	/* Do not discard unused blocks */
 
 /*
  * Table driven mount option parser.
@@ -355,6 +357,10 @@ xfs_parseargs(
 			mp->m_flags |= XFS_MOUNT_DELAYLOG;
 		} else if (!strcmp(this_char, MNTOPT_NODELAYLOG)) {
 			mp->m_flags &= ~XFS_MOUNT_DELAYLOG;
+		} else if (!strcmp(this_char, MNTOPT_DISCARD)) {
+			mp->m_flags |= XFS_MOUNT_DISCARD;
+		} else if (!strcmp(this_char, MNTOPT_NODISCARD)) {
+			mp->m_flags &= ~XFS_MOUNT_DISCARD;
 		} else if (!strcmp(this_char, "ihashsize")) {
 			xfs_warn(mp,
 	"ihashsize no longer used, option is deprecated.");
@@ -385,6 +391,13 @@ xfs_parseargs(
 	if ((mp->m_flags & XFS_MOUNT_NOALIGN) && (dsunit || dswidth)) {
 		xfs_warn(mp,
 	"sunit and swidth options incompatible with the noalign option");
+		return EINVAL;
+	}
+
+	if ((mp->m_flags & XFS_MOUNT_DISCARD) &&
+	    !(mp->m_flags & XFS_MOUNT_DELAYLOG)) {
+		xfs_warn(mp,
+	"the discard option is incompatible with the nodelaylog option");
 		return EINVAL;
 	}
 
@@ -488,6 +501,7 @@ xfs_showargs(
 		{ XFS_MOUNT_FILESTREAMS,	"," MNTOPT_FILESTREAM },
 		{ XFS_MOUNT_GRPID,		"," MNTOPT_GRPID },
 		{ XFS_MOUNT_DELAYLOG,		"," MNTOPT_DELAYLOG },
+		{ XFS_MOUNT_DISCARD,		"," MNTOPT_DISCARD },
 		{ 0, NULL }
 	};
 	static struct proc_xfs_info xfs_info_unset[] = {
@@ -611,68 +625,6 @@ xfs_blkdev_put(
 {
 	if (bdev)
 		blkdev_put(bdev, FMODE_READ|FMODE_WRITE|FMODE_EXCL);
-}
-
-/*
- * Try to write out the superblock using barriers.
- */
-STATIC int
-xfs_barrier_test(
-	xfs_mount_t	*mp)
-{
-	xfs_buf_t	*sbp = xfs_getsb(mp, 0);
-	int		error;
-
-	XFS_BUF_UNDONE(sbp);
-	XFS_BUF_UNREAD(sbp);
-	XFS_BUF_UNDELAYWRITE(sbp);
-	XFS_BUF_WRITE(sbp);
-	XFS_BUF_UNASYNC(sbp);
-	XFS_BUF_ORDERED(sbp);
-
-	xfsbdstrat(mp, sbp);
-	error = xfs_buf_iowait(sbp);
-
-	/*
-	 * Clear all the flags we set and possible error state in the
-	 * buffer.  We only did the write to try out whether barriers
-	 * worked and shouldn't leave any traces in the superblock
-	 * buffer.
-	 */
-	XFS_BUF_DONE(sbp);
-	XFS_BUF_ERROR(sbp, 0);
-	XFS_BUF_UNORDERED(sbp);
-
-	xfs_buf_relse(sbp);
-	return error;
-}
-
-STATIC void
-xfs_mountfs_check_barriers(xfs_mount_t *mp)
-{
-	int error;
-
-	if (mp->m_logdev_targp != mp->m_ddev_targp) {
-		xfs_notice(mp,
-		  "Disabling barriers, not supported with external log device");
-		mp->m_flags &= ~XFS_MOUNT_BARRIER;
-		return;
-	}
-
-	if (xfs_readonly_buftarg(mp->m_ddev_targp)) {
-		xfs_notice(mp,
-			"Disabling barriers, underlying device is readonly");
-		mp->m_flags &= ~XFS_MOUNT_BARRIER;
-		return;
-	}
-
-	error = xfs_barrier_test(mp);
-	if (error) {
-		xfs_notice(mp,
-			"Disabling barriers, trial barrier write failed");
-		mp->m_flags &= ~XFS_MOUNT_BARRIER;
-		return;
-	}
 }
 
 void
@@ -911,47 +863,11 @@ xfs_fs_inode_init_once(
  */
 STATIC void
 xfs_fs_dirty_inode(
-	struct inode	*inode)
+	struct inode	*inode,
+	int		flags)
 {
 	barrier();
 	XFS_I(inode)->i_update_core = 1;
-}
-
-STATIC int
-xfs_log_inode(
-	struct xfs_inode	*ip)
-{
-	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_trans	*tp;
-	int			error;
-
-	xfs_iunlock(ip, XFS_ILOCK_SHARED);
-	tp = xfs_trans_alloc(mp, XFS_TRANS_FSYNC_TS);
-	error = xfs_trans_reserve(tp, 0, XFS_FSYNC_TS_LOG_RES(mp), 0, 0, 0);
-
-	if (error) {
-		xfs_trans_cancel(tp, 0);
-		/* we need to return with the lock hold shared */
-		xfs_ilock(ip, XFS_ILOCK_SHARED);
-		return error;
-	}
-
-	xfs_ilock(ip, XFS_ILOCK_EXCL);
-
-	/*
-	 * Note - it's possible that we might have pushed ourselves out of the
-	 * way during trans_reserve which would flush the inode.  But there's
-	 * no guarantee that the inode buffer has actually gone out yet (it's
-	 * delwri).  Plus the buffer could be pinned anyway if it's part of
-	 * an inode in another recent transaction.  So we play it safe and
-	 * fire off the transaction anyway.
-	 */
-	xfs_trans_ijoin(tp, ip);
-	xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
-	error = xfs_trans_commit(tp, 0);
-	xfs_ilock_demote(ip, XFS_ILOCK_EXCL);
-
-	return error;
 }
 
 STATIC int
@@ -966,9 +882,9 @@ xfs_fs_write_inode(
 	trace_xfs_write_inode(ip);
 
 	if (XFS_FORCED_SHUTDOWN(mp))
-		return XFS_ERROR(EIO);
+		return -XFS_ERROR(EIO);
 
-	if (wbc->sync_mode == WB_SYNC_ALL) {
+	if (wbc->sync_mode == WB_SYNC_ALL || wbc->for_kupdate) {
 		/*
 		 * Make sure the inode has made it it into the log.  Instead
 		 * of forcing it all the way to stable storage using a
@@ -977,13 +893,14 @@ xfs_fs_write_inode(
 		 * of synchronous log foces dramatically.
 		 */
 		xfs_ioend_wait(ip);
-		xfs_ilock(ip, XFS_ILOCK_SHARED);
-		if (ip->i_update_core) {
-			error = xfs_log_inode(ip);
-			if (error)
-				goto out_unlock;
-		}
+		error = xfs_log_dirty_inode(ip, NULL, 0);
+		if (error)
+			goto out;
+		return 0;
 	} else {
+		if (!ip->i_update_core)
+			return 0;
+
 		/*
 		 * We make this non-blocking if the inode is contended, return
 		 * EAGAIN to indicate to the caller that they did not succeed.
@@ -1225,14 +1142,6 @@ xfs_fs_remount(
 		switch (token) {
 		case Opt_barrier:
 			mp->m_flags |= XFS_MOUNT_BARRIER;
-
-			/*
-			 * Test if barriers are actually working if we can,
-			 * else delay this check until the filesystem is
-			 * marked writeable.
-			 */
-			if (!(mp->m_flags & XFS_MOUNT_RDONLY))
-				xfs_mountfs_check_barriers(mp);
 			break;
 		case Opt_nobarrier:
 			mp->m_flags &= ~XFS_MOUNT_BARRIER;
@@ -1267,8 +1176,6 @@ xfs_fs_remount(
 	/* ro -> rw */
 	if ((mp->m_flags & XFS_MOUNT_RDONLY) && !(*flags & MS_RDONLY)) {
 		mp->m_flags &= ~XFS_MOUNT_RDONLY;
-		if (mp->m_flags & XFS_MOUNT_BARRIER)
-			xfs_mountfs_check_barriers(mp);
 
 		/*
 		 * If this is the first remount to writeable state we
@@ -1450,9 +1357,6 @@ xfs_fs_fill_super(
 	if (error)
 		goto out_free_sb;
 
-	if (mp->m_flags & XFS_MOUNT_BARRIER)
-		xfs_mountfs_check_barriers(mp);
-
 	error = xfs_filestream_mount(mp);
 	if (error)
 		goto out_free_sb;
@@ -1472,37 +1376,35 @@ xfs_fs_fill_super(
 	sb->s_time_gran = 1;
 	set_posix_acl_flag(sb);
 
-	error = xfs_syncd_init(mp);
-	if (error)
-		goto out_filestream_unmount;
-
 	xfs_inode_shrinker_register(mp);
 
 	error = xfs_mountfs(mp);
 	if (error)
-		goto out_syncd_stop;
+		goto out_filestream_unmount;
+
+	error = xfs_syncd_init(mp);
+	if (error)
+		goto out_unmount;
 
 	root = igrab(VFS_I(mp->m_rootip));
 	if (!root) {
 		error = ENOENT;
-		goto fail_unmount;
+		goto out_syncd_stop;
 	}
 	if (is_bad_inode(root)) {
 		error = EINVAL;
-		goto fail_vnrele;
+		goto out_syncd_stop;
 	}
 	sb->s_root = d_alloc_root(root);
 	if (!sb->s_root) {
 		error = ENOMEM;
-		goto fail_vnrele;
+		goto out_iput;
 	}
 
 	return 0;
 
- out_syncd_stop:
-	xfs_inode_shrinker_unregister(mp);
-	xfs_syncd_stop(mp);
  out_filestream_unmount:
+	xfs_inode_shrinker_unregister(mp);
 	xfs_filestream_unmount(mp);
  out_free_sb:
 	xfs_freesb(mp);
@@ -1516,17 +1418,12 @@ xfs_fs_fill_super(
  out:
 	return -error;
 
- fail_vnrele:
-	if (sb->s_root) {
-		dput(sb->s_root);
-		sb->s_root = NULL;
-	} else {
-		iput(root);
-	}
-
- fail_unmount:
-	xfs_inode_shrinker_unregister(mp);
+ out_iput:
+	iput(root);
+ out_syncd_stop:
 	xfs_syncd_stop(mp);
+ out_unmount:
+	xfs_inode_shrinker_unregister(mp);
 
 	/*
 	 * Blow away any referenced inode in the filestreams cache.
@@ -1727,24 +1624,13 @@ xfs_init_workqueues(void)
 	 */
 	xfs_syncd_wq = alloc_workqueue("xfssyncd", WQ_CPU_INTENSIVE, 8);
 	if (!xfs_syncd_wq)
-		goto out;
-
-	xfs_ail_wq = alloc_workqueue("xfsail", WQ_CPU_INTENSIVE, 8);
-	if (!xfs_ail_wq)
-		goto out_destroy_syncd;
-
+		return -ENOMEM;
 	return 0;
-
-out_destroy_syncd:
-	destroy_workqueue(xfs_syncd_wq);
-out:
-	return -ENOMEM;
 }
 
 STATIC void
 xfs_destroy_workqueues(void)
 {
-	destroy_workqueue(xfs_ail_wq);
 	destroy_workqueue(xfs_syncd_wq);
 }
 
@@ -1786,10 +1672,6 @@ init_xfs_fs(void)
 	error = xfs_sysctl_register();
 	if (error)
 		goto out_cleanup_procfs;
-
-	error = xfs_init_workqueues();
-	if (error)
-		goto out_sysctl_unregister;
 
 	vfs_initquota();
 

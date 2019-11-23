@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,11 +8,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  *
  */
 #include <linux/slab.h>
@@ -28,17 +23,18 @@
 #include <linux/wait.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
+
 #include <mach/qdsp6v2/audio_dev_ctl.h>
 #include <mach/dal.h>
 #include <mach/qdsp6v2/q6voice.h>
-#include "audio_acdb.h"
-#include "rtac.h"
+#include <mach/qdsp6v2/rtac.h>
+#include <mach/qdsp6v2/audio_acdb.h>
+
 #include "q6core.h"
 
 
 #define TIMEOUT_MS 3000
 #define SNDDEV_CAP_TTY 0x20
-
 #define CMD_STATUS_SUCCESS 0
 #define CMD_STATUS_FAIL 1
 
@@ -113,9 +109,7 @@ static void voice_set_apr_cvs(void *apr_cvs)
 		common.apr_cvs = apr_cvs;
 	else
 		common.apr_q6_cvs = apr_cvs;
-#ifdef CONFIG_MSM8X60_RTAC
 	rtac_set_voice_handle(RTAC_CVS, apr_cvs);
-#endif
 }
 
 static void *voice_get_apr_cvp(void)
@@ -142,9 +136,7 @@ static void voice_set_apr_cvp(void *apr_cvp)
 		common.apr_cvp = apr_cvp;
 	else
 		common.apr_q6_cvp = apr_cvp;
-#ifdef CONFIG_MSM8X60_RTAC
 	rtac_set_voice_handle(RTAC_CVP, apr_cvp);
-#endif
 }
 
 static u16 voice_get_mvm_handle(struct voice_data *v)
@@ -799,7 +791,7 @@ static int voice_send_cvs_cal_to_modem(struct voice_data *v)
 	struct apr_hdr cvs_cal_cmd_hdr;
 	uint32_t *cmd_buf;
 	struct acdb_cal_data cal_data;
-	struct acdb_cal_block *cal_blk;
+	struct acdb_atomic_cal_block *cal_blk;
 	int32_t cal_size_per_network;
 	uint32_t *cal_data_per_network;
 	int index = 0;
@@ -838,11 +830,12 @@ static int voice_send_cvs_cal_to_modem(struct voice_data *v)
 	pr_debug("cal_blk =%x\n", (uint32_t)cal_data.cal_blocks);
 
 	for (; index < cal_data.num_cal_blocks; index++) {
-		cal_size_per_network = cal_blk[index].cal_size;
+		cal_size_per_network = atomic_read(&cal_blk[index].cal_size);
 		pr_debug(" cal size =%d\n", cal_size_per_network);
 		if (cal_size_per_network >= BUFFER_PAYLOAD_SIZE)
 			pr_err("Cal size is too big\n");
-		cal_data_per_network = (u32 *)cal_blk[index].cal_kvaddr;
+		cal_data_per_network =
+			(u32 *)atomic_read(&cal_blk[index].cal_kvaddr);
 		pr_debug(" cal data=%x\n", (uint32_t)cal_data_per_network);
 		cvs_cal_cmd_hdr.pkt_size = APR_PKT_SIZE(APR_HDR_SIZE,
 			cal_size_per_network);
@@ -876,7 +869,7 @@ static int voice_send_cvp_cal_to_modem(struct voice_data *v)
 	struct apr_hdr cvp_cal_cmd_hdr;
 	uint32_t *cmd_buf;
 	struct acdb_cal_data cal_data;
-	struct acdb_cal_block *cal_blk;
+	struct acdb_atomic_cal_block *cal_blk;
 	int32_t cal_size_per_network;
 	uint32_t *cal_data_per_network;
 	int index = 0;
@@ -915,11 +908,12 @@ static int voice_send_cvp_cal_to_modem(struct voice_data *v)
 	pr_debug(" cal_blk =%x\n", (uint32_t)cal_data.cal_blocks);
 
 	for (; index < cal_data.num_cal_blocks; index++) {
-		cal_size_per_network = cal_blk[index].cal_size;
+		cal_size_per_network = atomic_read(&cal_blk[index].cal_size);
 		if (cal_size_per_network >= BUFFER_PAYLOAD_SIZE)
 			pr_err("Cal size is too big\n");
 		pr_debug(" cal size =%d\n", cal_size_per_network);
-		cal_data_per_network = (u32 *)cal_blk[index].cal_kvaddr;
+		cal_data_per_network =
+			(u32 *)atomic_read(&cal_blk[index].cal_kvaddr);
 		pr_debug(" cal data=%x\n", (uint32_t)cal_data_per_network);
 
 		cvp_cal_cmd_hdr.pkt_size = APR_PKT_SIZE(APR_HDR_SIZE,
@@ -953,7 +947,7 @@ static int voice_send_cvp_vol_tbl_to_modem(struct voice_data *v)
 	struct apr_hdr cvp_vol_cal_cmd_hdr;
 	uint32_t *cmd_buf;
 	struct acdb_cal_data cal_data;
-	struct acdb_cal_block *cal_blk;
+	struct acdb_atomic_cal_block *cal_blk;
 	int32_t cal_size_per_network;
 	uint32_t *cal_data_per_network;
 	int index = 0;
@@ -992,8 +986,10 @@ static int voice_send_cvp_vol_tbl_to_modem(struct voice_data *v)
 	pr_debug("Cal_blk =%x\n", (uint32_t)cal_data.cal_blocks);
 
 	for (; index < cal_data.num_cal_blocks; index++) {
-		cal_size_per_network = cal_blk[index].cal_size;
-		cal_data_per_network = (u32 *)cal_blk[index].cal_kvaddr;
+		cal_size_per_network = atomic_read(&cal_blk[index].cal_size);
+		cal_data_per_network =
+			(u32 *)atomic_read(&cal_blk[index].cal_kvaddr);
+
 		pr_debug("Cal size =%d, index=%d\n", cal_size_per_network,
 			index);
 		pr_debug("Cal data=%x\n", (uint32_t)cal_data_per_network);
@@ -1338,9 +1334,7 @@ static int voice_disable_vocproc(struct voice_data *v)
 		pr_err("%s: wait_event timeout\n", __func__);
 		goto fail;
 	}
-#ifdef CONFIG_MSM8X60_RTAC
-	rtac_remove_voice(v);
-#endif
+	rtac_remove_voice(v->cvs_handle);
 
 	return 0;
 fail:
@@ -1374,13 +1368,22 @@ static int voice_set_device(struct voice_data *v)
 		goto fail;
 	}
 
-	if (dev_tx_info->channel_mode > 1)
-		cvp_setdev_cmd.cvp_set_device.tx_topology_id =
-			VSS_IVOCPROC_TOPOLOGY_ID_TX_DM_FLUENCE;
-	else
-		cvp_setdev_cmd.cvp_set_device.tx_topology_id =
-			VSS_IVOCPROC_TOPOLOGY_ID_TX_SM_ECNS;
+	cvp_setdev_cmd.cvp_set_device.tx_topology_id =
+				get_voice_tx_topology();
+	if (cvp_setdev_cmd.cvp_set_device.tx_topology_id == 0) {
+		if (dev_tx_info->channel_mode > 1)
+			cvp_setdev_cmd.cvp_set_device.tx_topology_id =
+				VSS_IVOCPROC_TOPOLOGY_ID_TX_DM_FLUENCE;
+		else
+			cvp_setdev_cmd.cvp_set_device.tx_topology_id =
+				VSS_IVOCPROC_TOPOLOGY_ID_TX_SM_ECNS;
+	}
+
+	/* Use default topology if invalid value in ACDB */
 	cvp_setdev_cmd.cvp_set_device.rx_topology_id =
+				get_voice_rx_topology();
+	if (cvp_setdev_cmd.cvp_set_device.rx_topology_id == 0)
+		cvp_setdev_cmd.cvp_set_device.rx_topology_id =
 			VSS_IVOCPROC_TOPOLOGY_ID_RX_DEFAULT;
 	cvp_setdev_cmd.cvp_set_device.tx_port_id = v->dev_tx.dev_port_id;
 	cvp_setdev_cmd.cvp_set_device.rx_port_id = v->dev_rx.dev_port_id;
@@ -1422,9 +1425,9 @@ static int voice_set_device(struct voice_data *v)
 	if (is_voip_session(v->session_id))
 		voice_send_netid_timing_cmd(v);
 
-#ifdef CONFIG_MSM8X60_RTAC
-	rtac_add_voice(v);
-#endif
+	rtac_add_voice(v->cvs_handle, v->cvp_handle,
+		v->dev_rx.dev_port_id, v->dev_tx.dev_port_id,
+		v->session_id);
 
 	return 0;
 fail:
@@ -1494,14 +1497,24 @@ static int voice_setup_modem_voice(struct voice_data *v)
 		goto fail;
 	}
 
-	if (dev_tx_info->channel_mode > 1)
-		cvp_session_cmd.cvp_session.tx_topology_id =
-			VSS_IVOCPROC_TOPOLOGY_ID_TX_DM_FLUENCE;
-	else
-		cvp_session_cmd.cvp_session.tx_topology_id =
-			VSS_IVOCPROC_TOPOLOGY_ID_TX_SM_ECNS;
+	/* Use default topology if invalid value in ACDB */
+	cvp_session_cmd.cvp_session.tx_topology_id =
+				get_voice_tx_topology();
+	if (cvp_session_cmd.cvp_session.tx_topology_id == 0) {
+		if (dev_tx_info->channel_mode > 1)
+			cvp_session_cmd.cvp_session.tx_topology_id =
+				VSS_IVOCPROC_TOPOLOGY_ID_TX_DM_FLUENCE;
+		else
+			cvp_session_cmd.cvp_session.tx_topology_id =
+				VSS_IVOCPROC_TOPOLOGY_ID_TX_SM_ECNS;
+	}
+
 	cvp_session_cmd.cvp_session.rx_topology_id =
+				get_voice_rx_topology();
+	if (cvp_session_cmd.cvp_session.rx_topology_id == 0)
+		cvp_session_cmd.cvp_session.rx_topology_id =
 			VSS_IVOCPROC_TOPOLOGY_ID_RX_DEFAULT;
+
 	cvp_session_cmd.cvp_session.direction = 2; /*tx and rx*/
 	cvp_session_cmd.cvp_session.network_id = VSS_NETWORK_ID_DEFAULT;
 	cvp_session_cmd.cvp_session.tx_port_id = v->dev_tx.dev_port_id;
@@ -1708,9 +1721,10 @@ static int voice_attach_vocproc(struct voice_data *v)
 	if (is_voip_session(v->session_id))
 		voice_send_netid_timing_cmd(v);
 
-#ifdef CONFIG_MSM8X60_RTAC
-	rtac_add_voice(v);
-#endif
+	rtac_add_voice(v->cvs_handle, v->cvp_handle,
+		v->dev_rx.dev_port_id, v->dev_tx.dev_port_id,
+		v->session_id);
+
 	return 0;
 fail:
 	return -EINVAL;
@@ -1778,10 +1792,7 @@ static int voice_destroy_modem_voice(struct voice_data *v)
 		pr_err("%s: wait_event timeout\n", __func__);
 		goto fail;
 	}
-
-#ifdef CONFIG_MSM8X60_RTAC
-	rtac_remove_voice(v);
-#endif
+	rtac_remove_voice(v->cvs_handle);
 	cvp_handle = 0;
 	voice_set_cvp_handle(v, cvp_handle);
 
@@ -2134,6 +2145,7 @@ static void voice_auddev_cb_function(u32 evt_id,
 	struct sidetone_cal sidetone_cal_data;
 	int rc = 0, i = 0;
 	int rc1 = 0;
+
 	pr_info("auddev_cb_function, evt_id=%d,\n", evt_id);
 
 	if (evt_payload == NULL) {
@@ -2158,15 +2170,15 @@ static void voice_auddev_cb_function(u32 evt_id,
 				&& (v->dev_tx.enabled == VOICE_DEV_ENABLED)) {
 				rc = voice_apr_register();
 				if (rc < 0) {
-					mutex_unlock(&v->lock);
 					pr_err("%s: voice apr registration"
 						"failed\n", __func__);
+					mutex_unlock(&v->lock);
 					return;
 				}
 				rc1 = voice_create_mvm_cvs_session(v);
 				if (rc1 < 0) {
 					pr_err("%s: create mvm-cvs failed\n",
-						__func__);
+								__func__);
 					msleep(100);
 					rc = voice_apr_register();
 					if (rc < 0) {
@@ -2178,13 +2190,12 @@ static void voice_auddev_cb_function(u32 evt_id,
 					rc1 = voice_create_mvm_cvs_session(v);
 					if (rc1 < 0) {
 						mutex_unlock(&v->lock);
-						pr_err("%s: Retry mvm-cvs"
-								" failed\n",
+						pr_err("%s:Retry mvmcvs "
+								"failed\n",
 								__func__);
 						return;
 					}
 				}
-
 				voice_setup_modem_voice(v);
 				voice_attach_vocproc(v);
 				voice_send_start_voice_cmd(v);
@@ -2484,7 +2495,7 @@ static int32_t modem_mvm_callback(struct apr_client_data *data, void *priv)
 	pr_debug("%s: session_id 0x%x\n", __func__, data->dest_port);
 
 	if (data->opcode == RESET_EVENTS) {
-		pr_debug("%s:Reset event received in Voice service MVM\n",
+		pr_debug("%s:Reset event received in Voice service\n",
 					__func__);
 		apr_reset(c->apr_mvm);
 		c->apr_mvm = NULL;
@@ -2599,8 +2610,8 @@ static int32_t modem_cvs_callback(struct apr_client_data *data, void *priv)
 	pr_debug("%s: session_id 0x%x\n", __func__, data->dest_port);
 
 	if (data->opcode == RESET_EVENTS) {
-		pr_debug("%s:Reset event received in Voice service CVS\n",
-						__func__);
+		pr_debug("%s:Reset event received in Voice service\n",
+					__func__);
 		apr_reset(c->apr_cvs);
 		c->apr_cvs = NULL;
 		apr_reset(c->apr_q6_cvs);
@@ -2701,11 +2712,9 @@ static int32_t modem_cvs_callback(struct apr_client_data *data, void *priv)
 
 					v->cvs_state = CMD_STATUS_SUCCESS;
 					wake_up(&v->cvs_wait);
-#ifdef CONFIG_MSM8X60_RTAC
 			} else if (ptr[0] == VOICE_CMD_SET_PARAM) {
 				rtac_make_voice_callback(RTAC_CVS, ptr,
 					data->payload_size);
-#endif
 			} else if (ptr[0] == VSS_ISTREAM_CMD_START_PLAYBACK) {
 				pr_debug("%s: START_PLAYBACK resp 0x%x\n",
 					 __func__, ptr[1]);
@@ -2778,12 +2787,9 @@ static int32_t modem_cvs_callback(struct apr_client_data *data, void *priv)
 		} else {
 			pr_err("%s: ul_cb is NULL\n", __func__);
 		}
-#ifdef CONFIG_MSM8X60_RTAC
 	} else if (data->opcode ==  VOICE_EVT_GET_PARAM_ACK) {
 		rtac_make_voice_callback(RTAC_CVS, data->payload,
 					data->payload_size);
-#endif
-
 	} else {
 		pr_debug("%s: Unknown opcode 0x%x\n", __func__, data->opcode);
 	}
@@ -2802,8 +2808,8 @@ static int32_t modem_cvp_callback(struct apr_client_data *data, void *priv)
 	pr_debug("%s: session_id 0x%x\n", __func__, data->dest_port);
 
 	if (data->opcode == RESET_EVENTS) {
-		pr_debug("%s:Reset event received in Voice service CVP\n",
-							__func__);
+		pr_debug("%s:Reset event received in Voice service\n",
+					__func__);
 		apr_reset(c->apr_cvp);
 		c->apr_cvp = NULL;
 		apr_reset(c->apr_q6_cvp);
@@ -2872,20 +2878,16 @@ static int32_t modem_cvp_callback(struct apr_client_data *data, void *priv)
 				pr_debug("%s: cmd = 0x%x\n", __func__, ptr[0]);
 				v->cvp_state = CMD_STATUS_SUCCESS;
 				wake_up(&v->cvp_wait);
-#ifdef CONFIG_MSM8X60_RTAC
 			} else if (ptr[0] == VOICE_CMD_SET_PARAM) {
 				rtac_make_voice_callback(RTAC_CVP, ptr,
 					data->payload_size);
-#endif
 			} else
 				pr_debug("%s: not match cmd = 0x%x\n",
 							__func__, ptr[0]);
 		}
-#ifdef CONFIG_MSM8X60_RTAC
 	} else if (data->opcode ==  VOICE_EVT_GET_PARAM_ACK) {
 		rtac_make_voice_callback(RTAC_CVP, data->payload,
 			data->payload_size);
-#endif
 	}
 	return 0;
 }

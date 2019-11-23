@@ -1,30 +1,13 @@
-/* Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- *       copyright notice, this list of conditions and the following
- *       disclaimer in the documentation and/or other materials provided
- *       with the distribution.
- *     * Neither the name of Code Aurora Forum, Inc. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
  *
- * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
- * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 
 #ifndef DIAGCHAR_H
@@ -40,8 +23,10 @@
 #include <asm/mach-types.h>
 /* Size of the USB buffers used for read and write*/
 #define USB_MAX_OUT_BUF 4096
+#define APPS_BUF_SIZE	2000
 #define IN_BUF_SIZE		16384
 #define MAX_IN_BUF_SIZE	32768
+#define MAX_SYNC_OBJ_NAME_SIZE	32
 /* Size of the buffer used for deframing a packet
   reveived from the PC tool*/
 #define HDLC_MAX 4096
@@ -54,15 +39,27 @@
 #define QDSP_DATA  		2
 #define APPS_DATA  		3
 #define SDIO_DATA		4
-#define MSG_MASK_SIZE 8000
+#define WCNSS_DATA		5
+#define HSIC_DATA		6
+#define SMUX_DATA		7
+#define MODEM_PROC		0
+#define APPS_PROC		1
+#define QDSP_PROC		2
+#define WCNSS_PROC		3
+#define MSG_MASK_SIZE 9500
 #define LOG_MASK_SIZE 8000
 #define EVENT_MASK_SIZE 1000
 #define USER_SPACE_DATA 8000
 #define PKT_SIZE 4096
-#define MAX_EQUIP_ID 12
-/* This is the maximum number of pkt registrations supported at initialization*/
-extern unsigned int diag_max_registration;
-extern unsigned int diag_threshold_registration;
+#define MAX_EQUIP_ID 15
+#define DIAG_CTRL_MSG_LOG_MASK	9
+#define DIAG_CTRL_MSG_EVENT_MASK	10
+#define DIAG_CTRL_MSG_F3_MASK	11
+#define CONTROL_CHAR	0x7E
+
+/* Maximum number of pkt reg supported at initialization*/
+extern unsigned int diag_max_reg;
+extern unsigned int diag_threshold_reg;
 
 #define APPEND_DEBUG(ch) \
 do {							\
@@ -74,9 +71,30 @@ do {							\
 struct diag_master_table {
 	uint16_t cmd_code;
 	uint16_t subsys_id;
+	uint32_t client_id;
 	uint16_t cmd_code_lo;
 	uint16_t cmd_code_hi;
 	int process_id;
+};
+
+struct bindpkt_params_per_process {
+	/* Name of the synchronization object associated with this proc */
+	char sync_obj_name[MAX_SYNC_OBJ_NAME_SIZE];
+	uint32_t count;	/* Number of entries in this bind */
+	struct bindpkt_params *params; /* first bind params */
+};
+
+struct bindpkt_params {
+	uint16_t cmd_code;
+	uint16_t subsys_id;
+	uint16_t cmd_code_lo;
+	uint16_t cmd_code_hi;
+	/* For Central Routing, used to store Processor number */
+	uint16_t proc_id;
+	uint32_t event_id;
+	uint32_t log_code;
+	/* For Central Routing, used to store SMD channel pointer */
+	uint32_t client_id;
 };
 
 struct diag_write_device {
@@ -116,8 +134,17 @@ struct diagchar_dev {
 	struct diag_client_map *client_map;
 	int *data_ready;
 	int num_clients;
+	int polling_reg_flag;
 	struct diag_write_device *buf_tbl;
-
+	int use_device_tree;
+	/* DCI related variables */
+	struct diag_dci_tbl *dci_tbl;
+	int dci_tag;
+	int dci_client_id;
+	struct mutex dci_mutex;
+	int num_dci_client;
+	unsigned char *apps_dci_buf;
+	int dci_state;
 	/* Memory pool parameters */
 	unsigned int itemsize;
 	unsigned int poolsize;
@@ -135,21 +162,43 @@ struct diagchar_dev {
 	int count_hdlc_pool;
 	int count_write_struct_pool;
 	int used;
-
+	/* Buffers for masks */
+	struct mutex diag_cntl_mutex;
+	struct diag_ctrl_event_mask *event_mask;
+	struct diag_ctrl_log_mask *log_mask;
+	struct diag_ctrl_msg_mask *msg_mask;
 	/* State for diag forwarding */
 	unsigned char *buf_in_1;
 	unsigned char *buf_in_2;
+	unsigned char *buf_in_cntl;
 	unsigned char *buf_in_qdsp_1;
 	unsigned char *buf_in_qdsp_2;
+	unsigned char *buf_in_qdsp_cntl;
+	unsigned char *buf_in_wcnss_1;
+	unsigned char *buf_in_wcnss_2;
+	unsigned char *buf_in_wcnss_cntl;
+	unsigned char *buf_in_dci;
 	unsigned char *usb_buf_out;
 	unsigned char *apps_rsp_buf;
 	unsigned char *user_space_data;
+	/* buffer for updating mask to peripherals */
+	unsigned char *buf_msg_mask_update;
+	unsigned char *buf_log_mask_update;
+	unsigned char *buf_event_mask_update;
 	smd_channel_t *ch;
+	smd_channel_t *ch_cntl;
+	smd_channel_t *ch_dci;
 	smd_channel_t *chqdsp;
+	smd_channel_t *chqdsp_cntl;
+	smd_channel_t *ch_wcnss;
+	smd_channel_t *ch_wcnss_cntl;
 	int in_busy_1;
 	int in_busy_2;
 	int in_busy_qdsp_1;
 	int in_busy_qdsp_2;
+	int in_busy_wcnss_1;
+	int in_busy_wcnss_2;
+	int in_busy_dci;
 	int read_len_legacy;
 	unsigned char *hdlc_buf;
 	unsigned hdlc_count;
@@ -163,7 +212,16 @@ struct diagchar_dev {
 	struct workqueue_struct *diag_wq;
 	struct work_struct diag_drain_work;
 	struct work_struct diag_read_smd_work;
+	struct work_struct diag_read_smd_cntl_work;
 	struct work_struct diag_read_smd_qdsp_work;
+	struct work_struct diag_read_smd_qdsp_cntl_work;
+	struct work_struct diag_read_smd_wcnss_work;
+	struct work_struct diag_read_smd_wcnss_cntl_work;
+	struct workqueue_struct *diag_cntl_wq;
+	struct work_struct diag_modem_mask_update_work;
+	struct work_struct diag_qdsp_mask_update_work;
+	struct work_struct diag_wcnss_mask_update_work;
+	struct work_struct diag_read_smd_dci_work;
 	uint8_t *msg_masks;
 	uint8_t *log_masks;
 	int log_masks_length;
@@ -177,7 +235,11 @@ struct diagchar_dev {
 	struct diag_request *write_ptr_svc;
 	struct diag_request *write_ptr_qdsp_1;
 	struct diag_request *write_ptr_qdsp_2;
+	struct diag_request *write_ptr_wcnss_1;
+	struct diag_request *write_ptr_wcnss_2;
+	struct diag_write_device *write_ptr_dci;
 	int logging_mode;
+	int mask_check;
 	int logging_process_id;
 #ifdef CONFIG_DIAG_SDIO_PIPE
 	unsigned char *buf_in_sdio;
@@ -189,6 +251,36 @@ struct diagchar_dev {
 	struct work_struct diag_read_mdm_work;
 	struct workqueue_struct *diag_sdio_wq;
 	struct work_struct diag_read_sdio_work;
+	struct work_struct diag_close_sdio_work;
+	struct diag_request *usb_read_mdm_ptr;
+	struct diag_request *write_ptr_mdm;
+#endif
+#ifdef CONFIG_DIAG_BRIDGE_CODE
+	/* SGLTE variables */
+	int lcid;
+	unsigned char *buf_in_smux;
+	int in_busy_smux;
+	int diag_smux_enabled;
+	/* HSIC variables */
+	unsigned char *buf_in_hsic;
+	int hsic_ch;
+	int hsic_device_enabled;
+	int hsic_device_opened;
+	int hsic_suspend;
+	int in_busy_hsic_read_on_device;
+	int in_busy_hsic_write_on_device;
+	int in_busy_hsic_write;
+	int in_busy_hsic_read;
+	struct work_struct diag_read_hsic_work;
+	/* USB MDM channel variables */
+	int usb_mdm_connected;
+	int read_len_mdm;
+	unsigned char *usb_buf_mdm_out;
+	struct usb_diag_ch *mdm_ch;
+	struct workqueue_struct *diag_bridge_wq;
+	struct work_struct diag_read_mdm_work;
+	struct work_struct diag_disconnect_work;
+	struct work_struct diag_usb_read_complete_work;
 	struct diag_request *usb_read_mdm_ptr;
 	struct diag_request *write_ptr_mdm;
 #endif

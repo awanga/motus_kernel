@@ -5,14 +5,9 @@ extern pmd_t *top_pmd;
 
 #define TOP_PTE(x)	pte_offset_kernel(top_pmd, x)
 
-static inline pmd_t *pmd_off(pgd_t *pgd, unsigned long virt)
-{
-	return pmd_offset(pud_offset(pgd, virt), virt);
-}
-
 static inline pmd_t *pmd_off_k(unsigned long virt)
 {
-	return pmd_off(pgd_offset_k(virt), virt);
+	return pmd_offset(pud_offset(pgd_offset_k(virt), virt), virt);
 }
 
 struct mem_type;
@@ -23,10 +18,8 @@ extern void __flush_dcache_page(struct address_space *mapping, struct page *page
 
 #endif
 
-struct pglist_data;
 struct map_desc;
 
-void reserve_node_zero(struct pglist_data *pgdat);
-void __init create_mapping(struct map_desc *md);
 void __init bootmem_init(void);
 void arm_mm_memblock_reserve(void);
+void __init create_mapping(struct map_desc *md);

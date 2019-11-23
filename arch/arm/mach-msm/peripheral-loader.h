@@ -1,54 +1,61 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- *       copyright notice, this list of conditions and the following
- *       disclaimer in the documentation and/or other materials provided
- *       with the distribution.
- *     * Neither the name of Code Aurora Forum, Inc. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
  *
- * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
- * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
-#ifndef __MACH_PERIPHERAL_LOADER_H
-#define __MACH_PERIPHERAL_LOADER_H
+#ifndef __MSM_PERIPHERAL_LOADER_H
+#define __MSM_PERIPHERAL_LOADER_H
 
-#include <linux/list.h>
-#include <linux/mutex.h>
-#include <linux/platform_device.h>
+struct device;
+struct module;
 
-struct pil_reset_ops {
-	int (*init_image)(const u8 *metadata, size_t size);
-	int (*verify_blob)(u32 phy_addr, size_t size);
-	int (*auth_and_reset)(void);
-	int (*shutdown)(void);
-};
-
-struct pil_device {
+/**
+ * struct pil_desc - PIL descriptor
+ * @name: string used for pil_get()
+ * @depends_on: booted before this peripheral
+ * @dev: parent device
+ * @ops: callback functions
+ * @owner: module the descriptor belongs to
+ * @proxy_timeout: delay in ms until proxy vote is removed
+ */
+struct pil_desc {
 	const char *name;
 	const char *depends_on;
-	int count;
-	struct mutex lock;
-	struct platform_device pdev;
-	struct list_head list;
-	struct pil_reset_ops *ops;
+	struct device *dev;
+	const struct pil_reset_ops *ops;
+	struct module *owner;
+	unsigned long proxy_timeout;
 };
 
-extern int msm_pil_add_device(struct pil_device *pil);
+/**
+ * struct pil_reset_ops - PIL operations
+ * @init_image: prepare an image for authentication
+ * @verify_blob: authenticate a program segment, called once for each loadable
+ *		 program segment (optional)
+ * @proxy_vote: make proxy votes before auth_and_reset (optional)
+ * @auth_and_reset: boot the processor
+ * @proxy_unvote: remove any proxy votes (optional)
+ * @shutdown: shutdown the processor
+ */
+struct pil_reset_ops {
+	int (*init_image)(struct pil_desc *pil, const u8 *metadata,
+			  size_t size);
+	int (*verify_blob)(struct pil_desc *pil, u32 phy_addr, size_t size);
+	int (*proxy_vote)(struct pil_desc *pil);
+	int (*auth_and_reset)(struct pil_desc *pil);
+	void (*proxy_unvote)(struct pil_desc *pil);
+	int (*shutdown)(struct pil_desc *pil);
+};
+
+struct pil_device;
+
+extern struct pil_device *msm_pil_register(struct pil_desc *desc);
+extern void msm_pil_unregister(struct pil_device *pil);
 
 #endif

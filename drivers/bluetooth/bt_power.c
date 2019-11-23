@@ -44,20 +44,20 @@ static int bt_power_read_proc(char *buffer, char **start, off_t offset, int size
   char *str;
   int r;
   int len;
-  
+
   r = gpio_get_value(INTERNAL_BT_VREG);  // internal BT VREG
-  
+
   if(r)
     {str = "1 (Bluetooth power is ON)\n";}
   else
     {str = "0 (Bluetooth power is OFF)\n";}
-  
+
   len = strlen(str);
   if (size < len) {return -EINVAL;}
   if (offset != 0){return 0;}
-  
+
   strcpy(buffer, str);
-  
+
   *eof = 1;
   return len;
 }
@@ -108,17 +108,17 @@ static int bt_stat_read_proc(char *buffer, char **start, off_t offset, int size,
       sprintf(line,"%d",   gpio_get_value(BT_RESET)); strcat(str,line);
       sprintf(line,"%d",   gpio_get_value(INTERNAL_BT_VREG)); strcat(str,line);
       sprintf(line,"%d ",  gpio_get_value(WLAN_REG_ON_SIGNAL)); strcat(str,line);
-      
+
       sprintf(line,"%d",   gpio_get_value(43)); strcat(str,line);
       sprintf(line,"%d",   gpio_get_value(44)); strcat(str,line);
       sprintf(line,"%d",   gpio_get_value(45)); strcat(str,line);
       sprintf(line,"%d ",  gpio_get_value(46)); strcat(str,line);
-      
+
       sprintf(line,"%d",   gpio_get_value(68)); strcat(str,line);
       sprintf(line,"%d",   gpio_get_value(69)); strcat(str,line);
       sprintf(line,"%d",   gpio_get_value(70)); strcat(str,line);
       sprintf(line,"%d ",  gpio_get_value(71)); strcat(str,line);
-      
+
       sprintf(line,"%d",   gpio_get_value(BT_WAKE)); strcat(str,line);
       sprintf(line,"%d\n", gpio_get_value(BT_HOST_WAKE)); strcat(str,line);
 
@@ -127,9 +127,9 @@ static int bt_stat_read_proc(char *buffer, char **start, off_t offset, int size,
     }
 
   if (offset != 0){return 0;}
-  
+
   strcpy(buffer, str);
-  
+
   *eof = 1;
   return len;
 }
@@ -163,9 +163,9 @@ static int bt_status_read_proc(char *buffer, char **start, off_t offset, int siz
   len = strlen(str);
   if (size < len) {return -EINVAL;}
   if (offset != 0){return 0;}
-  
+
   strcpy(buffer, str);
-  
+
   *eof = 1;
   return len;
 }
@@ -179,7 +179,7 @@ static int bt_irq_read_proc(char *buffer, char **start, off_t offset, int size, 
   unsigned int irq[65];
   extern int interrupt_ack_stats[];
   int len;
-  
+
   int i=65;
   do
     {
@@ -188,7 +188,7 @@ static int bt_irq_read_proc(char *buffer, char **start, off_t offset, int size, 
       interrupt_ack_stats[i]=0;
     }
   while(i);
-  
+
   i=0; line[0]=0;
   do
     {
@@ -205,9 +205,9 @@ static int bt_irq_read_proc(char *buffer, char **start, off_t offset, int size, 
   len = strlen(line);
   if (size < len) {return -EINVAL;}
   if (offset != 0){return 0;}
-  
+
   strcpy(buffer, line);
-  
+
   *eof = 1;
   return len;
 }
@@ -222,12 +222,12 @@ void hsuart_power(int on)
 #ifndef CONFIG_MACH_MOT
   struct uart_port *ups;
 
-  if (on) 
+  if (on)
     {
       msm_hs_request_clock_on(ups);
       msm_hs_set_mctrl_locked(ups, TIOCM_RTS);
-    } 
-  else 
+    }
+  else
     {
       msm_hs_set_mctrl_locked(ups, 0);
       msm_hs_request_clock_off(ups);
@@ -272,7 +272,7 @@ int bt_power_write_proc(struct file *file, const char *buffer, unsigned long cou
 	return 1;
 #endif
     }
-  
+
   if('W' == *proc_buf)
     {
       gpio_set_value(BT_WAKE, 1);
@@ -283,7 +283,7 @@ int bt_power_write_proc(struct file *file, const char *buffer, unsigned long cou
 	return 1;
 #endif
     }
-  
+
   if('1' == *proc_buf)
     {
       if(!power_is_on)
@@ -304,17 +304,17 @@ if
 #ifndef CONFIG_MACH_MOT
 }
 #endif
-	  
-	  msleep_interruptible(100);
-	  
+
+	  msleep(100);
+
 	  gpio_request(INTERNAL_BT_VREG, "bt_reg_on"); 	// turn on internal BT VREG
 	  gpio_direction_output(INTERNAL_BT_VREG, 1);
-	  
-	  msleep_interruptible(100);	// BCM4325 powerup requirement
-	  
+
+	  msleep(100);	// BCM4325 powerup requirement
+
 	  gpio_request(BT_RESET, "bt_reset_n"); // take BT out of reset
 	  gpio_direction_output(BT_RESET, 1);
-	  
+
 	  power_is_on = 1;
 	  printk(KERN_INFO "BLUETOOTH: bt_power: ON\n");
 	}
@@ -325,7 +325,7 @@ if
 	{
 	  gpio_set_value (BT_RESET, 0);	// put BT into reset
 	  gpio_set_value (INTERNAL_BT_VREG, 0);	// turn off internal BT VREG
-	  
+
 	  if(!gpio_get_value(WLAN_REG_ON_SIGNAL))
 	    {
 #ifndef CONFIG_MACH_MOT
@@ -343,10 +343,9 @@ if
 #ifndef CONFIG_MACH_MOT
 }
 #endif
-	      
-	      msleep_interruptible(100);
+	      msleep(100);
 	    }
-	  
+
 	  power_is_on = 0;
 	  printk(KERN_INFO "BLUETOOTH: bt_power: OFF\n");
 	}
@@ -382,10 +381,10 @@ static int __init bt_power_init(void)
 	printk(KERN_ERR "BLUETOOTH: Registration of proc \"bt_stat\" file failed\n");
 	return(-ENOMEM);
       }
-    
+
     proc_entry->read_proc  = bt_stat_read_proc;
     proc_entry->write_proc = 0;
-    
+
     printk(KERN_INFO "BLUETOOTH: /proc/bt_stat created\n");
   }
 
@@ -396,10 +395,10 @@ static int __init bt_power_init(void)
 	printk(KERN_ERR "BLUETOOTH: Registration of proc \"bt_status\" file failed\n");
 	return(-ENOMEM);
       }
-    
+
     proc_entry->read_proc  = bt_status_read_proc;
     proc_entry->write_proc = 0;
-    
+
     printk(KERN_INFO "BLUETOOTH: /proc/bt_status created\n");
   }
 
@@ -411,10 +410,10 @@ static int __init bt_power_init(void)
        printk(KERN_ERR "BLUETOOTH: Registration of proc \"bt_irq\" file failed\n");
        return(-ENOMEM);
       }
-    
+
     proc_entry->read_proc  = bt_irq_read_proc;
     proc_entry->write_proc = 0;
-    
+
     printk(KERN_INFO "BLUETOOTH: /proc/bt_irq created\n");
   }
 #endif
@@ -442,15 +441,15 @@ if
 #ifndef CONFIG_MACH_MOT
 }
 #endif
-	
-	msleep_interruptible(100);
+
+	msleep(100);
       }
 
     printk(KERN_INFO "BLUETOOTH: bt_power: Bluetooth power is off, and BT module is in reset.\n");
-    
+
     power_is_on = 0;
   }
-  
+
   return 0;
 }
 

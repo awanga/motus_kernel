@@ -8,11 +8,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  */
 
 #include <linux/init.h>
@@ -31,10 +26,10 @@
 #include <sound/tlv.h>
 #include <sound/initval.h>
 #include <sound/control.h>
+#include <sound/q6afe.h>
 #include <asm/dma.h>
 #include <asm/mach-types.h>
 #include <mach/qdsp6v2/audio_dev_ctl.h>
-#include <mach/qdsp6v2/q6afe.h>
 #include <mach/qdsp6v2/q6voice.h>
 
 #define LOOPBACK_ENABLE		0x1
@@ -811,7 +806,7 @@ static int pcm_route_put_rx(struct snd_kcontrol *kcontrol,
 				 __func__, (session_id),
 				dev_info->name);
 	session_route.playback_session[session_id][dev_info->copp_id] =
-							dev_info->copp_id;
+							 dev_info->copp_id;
 	if (dev_info->opened) {
 		dev_info->sessions = dev_info->sessions | session_mask;
 		broadcast_event(AUDDEV_EVT_DEV_RDY,
@@ -974,7 +969,7 @@ static int msm_device_mute_put(struct snd_kcontrol *kcontrol,
 	int mute = ucontrol->value.integer.value[1];
 	struct msm_snddev_info *dev_info;
 	int rc = 0;
-	int gain = 0x4000;
+	u16 gain = 0x2000;
 
 	dev_info = audio_dev_ctrl_find_dev(dev_id);
 	if (IS_ERR(dev_info)) {
@@ -998,7 +993,7 @@ static int msm_device_mute_put(struct snd_kcontrol *kcontrol,
 				"control.", __func__, dev_info->name);
 		return rc;
 	}
-	pr_debug("Muting device id %d(%s)\n", dev_id, dev_info->name);
+	pr_debug("Muting/Unmuting device id %d(%s)\n", dev_id, dev_info->name);
 
 	return rc;
 }
@@ -1115,22 +1110,23 @@ static struct snd_kcontrol_new snd_msm_secondary_controls[] = {
 			msm_voc_session_info, msm_voip_session_get, NULL, 0),
 };
 
-static int msm_new_mixer(struct snd_card *card)
+static int msm_new_mixer(struct snd_soc_codec *codec)
 {
 	unsigned int idx;
 	int err;
 	int dev_cnt;
 
-	strcpy(card->mixername, "MSM Mixer");
+	strcpy(codec->card->snd_card->mixername, "MSM Mixer");
 	for (idx = 0; idx < ARRAY_SIZE(snd_msm_controls); idx++) {
-		err = snd_ctl_add(card,	snd_ctl_new1(&snd_msm_controls[idx],
+		err = snd_ctl_add(codec->card->snd_card,
+				snd_ctl_new1(&snd_msm_controls[idx],
 					NULL));
 		if (err < 0)
 			pr_err("%s:ERR adding ctl\n", __func__);
 	}
 
 	for (idx = 0; idx < ARRAY_SIZE(snd_msm_secondary_controls); idx++) {
-		err = snd_ctl_add(card,
+		err = snd_ctl_add(codec->card->snd_card,
 			snd_ctl_new1(&snd_msm_secondary_controls[idx],
 			NULL));
 		if (err < 0)
@@ -1140,8 +1136,9 @@ static int msm_new_mixer(struct snd_card *card)
 
 	for (idx = 0; idx < dev_cnt; idx++) {
 		if (!snd_dev_ctl_index(idx)) {
-			err = snd_ctl_add(card, snd_ctl_new1(
-				&snd_dev_controls[idx], NULL));
+			err = snd_ctl_add(codec->card->snd_card,
+				snd_ctl_new1(&snd_dev_controls[idx],
+					NULL));
 			if (err < 0)
 				pr_err("%s:ERR adding ctl\n", __func__);
 		} else
@@ -1153,58 +1150,69 @@ static int msm_new_mixer(struct snd_card *card)
 	return 0;
 }
 
-static int msm_soc_dai_init(struct snd_soc_codec *codec)
+static int msm_soc_dai_init(
+	struct snd_soc_pcm_runtime *rtd)
 {
 
 	int ret = 0;
-	ret = msm_new_mixer(codec->card);
+	struct snd_soc_codec *codec = rtd->codec;
+
+	init_waitqueue_head(&the_locks.enable_wait);
+	init_waitqueue_head(&the_locks.eos_wait);
+	init_waitqueue_head(&the_locks.write_wait);
+	init_waitqueue_head(&the_locks.read_wait);
+	memset(&session_route, DEVICE_IGNORE, sizeof(struct pcm_session));
+
+	ret = msm_new_mixer(codec);
 	if (ret < 0)
 		pr_err("%s: ALSA MSM Mixer Fail\n", __func__);
 
 	return ret;
 }
 
-static struct snd_soc_dai_link msm_dai = {
-	.name = "ASOC",
-	.stream_name = "ASOC",
-	.codec_dai = &msm_dais[0],
-	.cpu_dai = &msm_dais[1],
-	.init	= msm_soc_dai_init,
+static struct snd_soc_dai_link msm_dai[] = {
+{
+	.name = "MSM Primary I2S",
+	.stream_name = "DSP 1",
+	.cpu_dai_name = "msm-cpu-dai.0",
+	.platform_name = "msm-dsp-audio.0",
+	.codec_name = "msm-codec-dai.0",
+	.codec_dai_name = "msm-codec-dai",
+	.init   = &msm_soc_dai_init,
+},
+#ifdef CONFIG_MSM_8x60_VOIP
+{
+	.name = "MSM Primary Voip",
+	.stream_name = "MVS",
+	.cpu_dai_name = "mvs-cpu-dai.0",
+	.platform_name = "msm-mvs-audio.0",
+	.codec_name = "mvs-codec-dai.0",
+	.codec_dai_name = "mvs-codec-dai",
+},
+#endif
 };
 
-struct snd_soc_card snd_soc_card_msm = {
-	.name = "msm-audio",
-	.dai_link	= &msm_dai,
-	.num_links = 1,
-	.platform = &msm_soc_platform,
-};
-
-/* msm_audio audio subsystem */
-static struct snd_soc_device msm_audio_snd_devdata = {
-	.card = &snd_soc_card_msm,
-	.codec_dev = &soc_codec_dev_msm,
+static struct snd_soc_card snd_soc_card_msm = {
+	.name		= "msm-audio",
+	.dai_link	= msm_dai,
+	.num_links = ARRAY_SIZE(msm_dai),
 };
 
 static int __init msm_audio_init(void)
 {
 	int ret;
 
-	msm_audio_snd_device = platform_device_alloc("soc-audio", 0);
+	msm_audio_snd_device = platform_device_alloc("soc-audio", -1);
 	if (!msm_audio_snd_device)
 		return -ENOMEM;
 
-	platform_set_drvdata(msm_audio_snd_device, &msm_audio_snd_devdata);
-	msm_audio_snd_devdata.dev = &msm_audio_snd_device->dev;
+	platform_set_drvdata(msm_audio_snd_device, &snd_soc_card_msm);
 	ret = platform_device_add(msm_audio_snd_device);
 	if (ret) {
 		platform_device_put(msm_audio_snd_device);
 		return ret;
 	}
-	init_waitqueue_head(&the_locks.enable_wait);
-	init_waitqueue_head(&the_locks.eos_wait);
-	init_waitqueue_head(&the_locks.write_wait);
-	init_waitqueue_head(&the_locks.read_wait);
-	memset(&session_route, DEVICE_IGNORE, sizeof(struct pcm_session));
+
 	src_dev = DEVICE_IGNORE;
 	dst_dev = DEVICE_IGNORE;
 

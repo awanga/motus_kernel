@@ -132,3 +132,6 @@ obj-$(CONFIG_YAFFS_FS)		+= yaffs2/
 CFLAGS_REMOVE_eventpoll.o = -Werror
 
 obj-$(CONFIG_PSTORE)		+= pstore/
+
+# Patched by YAFFS
+obj-$(CONFIG_YAFFS_FS)		+= yaffs2/

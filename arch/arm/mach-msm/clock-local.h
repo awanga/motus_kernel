@@ -1,29 +1,13 @@
-/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- *       copyright notice, this list of conditions and the following
- *       disclaimer in the documentation and/or other materials provided
- *       with the distribution.
- *     * Neither the name of Code Aurora Forum, Inc. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
  *
- * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
- * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  */
 
@@ -33,48 +17,80 @@
 #include <linux/spinlock.h>
 #include "clock.h"
 
-/*
- * Bit manipulation macros
- */
-#define BM(msb, lsb)	(((((uint32_t)-1) << (31-msb)) >> (31-msb+lsb)) << lsb)
-#define BVAL(msb, lsb, val)	(((val) << lsb) & BM(msb, lsb))
+#define MN_MODE_DUAL_EDGE 0x2
+
+/* MD Registers */
+#define MD4(m_lsb, m, n_lsb, n) \
+		((BVAL((m_lsb+3), m_lsb, m) | BVAL((n_lsb+3), n_lsb, ~(n))) \
+		* !!(n))
+#define MD8(m_lsb, m, n_lsb, n) \
+		((BVAL((m_lsb+7), m_lsb, m) | BVAL((n_lsb+7), n_lsb, ~(n))) \
+		* !!(n))
+#define MD16(m, n) ((BVAL(31, 16, m) | BVAL(15, 0, ~(n))) * !!(n))
+
+/* NS Registers */
+#define NS(n_msb, n_lsb, n, m, mde_lsb, d_msb, d_lsb, d, s_msb, s_lsb, s) \
+		(BVAL(n_msb, n_lsb, ~(n-m) * !!(n)) \
+		| (BVAL((mde_lsb+1), mde_lsb, MN_MODE_DUAL_EDGE) * !!(n)) \
+		| BVAL(d_msb, d_lsb, (d-1)) | BVAL(s_msb, s_lsb, s))
+
+#define NS_MM(n_msb, n_lsb, n, m, d_msb, d_lsb, d, s_msb, s_lsb, s) \
+		(BVAL(n_msb, n_lsb, ~(n-m) * !!(n))|BVAL(d_msb, d_lsb, (d-1)) \
+		| BVAL(s_msb, s_lsb, s))
+
+#define NS_DIVSRC(d_msb, d_lsb, d, s_msb, s_lsb, s) \
+		(BVAL(d_msb, d_lsb, (d-1)) | BVAL(s_msb, s_lsb, s))
+
+#define NS_DIV(d_msb, d_lsb, d) \
+		BVAL(d_msb, d_lsb, (d-1))
+
+#define NS_SRC_SEL(s_msb, s_lsb, s) \
+		BVAL(s_msb, s_lsb, s)
+
+#define NS_MND_BANKED4(n0_lsb, n1_lsb, n, m, s0_lsb, s1_lsb, s) \
+		 (BVAL((n0_lsb+3), n0_lsb, ~(n-m) * !!(n)) \
+		| BVAL((n1_lsb+3), n1_lsb, ~(n-m) * !!(n)) \
+		| BVAL((s0_lsb+2), s0_lsb, s) \
+		| BVAL((s1_lsb+2), s1_lsb, s))
+
+#define NS_MND_BANKED8(n0_lsb, n1_lsb, n, m, s0_lsb, s1_lsb, s) \
+		 (BVAL((n0_lsb+7), n0_lsb, ~(n-m) * !!(n)) \
+		| BVAL((n1_lsb+7), n1_lsb, ~(n-m) * !!(n)) \
+		| BVAL((s0_lsb+2), s0_lsb, s) \
+		| BVAL((s1_lsb+2), s1_lsb, s))
+
+#define NS_DIVSRC_BANKED(d0_msb, d0_lsb, d1_msb, d1_lsb, d, \
+	s0_msb, s0_lsb, s1_msb, s1_lsb, s) \
+		 (BVAL(d0_msb, d0_lsb, (d-1)) | BVAL(d1_msb, d1_lsb, (d-1)) \
+		| BVAL(s0_msb, s0_lsb, s) \
+		| BVAL(s1_msb, s1_lsb, s))
+
+/* CC Registers */
+#define CC(mde_lsb, n) (BVAL((mde_lsb+1), mde_lsb, MN_MODE_DUAL_EDGE) * !!(n))
+#define CC_BANKED(mde0_lsb, mde1_lsb, n) \
+		((BVAL((mde0_lsb+1), mde0_lsb, MN_MODE_DUAL_EDGE) \
+		| BVAL((mde1_lsb+1), mde1_lsb, MN_MODE_DUAL_EDGE)) \
+		* !!(n))
 
 /*
- * Clock types
+ * Clock Definition Macros
  */
-#define MND		1 /* Integer predivider and fractional MN:D divider. */
-#define BASIC		2 /* Integer divider. */
-#define NORATE		3 /* Just on/off. */
-#define NOENABLE	4 /* No branch to enable (reset or measurement only). */
-
-/*
- * IDs for invalid sources, source selects, and XOs
- */
-#define SRC_NONE	-1
-#define SRC_SEL_NONE	-1
-#define XO_NONE		-1
-
-/*
- * Halt/Status Checking Mode Macros
- */
-#define NOCHECK		0	/* No bit to check, do nothing */
-#define HALT		1	/* Bit pol: 1 = halted */
-#define HALT_VOTED	2	/* Bit pol: 1 = halted; delay on disable */
-#define ENABLE		3	/* Bit pol: 1 = running */
-#define ENABLE_VOTED	4	/* Bit pol: 1 = running; delay on disable */
-#define DELAY		5	/* No bit to check, just delay */
+#define DEFINE_CLK_MEASURE(name) \
+	struct clk name = { \
+		.ops = &clk_ops_empty, \
+		.dbg_name = #name, \
+		CLK_INIT(name), \
+	}; \
 
 /*
  * Generic frequency-definition structs and macros
  */
 struct clk_freq_tbl {
 	const uint32_t	freq_hz;
-	const int	src;
+	struct clk	*const src_clk;
 	const uint32_t	md_val;
 	const uint32_t	ns_val;
-	const uint32_t	cc_val;
-	uint32_t	mnd_en_mask;
-	const unsigned	sys_vdd;
+	const uint32_t	ctl_val;
 	void		*const extra_freq_data;
 };
 
@@ -95,153 +111,180 @@ struct bank_masks {
 	const struct bank_mask_info	bank1_mask;
 };
 
-#define F_RAW(f, s, m_v, n_v, c_v, m_m, v, e) { \
+#define F_RAW(f, sc, m_v, n_v, c_v, e) { \
 	.freq_hz = f, \
-	.src = s, \
+	.src_clk = sc, \
 	.md_val = m_v, \
 	.ns_val = n_v, \
-	.cc_val = c_v, \
-	.mnd_en_mask = m_m, \
-	.sys_vdd = v, \
+	.ctl_val = c_v, \
 	.extra_freq_data = e, \
 	}
 #define FREQ_END	(UINT_MAX-1)
-#define F_END \
-	{ \
-		.freq_hz = FREQ_END, \
-		.src = SRC_NONE, \
-		.sys_vdd = LOW, \
-	}
+#define F_END { .freq_hz = FREQ_END }
+
+/**
+ * struct branch - branch on/off
+ * @ctl_reg: clock control register
+ * @en_mask: ORed with @ctl_reg to enable the clock
+ * @hwcg_reg: hardware clock gating register
+ * @hwcg_mask: ORed with @hwcg_reg to enable hardware clock gating
+ * @halt_reg: halt register
+ * @halt_check: type of halt check to perform
+ * @halt_bit: ANDed with @halt_reg to test for clock halted
+ * @reset_reg: reset register
+ * @reset_mask: ORed with @reset_reg to reset the clock domain
+ */
+struct branch {
+	void __iomem *const ctl_reg;
+	const u32 en_mask;
+
+	void __iomem *hwcg_reg;
+	u32 hwcg_mask;
+
+	void __iomem *const halt_reg;
+	const u16 halt_check;
+	const u16 halt_bit;
+
+	void __iomem *const reset_reg;
+	const u32 reset_mask;
+
+	void __iomem *const retain_reg;
+	const u32 retain_mask;
+};
+
+extern struct clk_ops clk_ops_branch;
+extern struct clk_ops clk_ops_reset;
+
+int branch_reset(struct branch *b, enum clk_reset_action action);
+void __branch_clk_enable_reg(const struct branch *clk, const char *name);
+u32 __branch_clk_disable_reg(const struct branch *clk, const char *name);
+enum handoff branch_handoff(struct branch *clk, struct clk *c);
 
 /*
  * Generic clock-definition struct and macros
  */
-struct clk_local {
-	int		count;
-	const uint32_t	type;
+struct rcg_clk {
+	bool		enabled;
 	void		*const ns_reg;
-	void		*const cc_reg;
 	void		*const md_reg;
-	void		*const reset_reg;
-	void		*const halt_reg;
-	const uint32_t	reset_mask;
-	const uint16_t	halt_check;
-	const uint16_t	halt_bit;
-	const uint32_t	br_en_mask;
+
 	const uint32_t	root_en_mask;
 	uint32_t	ns_mask;
-	const uint32_t	cc_mask;
-	const uint32_t	test_vector;
-	struct bank_masks *const bank_masks;
-	const int	parent;
-	const uint32_t	*const children;
-	void		(*set_rate)(struct clk_local *, struct clk_freq_tbl *);
-	struct clk_freq_tbl *const freq_tbl;
+	const uint32_t	ctl_mask;
+	uint32_t	mnd_en_mask;
+
+	void		*bank_info;
+	void   (*set_rate)(struct rcg_clk *, struct clk_freq_tbl *);
+
+	struct clk_freq_tbl *freq_tbl;
 	struct clk_freq_tbl *current_freq;
+
+	struct branch	b;
+	struct clk	c;
 };
 
-#define C(x)		L_##x##_CLK
-#define L_NONE_CLK	-1
-#define CLK(id, t, ns_r, cc_r, md_r, r_r, r_m, h_r, h_c, h_b, br, root, \
-		n_m, c_m, s_fn, tbl, bmasks, par, chld_lst, tv) \
-	[C(id)] = { \
-	.type = t, \
-	.ns_reg = ns_r, \
-	.cc_reg = cc_r, \
-	.md_reg = md_r, \
-	.reset_reg = r_r, \
-	.halt_reg = h_r, \
-	.halt_check = h_c, \
-	.halt_bit = h_b, \
-	.reset_mask = r_m, \
-	.br_en_mask = br, \
-	.root_en_mask = root, \
-	.ns_mask = n_m, \
-	.cc_mask = c_m, \
-	.test_vector = tv, \
-	.bank_masks = bmasks, \
-	.parent = C(par), \
-	.children = chld_lst, \
-	.set_rate = s_fn, \
-	.freq_tbl = tbl, \
-	.current_freq = &local_dummy_freq, \
-	}
+static inline struct rcg_clk *to_rcg_clk(struct clk *clk)
+{
+	return container_of(clk, struct rcg_clk, c);
+}
 
-/*
- * Convenience macros
- */
-#define set_1rate(clk) \
-	local_clk_set_rate(C(clk), soc_clk_local_tbl[C(clk)].freq_tbl->freq_hz)
+extern struct clk_ops clk_ops_rcg;
 
-/*
- * SYS_VDD voltage levels
+extern struct clk_freq_tbl rcg_dummy_freq;
+
+/**
+ * struct cdiv_clk - integer divider clock with external source selection
+ * @ns_reg: source select and divider settings register
+ * @ext_mask: bit to set to select an external source
+ * @cur_div: current divider setting (or 0 for external source)
+ * @max_div: maximum divider value supported (must be power of 2)
+ * @div_offset: number of bits to shift divider left by in @ns_reg
+ * @b: branch
+ * @c: clock
  */
-enum sys_vdd_level {
-	NONE,
-	LOW,
-	NOMINAL,
-	HIGH,
-	NUM_SYS_VDD_LEVELS
+struct cdiv_clk {
+	void __iomem *const ns_reg;
+	u32 ext_mask;
+
+	unsigned long cur_div;
+	u8 div_offset;
+	u32 max_div;
+
+	struct branch b;
+	struct clk c;
 };
 
-/*
- * Clock source descriptions
+static inline struct cdiv_clk *to_cdiv_clk(struct clk *clk)
+{
+	return container_of(clk, struct cdiv_clk, c);
+}
+
+extern struct clk_ops clk_ops_cdiv;
+
+/**
+ * struct fixed_clk - fixed rate clock (used for crystal oscillators)
+ * @c: clk
  */
-struct clk_source {
-	int		(*enable_func)(unsigned src, unsigned enable);
-	const signed	par;
+struct fixed_clk {
+	struct clk c;
 };
 
-/*
- * Variables from SoC-specific clock drivers
+/**
+ * struct branch_clk - branch
+ * @enabled: true if clock is on, false otherwise
+ * @b: branch
+ * @parent: clock source
+ * @c: clk
+ *
+ * An on/off switch with a rate derived from the parent.
  */
-extern struct clk_local		soc_clk_local_tbl[];
-extern struct clk_source	soc_clk_sources[];
+struct branch_clk {
+	bool enabled;
+	struct branch b;
+	struct clk *parent;
+	struct clk c;
+};
+
+static inline struct branch_clk *to_branch_clk(struct clk *clk)
+{
+	return container_of(clk, struct branch_clk, c);
+}
+
+/**
+ * struct measure_clk - for rate measurement debug use
+ * @sample_ticks: sample period in reference clock ticks
+ * @multiplier: measurement scale-up factor
+ * @divider: measurement scale-down factor
+ * @c: clk
+*/
+struct measure_clk {
+	u64 sample_ticks;
+	u32 multiplier;
+	u32 divider;
+	struct clk c;
+};
+
+extern struct clk_ops clk_ops_empty;
+
+static inline struct measure_clk *to_measure_clk(struct clk *clk)
+{
+	return container_of(clk, struct measure_clk, c);
+}
 
 /*
  * Variables from clock-local driver
  */
 extern spinlock_t		local_clock_reg_lock;
-extern struct clk_freq_tbl	local_dummy_freq;
-
-/*
- * Local-clock APIs
- */
-int local_src_enable(int src);
-int local_src_disable(int src);
-void local_clk_enable_reg(unsigned id);
-void local_clk_disable_reg(unsigned id);
-int local_vote_sys_vdd(enum sys_vdd_level level);
-int local_unvote_sys_vdd(enum sys_vdd_level level);
-
-/*
- * clk_ops APIs
- */
-int local_clk_enable(unsigned id);
-void local_clk_disable(unsigned id);
-void local_clk_auto_off(unsigned id);
-int local_clk_set_rate(unsigned id, unsigned rate);
-int local_clk_set_min_rate(unsigned id, unsigned rate);
-int local_clk_set_max_rate(unsigned id, unsigned rate);
-unsigned local_clk_get_rate(unsigned id);
-int local_clk_list_rate(unsigned id, unsigned n);
-int local_clk_is_enabled(unsigned id);
-long local_clk_round_rate(unsigned id, unsigned rate);
-
-/*
- * Required SoC-specific functions, implemented for every supported SoC
- */
-int soc_update_sys_vdd(enum sys_vdd_level level);
-int soc_set_pwr_rail(unsigned id, int enable);
-int soc_clk_measure_rate(unsigned id);
-int soc_clk_set_flags(unsigned id, unsigned flags);
-int soc_clk_reset(unsigned id, enum clk_reset_action action);
+extern struct fixed_clk		gnd_clk;
 
 /*
  * Generic set-rate implementations
  */
-void set_rate_mnd(struct clk_local *clk, struct clk_freq_tbl *nf);
-void set_rate_nop(struct clk_local *clk, struct clk_freq_tbl *nf);
+void set_rate_mnd(struct rcg_clk *clk, struct clk_freq_tbl *nf);
+void set_rate_nop(struct rcg_clk *clk, struct clk_freq_tbl *nf);
+void set_rate_mnd_8(struct rcg_clk *clk, struct clk_freq_tbl *nf);
+void set_rate_mnd_banked(struct rcg_clk *clk, struct clk_freq_tbl *nf);
+void set_rate_div_banked(struct rcg_clk *clk, struct clk_freq_tbl *nf);
 
 #endif /* __ARCH_ARM_MACH_MSM_CLOCK_LOCAL_H */
 

@@ -11,11 +11,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  */
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -26,52 +21,10 @@
 
 #define MAX_KEYPAD_BL_LEVEL	16
 
-/* IKPITTSBURGH - 138 */
-#ifdef CONFIG_MACH_PITTSBURGH
-#ifndef FALSE
-#define FALSE  0
-#define TRUE   (!FALSE)
-#endif
-#define KEYPAD_BL_TEST_ON_OFF  0x0B    /* 'q' keypad map value which toggle ON/OFF the keypad bl */
-static bool pittsburgh_keypad_backlight_test = FALSE;
-static int  keypad_bl_value = 0;
-
-static void msm_keypad_bl_led_value_adjusted (enum led_brightness *value)
-{
-   if (*value == KEYPAD_BL_TEST_ON_OFF)
-   {
-      /* Toggle ON/OFF the keypad backlight test */
-      pittsburgh_keypad_backlight_test = 
-                        (pittsburgh_keypad_backlight_test == FALSE? TRUE: FALSE);
-
-   }
-   else
-   {
-      keypad_bl_value = *value;   /* save the current value */
-   }
-
-   if (pittsburgh_keypad_backlight_test == TRUE)
-   {
-      /* keypad bl decense test is ON */
-      *value = LED_FULL;   /* Always turn ON when in test mode */
-   } 
-   else
-   {
-      /* keypad bl decense test is OFF */
-      *value = keypad_bl_value;   /* retrieve the previous value */
-   }
-}
- 
-#endif/* CONFIG_MACH_PITTSBURGH */
-
 static void msm_keypad_bl_led_set(struct led_classdev *led_cdev,
 	enum led_brightness value)
 {
 	int ret;
-
-#ifdef CONFIG_MACH_PITTSBURGH
-        msm_keypad_bl_led_value_adjusted (&value);
-#endif/* CONFIG_MACH_PITTSBURGH */
 
 	ret = pmic_set_led_intensity(LED_KEYPAD, value / MAX_KEYPAD_BL_LEVEL);
 	if (ret)

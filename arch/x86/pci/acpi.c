@@ -43,6 +43,17 @@ static const struct dmi_system_id pci_use_crs_table[] __initconst = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "ALiveSATA2-GLAN"),
                 },
         },
+	/* https://bugzilla.kernel.org/show_bug.cgi?id=30552 */
+	/* 2006 AMD HT/VIA system with two host bridges */
+	{
+		.callback = set_use_crs,
+		.ident = "ASUS M2V-MX SE",
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "ASUSTeK Computer INC."),
+			DMI_MATCH(DMI_BOARD_NAME, "M2V-MX SE"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "American Megatrends Inc."),
+		},
+	},
 	{}
 };
 
@@ -138,7 +149,7 @@ setup_resource(struct acpi_resource *acpi_res, void *data)
 	struct acpi_resource_address64 addr;
 	acpi_status status;
 	unsigned long flags;
-	u64 start, end;
+	u64 start, orig_end, end;
 
 	status = resource_to_addr(acpi_res, &addr);
 	if (!ACPI_SUCCESS(status))
@@ -154,7 +165,21 @@ setup_resource(struct acpi_resource *acpi_res, void *data)
 		return AE_OK;
 
 	start = addr.minimum + addr.translation_offset;
-	end = addr.maximum + addr.translation_offset;
+	orig_end = end = addr.maximum + addr.translation_offset;
+
+	/* Exclude non-addressable range or non-addressable portion of range */
+	end = min(end, (u64)iomem_resource.end);
+	if (end <= start) {
+		dev_info(&info->bridge->dev,
+			"host bridge window [%#llx-%#llx] "
+			"(ignored, not CPU addressable)\n", start, orig_end);
+		return AE_OK;
+	} else if (orig_end != end) {
+		dev_info(&info->bridge->dev,
+			"host bridge window [%#llx-%#llx] "
+			"([%#llx-%#llx] ignored, not CPU addressable)\n",
+			start, orig_end, end + 1, orig_end);
+	}
 
 	res = &info->res[info->res_num];
 	res->name = info->name;
@@ -188,7 +213,7 @@ static bool resource_contains(struct resource *res, resource_size_t point)
 	return false;
 }
 
-static void coalesce_windows(struct pci_root_info *info, int type)
+static void coalesce_windows(struct pci_root_info *info, unsigned long type)
 {
 	int i, j;
 	struct resource *res1, *res2;

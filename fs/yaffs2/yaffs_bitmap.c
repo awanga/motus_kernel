@@ -96,18 +96,3 @@ int yaffs_count_chunk_bits(struct yaffs_dev *dev, int blk)
 
 	return n;
 }
-
-/* Count the bits in an unsigned char or a U32 */
-
-int yaffs_count_bits(unsigned char x)
-{
-        int r = 0;
-
-        while (x) {
-                if (x & 1)
-                        r++;
-
-                x >>= 1;
-        }
-        return r;
-}

@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -75,6 +75,9 @@
 #define AUDLPA_EVENT_NUM 10 /* Default number of pre-allocated event packets */
 
 #define MASK_32BITS     0xFFFFFFFF
+
+#define MAX_BUF 4
+#define BUFSZ (524288)
 
 #define __CONTAINS(r, v, l) ({					\
 	typeof(r) __r = r;					\
@@ -193,12 +196,24 @@ static void lpa_listner(u32 evt_id, union auddev_evt_data *evt_payload,
 			audio->running, audio->enabled, audio->source);
 		if (audio->running == 1 && audio->enabled == 1) {
 			audpp_route_stream(audio->dec_id, audio->source);
-			if (audio->source & AUDPP_MIXER_HLB)
+			if (audio->source & AUDPP_MIXER_HLB) {
 				audpp_dsp_set_vol_pan(
 					AUDPP_CMD_CFG_DEV_MIXER_ID_4,
 					&audio->vol_pan,
 					COPP);
-			else if (audio->source & AUDPP_MIXER_NONHLB)
+					/*restore the POPP gain to 0x2000
+					this is needed to avoid use cases
+					where POPP volume is lowered during
+					NON HLB playback, when device moved
+					from NON HLB to HLB POPP is not
+					disabled but POPP gain will be retained
+					as the old one which result
+					in lower volume*/
+					audio->vol_pan.volume = 0x2000;
+					audpp_dsp_set_vol_pan(
+						audio->dec_id,
+						&audio->vol_pan, POPP);
+			} else if (audio->source & AUDPP_MIXER_NONHLB)
 				audpp_dsp_set_vol_pan(
 					audio->dec_id, &audio->vol_pan, POPP);
 			if (audio->device_switch == DEVICE_SWITCH_STATE_READY) {
@@ -544,6 +559,8 @@ static void audlpa_async_send_buffer(struct audio *audio)
 
 			if ((signed)(temp >= 0) &&
 			((signed)(next_buf->buf.data_len - temp) >= 0)) {
+				MM_DBG("audlpa_async_send_buffer - sending the"
+					"rest of the buffer bassedon AV sync");
 				cmd.buf_ptr	= (unsigned) (next_buf->paddr +
 						  (next_buf->buf.data_len -
 						   temp));
@@ -551,6 +568,21 @@ static void audlpa_async_send_buffer(struct audio *audio)
 				cmd.partition_number	= 0;
 				audio->bytecount_given =
 					audio->bytecount_consumed + temp;
+				wmb();
+				audplay_send_queue0(audio, &cmd, sizeof(cmd));
+				audio->out_needed = 0;
+				audio->drv_status |= ADRV_STATUS_OBUF_GIVEN;
+			} else if ((signed)(temp >= 0) &&
+				((signed)(next_buf->buf.data_len -
+							temp) < 0)) {
+				MM_DBG("audlpa_async_send_buffer - else case:"
+					"sending the rest of the buffer bassedon"
+					"AV sync");
+				cmd.buf_ptr	= (unsigned) next_buf->paddr;
+				cmd.buf_size = next_buf->buf.data_len >> 1;
+				cmd.partition_number	= 0;
+				audio->bytecount_given = audio->bytecount_head +
+					next_buf->buf.data_len;
 				wmb();
 				audplay_send_queue0(audio, &cmd, sizeof(cmd));
 				audio->out_needed = 0;
@@ -591,17 +623,19 @@ static void audlpa_async_send_data(struct audio *audio, unsigned needed,
 			temp = audio->bytecount_head;
 			used_buf = list_first_entry(&audio->out_queue,
 					struct audlpa_buffer_node, list);
-			if ((audio->bytecount_head + used_buf->buf.data_len) <
-				audio->bytecount_consumed) {
-				audio->bytecount_head += used_buf->buf.data_len;
+			if (audio->device_switch !=
+				DEVICE_SWITCH_STATE_COMPLETE) {
+				audio->bytecount_head +=
+						used_buf->buf.data_len;
 				temp = audio->bytecount_head;
 				list_del(&used_buf->list);
 				evt_payload.aio_buf = used_buf->buf;
-				audlpa_post_event(audio, AUDIO_EVENT_WRITE_DONE,
+				audlpa_post_event(audio,
+						AUDIO_EVENT_WRITE_DONE,
 						  evt_payload);
 				kfree(used_buf);
+				audio->drv_status &= ~ADRV_STATUS_OBUF_GIVEN;
 			}
-			audio->drv_status &= ~ADRV_STATUS_OBUF_GIVEN;
 		}
 	}
 	if (audio->out_needed) {
@@ -1137,6 +1171,15 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		audio->wflush = 1;
 		audio_ioport_reset(audio);
 		if (audio->running) {
+			if (!(audio->drv_status & ADRV_STATUS_PAUSE)) {
+				rc = audpp_pause(audio->dec_id, (int) arg);
+				if (rc < 0) {
+					MM_ERR("%s: pause cmd failed rc=%d\n",
+						__func__, rc);
+					rc = -EINTR;
+					break;
+				}
+			}
 			audpp_flush(audio->dec_id);
 			rc = wait_event_interruptible(audio->write_wait,
 				!audio->wflush);
@@ -1182,6 +1225,8 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		audio->out_sample_rate = config.sample_rate;
 		audio->out_channel_mode = config.channel_count;
 		audio->out_bits = config.bits;
+		audio->buffer_count = config.buffer_count;
+		audio->buffer_size = config.buffer_size;
 		MM_DBG("AUDIO_SET_CONFIG: config.bits = %d\n", config.bits);
 		rc = 0;
 		break;
@@ -1189,7 +1234,8 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case AUDIO_GET_CONFIG:{
 		struct msm_audio_config config;
-		config.buffer_count = 2;
+		config.buffer_count = audio->buffer_count;
+		config.buffer_size = audio->buffer_size;
 		config.sample_rate = audio->out_sample_rate;
 		if (audio->out_channel_mode == AUDPP_CMD_PCM_INTF_MONO_V)
 			config.channel_count = 1;
@@ -1508,6 +1554,8 @@ static int audio_open(struct inode *inode, struct file *file)
 	dec_attrb |= audlpa_decs[audio->minor_no].dec_attrb;
 	audio->codec_ops.ioctl = audlpa_decs[audio->minor_no].ioctl;
 	audio->codec_ops.adec_params = audlpa_decs[audio->minor_no].adec_params;
+	audio->buffer_size = BUFSZ;
+	audio->buffer_count = MAX_BUF;
 
 	dec_attrb |= MSM_AUD_MODE_LP;
 

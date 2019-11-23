@@ -97,7 +97,28 @@ int cap_capable(struct task_struct *tsk, const struct cred *cred,
 	if (cap == CAP_NET_ADMIN && in_egroup_p(AID_NET_ADMIN))
 		return 0;
 #endif
-	return cap_raised(cred->cap_effective, cap) ? 0 : -EPERM;
+
+	for (;;) {
+		/* The creator of the user namespace has all caps. */
+		if (targ_ns != &init_user_ns && targ_ns->creator == cred->user)
+			return 0;
+
+		/* Do we have the necessary capabilities? */
+		if (targ_ns == cred->user->user_ns)
+			return cap_raised(cred->cap_effective, cap) ? 0 : -EPERM;
+
+		/* Have we tried all of the parent namespaces? */
+		if (targ_ns == &init_user_ns)
+			return -EPERM;
+
+		/*
+		 *If you have a capability in a parent user ns, then you have
+		 * it over all children user namespaces as well.
+		 */
+		targ_ns = targ_ns->creator->user_ns;
+	}
+
+	/* We never get here */
 }
 
 /**
@@ -523,15 +544,10 @@ skip:
 	new->suid = new->fsuid = new->euid;
 	new->sgid = new->fsgid = new->egid;
 
-	/* For init, we want to retain the capabilities set in the initial
-	 * task.  Thus we skip the usual capability rules
-	 */
-	if (!is_global_init(current)) {
-		if (effective)
-			new->cap_effective = new->cap_permitted;
-		else
-			cap_clear(new->cap_effective);
-	}
+	if (effective)
+		new->cap_effective = new->cap_permitted;
+	else
+		cap_clear(new->cap_effective);
 	bprm->cap_effective = effective;
 
 	/*

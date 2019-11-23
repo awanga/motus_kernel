@@ -405,7 +405,7 @@ int accel_i2c_set_config(int mode, int odr, int fs, int interval)
         accel_info.ipdev->poll_interval = ACCEL_NO_POLL;
 		if (accel_info.idev) {
 			input_report_switch (accel_info.idev, 6, TOGGLE_OFF);
-			input_sync (accel_info.idev);			
+			input_sync (accel_info.idev);
 		}
 		mutex_unlock (&accel_info.mlock);
 
@@ -437,8 +437,8 @@ int accel_i2c_set_config(int mode, int odr, int fs, int interval)
 		accel_events_mask |= ACCEL_EV_RAW_DATA;
 		accel_events_mask &= ~ACCEL_EV_SCREEN_ORIENT;
 		if (accel_info.idev) {
-			input_report_switch (accel_info.idev, 6, TOGGLE_OFF);			
-			input_sync (accel_info.idev);			
+			input_report_switch (accel_info.idev, 6, TOGGLE_OFF);
+			input_sync (accel_info.idev);
 		}
 /*		if (accel_info.irq2_disabled) {
 			enable_irq (accel_info.irq2);
@@ -447,9 +447,9 @@ int accel_i2c_set_config(int mode, int odr, int fs, int interval)
 #ifndef ACCEL_DATA_READY_IRQ
         atomic_set (&accel_info.data_ready_enabled, 1);
         if (accel_info.ipdev->poll_interval == ACCEL_NO_POLL) {
-            input_stop_polled_device (accel_info.ipdev);
+            accel_info.ipdev->close(accel_info.ipdev);
             accel_info.ipdev->poll_interval = interval;
-            input_start_polled_device (accel_info.ipdev);
+            accel_info.ipdev->open(accel_info.ipdev);
         } else {
             accel_info.ipdev->poll_interval = interval;
         }
@@ -487,8 +487,8 @@ int accel_i2c_set_config(int mode, int odr, int fs, int interval)
         accel_info.ipdev->poll_interval = ACCEL_NO_POLL;
 #endif
 		if (accel_info.idev) {
-			input_report_switch (accel_info.idev, 6, TOGGLE_ON);			
-			input_sync (accel_info.idev);			
+			input_report_switch (accel_info.idev, 6, TOGGLE_ON);
+			input_sync (accel_info.idev);
 		}
 /*		if (0 == accel_info.irq2_disabled) { // TODO: interrupt will never fire again if disabled twice!!!
 			disable_irq (accel_info.irq2);
@@ -527,8 +527,8 @@ int accel_i2c_set_config(int mode, int odr, int fs, int interval)
 		accel_events_mask |= ACCEL_EV_RAW_DATA;
 		accel_events_mask |= ACCEL_EV_SCREEN_ORIENT;
 		if (accel_info.idev) {
-			input_report_switch (accel_info.idev, 6, TOGGLE_ON);			
-			input_sync (accel_info.idev);			
+			input_report_switch (accel_info.idev, 6, TOGGLE_ON);
+			input_sync (accel_info.idev);
 		}
 /*		if (accel_info.irq2_disabled) {
 			enable_irq (accel_info.irq2);
@@ -537,9 +537,9 @@ int accel_i2c_set_config(int mode, int odr, int fs, int interval)
 #ifndef ACCEL_DATA_READY_IRQ
         atomic_set (&accel_info.data_ready_enabled, 1);
         if (accel_info.ipdev->poll_interval == ACCEL_NO_POLL) {
-            input_stop_polled_device (accel_info.ipdev);
+            accel_info.ipdev->close (accel_info.ipdev);
             accel_info.ipdev->poll_interval = interval;
-            input_start_polled_device (accel_info.ipdev);
+            accel_info.ipdev->open (accel_info.ipdev);
         } else {
             accel_info.ipdev->poll_interval = interval;
         }
@@ -589,8 +589,8 @@ int accel_i2c_set_config(int mode, int odr, int fs, int interval)
         accel_info.ipdev->poll_interval = ACCEL_NO_POLL;
 #endif
 		if (accel_info.idev) {
-			input_report_switch (accel_info.idev, 6, TOGGLE_ON);			
-			input_sync (accel_info.idev);			
+			input_report_switch (accel_info.idev, 6, TOGGLE_ON);
+			input_sync (accel_info.idev);
 		}
 /*		if (0 == accel_info.irq2_disabled) { // TODO: interrupt will never fire again if disabled twice!!!
 			disable_irq (accel_info.irq2);

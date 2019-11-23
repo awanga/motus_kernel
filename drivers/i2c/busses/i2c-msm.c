@@ -26,7 +26,6 @@
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/io.h>
-#include <asm/mach-types.h>
 #include <mach/board.h>
 #include <linux/mutex.h>
 #include <linux/timer.h>
@@ -196,6 +195,7 @@ msm_i2c_interrupt(int irq, void *devid)
 					dev->rd_acked = 0;
 				if (dev->cnt == 0)
 					goto out_complete;
+
 			} else {
 				/* Now that extra read-cycle-clocks aren't
 				 * generated, this becomes error condition
@@ -226,7 +226,7 @@ msm_i2c_interrupt(int irq, void *devid)
 			data = dev->msg->buf[dev->pos];
 #if defined(CONFIG_MACH_MOT)
 			if (dev->cnt == 1)
-#else 
+#else
 			if (dev->cnt == 1 && dev->rem == 1)
 #endif
 				data |= I2C_WRITE_DATA_LAST_BYTE;
@@ -328,6 +328,7 @@ msm_i2c_recover_bus_busy(struct msm_i2c_dev *dev, struct i2c_adapter *adap)
 		gpio_clk = dev->pdata->pri_clk;
 		gpio_dat = dev->pdata->pri_dat;
 	}
+
 #ifndef CONFIG_MACH_MOT
 	disable_irq(dev->irq);
 #endif
@@ -353,7 +354,7 @@ msm_i2c_recover_bus_busy(struct msm_i2c_dev *dev, struct i2c_adapter *adap)
 		gpio_direction_input(gpio_clk);
 		udelay(5);
 		if (!gpio_get_value(gpio_clk))
-			udelay(20);
+			usleep_range(20, 30);
 		if (!gpio_get_value(gpio_clk))
 			msleep(10);
 		gpio_clk_status = gpio_get_value(gpio_clk);
@@ -508,12 +509,10 @@ msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 				/* 1-byte-reads from slow devices in interrupt
 				 * context
 				 */
-
 				goto wait_for_int;
 			}
 
 			dev->rd_acked = 1;
-
 			writel(I2C_WRITE_DATA_LAST_BYTE,
 					dev->base + I2C_WRITE_DATA);
 			spin_unlock_irqrestore(&dev->lock, flags);
@@ -534,8 +533,7 @@ wait_for_int:
 
 		timeout = wait_for_completion_timeout(&complete, HZ);
 		if (!timeout) {
-			dev_err(dev->dev, "Transaction timed out for addr 0x%x\n",
-				msgs->addr);
+			dev_err(dev->dev, "Transaction timed out\n");
 			writel(I2C_WRITE_DATA_LAST_BYTE,
 				dev->base + I2C_WRITE_DATA);
 			msleep(100);
@@ -546,16 +544,10 @@ wait_for_int:
 			goto out_err;
 		}
 		if (dev->err) {
-#ifdef CONFIG_MACH_MOT
-            if (! (dev->msg->flags & I2C_M_NAK_LIKELY))
-#endif
 			dev_err(dev->dev,
 				"(%04x) Error during data xfer (%d)\n",
 				addr, dev->err);
 			ret = dev->err;
-#ifdef CONFIG_MACH_MOT
-			msm_i2c_recover_bus_busy(dev, adap);
-#endif
 			goto out_err;
 		}
 
@@ -633,7 +625,7 @@ msm_i2c_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "I2C region already claimed\n");
 		return -EBUSY;
 	}
-	clk = clk_get(&pdev->dev, "i2c_clk");
+	clk = clk_get(&pdev->dev, "core_clk");
 	if (IS_ERR(clk)) {
 		dev_err(&pdev->dev, "Could not get clock\n");
 		ret = PTR_ERR(clk);
@@ -687,7 +679,6 @@ msm_i2c_probe(struct platform_device *pdev)
 		if (remote_mutex_init(&dev->r_lock, &rmid) != 0)
 			pdata->rmutex = 0;
 	}
-
 	/* I2C_HS_CLK = I2C_CLK/(3*(HS_DIVIDER_VALUE+1) */
 	/* I2C_FS_CLK = I2C_CLK/(2*(FS_DIVIDER_VALUE+3) */
 	/* FS_DIVIDER_VALUE = ((I2C_CLK / I2C_FS_CLK) / 2) - 3 */
@@ -695,12 +686,12 @@ msm_i2c_probe(struct platform_device *pdev)
 	fs_div = ((i2c_clk / pdata->clk_freq) / 2) - 3;
 
 #ifdef CONFIG_MACH_MOT
-	/* 
+	/*
 		Divider formula from the spec gives wrong clock.
 		Experimentally it acts like i2c_clk = tcxo/(2*(fs_div+6))
 		Reduce fs_div by 3 to compensate
 	*/
-	fs_div -= 3; 
+	fs_div -= 3;
 #endif
 	hs_div = 3;
 	clk_ctl = ((hs_div & 0x7) << 8) | (fs_div & 0xff);
@@ -714,7 +705,6 @@ msm_i2c_probe(struct platform_device *pdev)
 #endif
 
 #if !defined(CONFIG_MACH_MOT)
-
 	i2c_set_adapdata(&dev->adap_pri, dev);
 	dev->adap_pri.algo = &msm_i2c_algo;
 	strlcpy(dev->adap_pri.name,
@@ -757,11 +747,6 @@ msm_i2c_probe(struct platform_device *pdev)
 	}
 	pm_qos_add_request(&dev->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
 					     PM_QOS_DEFAULT_VALUE);
-	/*if (ret) {
-		dev_err(&pdev->dev, "pm_qos_add_request failed\n");
-		goto err_pm_qos_add_request_failed;
-	}*/
-
 	disable_irq(dev->irq);
 	dev->suspended = 0;
 	mutex_init(&dev->mlock);
@@ -779,8 +764,6 @@ msm_i2c_probe(struct platform_device *pdev)
 
 	return 0;
 
-/*err_pm_qos_add_request_failed:
-	free_irq(dev->irq, dev);*/
 err_request_irq_failed:
 #if !defined(CONFIG_MACH_MOT)
 	i2c_del_adapter(&dev->adap_pri);
@@ -854,14 +837,7 @@ static int msm_i2c_suspend(struct platform_device *pdev, pm_message_t state)
 static int msm_i2c_resume(struct platform_device *pdev)
 {
 	struct msm_i2c_dev *dev = platform_get_drvdata(pdev);
-
 	dev->suspended = 0;
-	/*if (dev) {
-		clk_enable(dev->clk);
-		mutex_lock(&dev->mlock);		
-		dev->suspended = 0;
-		mutex_unlock(&dev->mlock);
-	}*/
 	return 0;
 }
 

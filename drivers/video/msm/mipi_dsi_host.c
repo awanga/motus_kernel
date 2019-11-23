@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -9,11 +9,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  *
  */
 
@@ -55,6 +50,39 @@ static int dsi_mdp_busy;
 static struct list_head pre_kickoff_list;
 static struct list_head post_kickoff_list;
 
+enum {
+	STAT_DSI_START,
+	STAT_DSI_ERROR,
+	STAT_DSI_CMD,
+	STAT_DSI_MDP
+};
+
+#ifdef CONFIG_FB_MSM_MDP40
+void mipi_dsi_mdp_stat_inc(int which)
+{
+	switch (which) {
+	case STAT_DSI_START:
+		mdp4_stat.dsi_mdp_start++;
+		break;
+	case STAT_DSI_ERROR:
+		mdp4_stat.intr_dsi_err++;
+		break;
+	case STAT_DSI_CMD:
+		mdp4_stat.intr_dsi_cmd++;
+		break;
+	case STAT_DSI_MDP:
+		mdp4_stat.intr_dsi_mdp++;
+		break;
+	default:
+		break;
+	}
+}
+#else
+void mipi_dsi_mdp_stat_inc(int which)
+{
+}
+#endif
+
 void mipi_dsi_init(void)
 {
 	init_completion(&dsi_dma_comp);
@@ -78,7 +106,7 @@ void mipi_dsi_enable_irq(void)
 		return;
 	}
 	dsi_irq_enabled = 1;
-	enable_irq(DSI_IRQ);
+	enable_irq(dsi_irq);
 	spin_unlock_irqrestore(&dsi_irq_lock, flags);
 }
 
@@ -94,7 +122,7 @@ void mipi_dsi_disable_irq(void)
 	}
 
 	dsi_irq_enabled = 0;
-	disable_irq(DSI_IRQ);
+	disable_irq(dsi_irq);
 	spin_unlock_irqrestore(&dsi_irq_lock, flags);
 }
 
@@ -112,8 +140,24 @@ void mipi_dsi_disable_irq(void)
 	}
 
 	dsi_irq_enabled = 0;
-	disable_irq_nosync(DSI_IRQ);
+	disable_irq_nosync(dsi_irq);
 	spin_unlock(&dsi_irq_lock);
+}
+
+void mipi_dsi_turn_on_clks(void)
+{
+	local_bh_disable();
+	mipi_dsi_ahb_ctrl(1);
+	mipi_dsi_clk_enable();
+	local_bh_enable();
+}
+
+void mipi_dsi_turn_off_clks(void)
+{
+	local_bh_disable();
+	mipi_dsi_clk_disable();
+	mipi_dsi_ahb_ctrl(0);
+	local_bh_enable();
 }
 
 static void mipi_dsi_action(struct list_head *act_list)
@@ -737,6 +781,11 @@ void mipi_dsi_host_init(struct mipi_panel_info *pinfo)
 	uint32 dsi_ctrl, intr_ctrl;
 	uint32 data;
 
+	if (mdp_rev > MDP_REV_41 || mdp_rev == MDP_REV_303)
+		pinfo->rgb_swap = DSI_RGB_SWAP_RGB;
+	else
+		pinfo->rgb_swap = DSI_RGB_SWAP_BGR;
+
 	if (pinfo->mode == DSI_VIDEO_MODE) {
 		data = 0;
 		if (pinfo->pulse_mode_hsa_he)
@@ -805,13 +854,6 @@ void mipi_dsi_host_init(struct mipi_panel_info *pinfo)
 	if (pinfo->data_lane0)
 		dsi_ctrl |= BIT(4);
 
-#ifdef RGB_SWAP
-	/* there has hardware problem
-	 * the color channel between dsi and mdp are swapped
-	 */
-	MIPI_OUTP(MIPI_DSI_BASE + 0x1c, 0x2000); /* rGB --> BGR */
-#endif
-
 	/* from frame buffer, low power mode */
 	/* DSI_COMMAND_MODE_DMA_CTRL */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x38, 0x14000000);
@@ -848,7 +890,10 @@ void mipi_dsi_host_init(struct mipi_panel_info *pinfo)
 	MIPI_OUTP(MIPI_DSI_BASE + 0x010c, intr_ctrl); /* DSI_INTL_CTRL */
 
 	/* turn esc, byte, dsi, pclk, sclk, hclk on */
-	MIPI_OUTP(MIPI_DSI_BASE + 0x118, 0x23f); /* DSI_CLK_CTRL */
+	if (mdp_rev >= MDP_REV_41)
+		MIPI_OUTP(MIPI_DSI_BASE + 0x118, 0x23f); /* DSI_CLK_CTRL */
+	else
+		MIPI_OUTP(MIPI_DSI_BASE + 0x118, 0x33f); /* DSI_CLK_CTRL */
 
 	dsi_ctrl |= BIT(0);	/* enable dsi */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x0000, dsi_ctrl);
@@ -963,6 +1008,7 @@ void mipi_dsi_mdp_busy_wait(struct msm_fb_data_type *mfd)
 				__func__, current->pid);
 }
 
+
 void mipi_dsi_cmd_mdp_start(void)
 {
 	unsigned long flag;
@@ -970,6 +1016,8 @@ void mipi_dsi_cmd_mdp_start(void)
 
 	if (!in_interrupt())
 		mipi_dsi_pre_kickoff_action();
+
+	mipi_dsi_mdp_stat_inc(STAT_DSI_START);
 
 	spin_lock_irqsave(&dsi_mdp_lock, flag);
 	mipi_dsi_enable_irq();
@@ -1005,14 +1053,6 @@ static struct dsi_cmd_desc dsi_tear_on_cmd = {
 static char set_tear_off[2] = {0x34, 0x00};
 static struct dsi_cmd_desc dsi_tear_off_cmd = {
 	DTYPE_DCS_WRITE, 1, 0, 0, 0, sizeof(set_tear_off), set_tear_off};
-
-#ifdef SET_TEAR_SCANLINE
-static char set_tear_scanline[3] = {0x44, 0x02, 0xcf};	/* line 719 */
-
-static struct dsi_cmd_desc dsi_tear_scanline_cmd = {
-	DTYPE_DCS_LWRITE, 1, 0, 0, 0,
-			sizeof(set_tear_scanline), set_tear_scanline};
-#endif
 
 void mipi_dsi_set_tear_on(struct msm_fb_data_type *mfd)
 {
@@ -1083,8 +1123,13 @@ int mipi_dsi_cmds_tx(struct msm_fb_data_type *mfd,
 		 * even it is video mode panel.
 		 */
 		/* make sure mdp dma is not txing pixel data */
-		if (mfd->panel_info.type == MIPI_CMD_PANEL)
+		if (mfd->panel_info.type == MIPI_CMD_PANEL) {
+#ifndef CONFIG_FB_MSM_MDP303
 			mdp4_dsi_cmd_dma_busy_wait(mfd);
+#else
+			mdp3_dsi_cmd_dma_busy_wait(mfd);
+#endif
+		}
 	}
 
 	spin_lock_irqsave(&dsi_mdp_lock, flag);
@@ -1143,6 +1188,12 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 	unsigned long flag;
 	char cmd;
 
+	if (mfd->panel_info.mipi.no_max_pkt_size) {
+		/* Only support rlen = 4*n */
+		rlen += 3;
+		rlen &= ~0x03;
+	}
+
 	len = rlen;
 	diff = 0;
 
@@ -1165,10 +1216,13 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 		cnt = len + 6; /* 4 bytes header + 2 bytes crc */
 	}
 
-
 	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
 		/* make sure mdp dma is not txing pixel data */
-		mdp4_dsi_cmd_dma_busy_wait(mfd);
+#ifndef CONFIG_FB_MSM_MDP303
+			mdp4_dsi_cmd_dma_busy_wait(mfd);
+#else
+			mdp3_dsi_cmd_dma_busy_wait(mfd);
+#endif
 	}
 
 	spin_lock_irqsave(&dsi_mdp_lock, flag);
@@ -1176,12 +1230,14 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 	dsi_mdp_busy = TRUE;
 	spin_unlock_irqrestore(&dsi_mdp_lock, flag);
 
-	/* packet size need to be set at every read */
-	pkt_size = len;
-	max_pktsize[0] = pkt_size;
-	mipi_dsi_buf_init(tp);
-	mipi_dsi_cmd_dma_add(tp, pkt_size_cmd);
-	mipi_dsi_cmd_dma_tx(tp);
+	if (!mfd->panel_info.mipi.no_max_pkt_size) {
+		/* packet size need to be set at every read */
+		pkt_size = len;
+		max_pktsize[0] = pkt_size;
+		mipi_dsi_buf_init(tp);
+		mipi_dsi_cmd_dma_add(tp, pkt_size_cmd);
+		mipi_dsi_cmd_dma_tx(tp);
+	}
 
 	mipi_dsi_buf_init(tp);
 	mipi_dsi_cmd_dma_add(tp, cmds);
@@ -1194,6 +1250,14 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 	 * at RDBK_DATA register already
 	 */
 	mipi_dsi_buf_init(rp);
+	if (mfd->panel_info.mipi.no_max_pkt_size) {
+		/*
+		 * expect rlen = n * 4
+		 * short alignement for start addr
+		 */
+		rp->data += 2;
+	}
+
 	mipi_dsi_cmd_dma_rx(rp, cnt);
 
 	spin_lock_irqsave(&dsi_mdp_lock, flag);
@@ -1201,6 +1265,17 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 	mipi_dsi_disable_irq();
 	complete(&dsi_mdp_comp);
 	spin_unlock_irqrestore(&dsi_mdp_lock, flag);
+
+	if (mfd->panel_info.mipi.no_max_pkt_size) {
+		/*
+		 * remove extra 2 bytes from previous
+		 * rx transaction at shift register
+		 * which was inserted during copy
+		 * shift registers to rx buffer
+		 * rx payload start from long alignment addr
+		 */
+		rp->data += 2;
+	}
 
 	cmd = rp->data[0];
 	switch (cmd) {
@@ -1388,6 +1463,7 @@ irqreturn_t mipi_dsi_isr(int irq, void *ptr)
 #endif
 
 	if (isr & DSI_INTR_ERROR) {
+		mipi_dsi_mdp_stat_inc(STAT_DSI_ERROR);
 		mipi_dsi_error();
 	}
 
@@ -1398,15 +1474,17 @@ irqreturn_t mipi_dsi_isr(int irq, void *ptr)
 	}
 
 	if (isr & DSI_INTR_CMD_DMA_DONE) {
+		mipi_dsi_mdp_stat_inc(STAT_DSI_CMD);
 		complete(&dsi_dma_comp);
 	}
 
 	if (isr & DSI_INTR_CMD_MDP_DONE) {
+		mipi_dsi_mdp_stat_inc(STAT_DSI_MDP);
 		spin_lock(&dsi_mdp_lock);
 		dsi_mdp_busy = FALSE;
+		mipi_dsi_disable_irq_nosync();
 		spin_unlock(&dsi_mdp_lock);
 		complete(&dsi_mdp_comp);
-		mipi_dsi_disable_irq_nosync();
 		mipi_dsi_post_kickoff_action();
 	}
 

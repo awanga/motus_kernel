@@ -33,7 +33,7 @@
 #include <asm/mach-types.h>
 #include <asm/gpio.h>
 #include <mach/pmic.h>
-#include <mach/vboost.h>
+#include <mach/vreg.h>
 #include <mach/msm_rpcrouter.h>
 #ifdef CONFIG_ANDROID_POWER
 #include <linux/android_power.h>
@@ -42,6 +42,7 @@
 #include <linux/earlysuspend.h>
 #endif
 
+static struct vreg *vreg_boost;
 
 //--------------------------------------------------------------------------------
 // 
@@ -138,7 +139,7 @@ static int cam_led_remove(struct platform_device *pdev);
 static int cam_led_register(struct device *dev);
 static void cam_led_unregister(void);
 static void cam_led_dev_release(struct device *dev);
-static int __devinit cam_led_init(void);
+static int __init cam_led_init(void);
 static void __exit cam_led_exit(void);
 static void cam_led_remove_device_files(void);
 static int cam_led_create_device_files(void);
@@ -351,10 +352,10 @@ static int cam_led_do_torch_level(unsigned value)
     }
     if (value == 0) {
          // Disable VBoost VREG to minimize current drain when LED is OFF
-        vboost_disable(VBOOST_CAMERA);
+        vreg_disable(vreg_boost);
     } else {
         // All Camera LED usage requires the VBoost VREG enabled
-        vboost_enable(VBOOST_CAMERA);
+        vreg_enable(vreg_boost);
     }
    // set the current level in the PMIC LCD output used for torch/flashlight
     printk("cam_led_do_torch_level : Intensity: %d , level: %d \n ", value, level); 
@@ -392,7 +393,7 @@ static int cam_led_do_burst_level(unsigned value)
             gpio_set_value(camera_led_gpio, led_gpio_off);
         } 
         // Disable VBoost VREG to minimize current drain
-        vboost_disable(VBOOST_CAMERA);
+        vreg_disable(vreg_boost);
 
         // Disable the flash LED burst current level in the PMIC
         ret |= mot_flash_led_set_current(0);
@@ -422,7 +423,7 @@ static int cam_led_do_burst_level(unsigned value)
         return ret;
     } 
     // All Camera LED usage requires the VBoost VREG enabled
-    vboost_enable(VBOOST_CAMERA);
+    vreg_enable(vreg_boost);
 
     // Convert brightness (0-255) to total current level (0-500 mA)
     total_curr = ((MAX_PMIC_BURST_CURRENT + MAX_PMIC_LCD_CURRENT)
@@ -1236,6 +1237,13 @@ static int __init cam_led_init(void)
     int ret = 0;
 
     printk (KERN_ERR "%s: enter\n", __FUNCTION__);
+
+    vreg_boost = vreg_get(NULL, "boost");
+    if (IS_ERR(vreg_boost)) {
+       printk(KERN_ERR "%s: vreg get failed (%ld)\n",
+           __func__, PTR_ERR(vreg_boost));
+           return PTR_ERR(vreg_boost);
+    }
 
     // Register this driver's entry points
     ret = platform_driver_register(&cam_led_driver);

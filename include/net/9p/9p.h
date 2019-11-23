@@ -241,10 +241,10 @@ enum p9_open_mode_t {
 
 /**
  * enum p9_perm_t - 9P permissions
- * @P9_DMDIR: mode bite for directories
+ * @P9_DMDIR: mode bit for directories
  * @P9_DMAPPEND: mode bit for is append-only
  * @P9_DMEXCL: mode bit for excluse use (only one open handle allowed)
- * @P9_DMMOUNT: mode bite for mount points
+ * @P9_DMMOUNT: mode bit for mount points
  * @P9_DMAUTH: mode bit for authentication file
  * @P9_DMTMP: mode bit for non-backed-up files
  * @P9_DMSYMLINK: mode bit for symbolic links (9P2000.u)
@@ -277,6 +277,30 @@ enum p9_perm_t {
 	P9_DMSETGID = 0x00040000,
 	P9_DMSETVTX = 0x00010000,
 };
+
+/* 9p2000.L open flags */
+#define P9_DOTL_RDONLY        00000000
+#define P9_DOTL_WRONLY        00000001
+#define P9_DOTL_RDWR          00000002
+#define P9_DOTL_NOACCESS      00000003
+#define P9_DOTL_CREATE        00000100
+#define P9_DOTL_EXCL          00000200
+#define P9_DOTL_NOCTTY        00000400
+#define P9_DOTL_TRUNC         00001000
+#define P9_DOTL_APPEND        00002000
+#define P9_DOTL_NONBLOCK      00004000
+#define P9_DOTL_DSYNC         00010000
+#define P9_DOTL_FASYNC        00020000
+#define P9_DOTL_DIRECT        00040000
+#define P9_DOTL_LARGEFILE     00100000
+#define P9_DOTL_DIRECTORY     00200000
+#define P9_DOTL_NOFOLLOW      00400000
+#define P9_DOTL_NOATIME       01000000
+#define P9_DOTL_CLOEXEC       02000000
+#define P9_DOTL_SYNC          04000000
+
+/* 9p2000.L at flags */
+#define P9_DOTL_AT_REMOVEDIR		0x200
 
 /**
  * enum p9_qid_t - QID types
@@ -320,6 +344,11 @@ enum p9_qid_t {
 /* Room for readdir header */
 #define P9_READDIRHDRSZ	24
 
+/* 9p2000.L lock type */
+#define P9_LOCK_TYPE_RDLCK 0
+#define P9_LOCK_TYPE_WRLCK 1
+#define P9_LOCK_TYPE_UNLCK 2
+
 /**
  * struct p9_str - length prefixed string type
  * @len: length of the string
@@ -362,7 +391,7 @@ struct p9_qid {
 };
 
 /**
- * struct p9_stat - file system metadata information
+ * struct p9_wstat - file system metadata information
  * @size: length prefix for this stat structure instance
  * @type: the type of the server (equivalent to a major number)
  * @dev: the sub-type of the server (equivalent to a minor number)
@@ -687,10 +716,10 @@ struct p9_rwstat {
  * @size: prefixed length of the structure
  * @id: protocol operating identifier of type &p9_msg_t
  * @tag: transaction id of the request
- * @offset: used by marshalling routines to track currentposition in buffer
+ * @offset: used by marshalling routines to track current position in buffer
  * @capacity: used by marshalling routines to track total malloc'd capacity
  * @pubuf: Payload user buffer given by the caller
- * @pubuf: Payload kernel buffer given by the caller
+ * @pkbuf: Payload kernel buffer given by the caller
  * @pbuf_size: pubuf/pkbuf(only one will be !NULL) size to be read/write.
  * @private: For transport layer's use.
  * @sdata: payload
@@ -714,7 +743,7 @@ struct p9_fcall {
 	size_t pbuf_size;
 	void *private;
 
-	uint8_t *sdata;
+	u8 *sdata;
 };
 
 struct p9_idpool;
@@ -728,7 +757,6 @@ void p9_idpool_put(int id, struct p9_idpool *p);
 int p9_idpool_check(int id, struct p9_idpool *p);
 
 int p9_error_init(void);
-int p9_errstr2errno(char *, int);
 int p9_trans_fd_init(void);
 void p9_trans_fd_exit(void);
 #endif /* NET_9P_H */

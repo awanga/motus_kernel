@@ -66,10 +66,12 @@
 #ifdef CONFIG_USB_FUNCTION
 #include <linux/usb/mass_storage_function.h>
 #endif
+#include "acpuclock.h"
 #include "devices.h"
 #include "clock.h"
 #include "pm.h"
 #include "board-mot.h"
+#include "board-msm7627-regulator.h"
 #include "timed_vibrator.h"
 #include "smd_private.h"
 
@@ -414,24 +416,30 @@ static struct i2c_board_info i2c_zeppelin_devices[] = {
 };
 
 static struct msm_pm_platform_data msm_pm_data[MSM_PM_SLEEP_MODE_NR] = {
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE].supported = 1,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE].suspend_enabled = 1,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE].idle_enabled = 1,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE].latency = 16000,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE].residency = 20000,
-
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].supported = 1,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].suspend_enabled = 1,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].idle_enabled = 1,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].latency = 12000,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].residency = 20000,
-
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].supported = 1,
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].suspend_enabled = 1,
-
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].idle_enabled = 1,
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].latency = 2000,
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].residency = 0,
+	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE] = {
+		.idle_supported = 1,
+		.suspend_supported = 1,
+		.idle_enabled = 1,
+		.suspend_enabled = 1,
+		.latency = 16000,
+		.residency = 20000,
+	},
+	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN] = {
+		.idle_supported = 1,
+		.suspend_supported = 1,
+		.idle_enabled = 1,
+		.suspend_enabled = 1,
+		.latency = 12000,
+		.residency = 20000,
+	},
+	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT] = {
+		.idle_supported = 1,
+		.suspend_supported = 1,
+		.idle_enabled = 1,
+		.suspend_enabled = 1,
+		.latency = 2000,
+		.residency = 0,
+	},
 };
 
 
@@ -477,11 +485,12 @@ static struct msm_i2c_platform_data msm_i2c_pdata = {
 
 static void __init msm_device_i2c_init(void)
 {
+#if 0
 	if (gpio_request(60, "i2c_pri_clk"))
 		pr_err("failed to request gpio i2c_pri_clk\n");
 	if (gpio_request(61, "i2c_pri_dat"))
 		pr_err("failed to request gpio i2c_pri_dat\n");
-
+#endif
 	msm_i2c_pdata.pm_lat =
 	msm_pm_data[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].latency;
 
@@ -638,7 +647,7 @@ static void sdcc_gpio_init(void)
 		__func__, rc);
 
 	/* SDC1 GPIOs */
-#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
+#if 0 /*def CONFIG_MMC_MSM_SDC1_SUPPORT*/
 	if (gpio_request(51, "sdc1_data_3"))
 		pr_err("failed to request gpio sdc1_data_3\n");
 	if (gpio_request(52, "sdc1_data_2"))
@@ -654,7 +663,7 @@ static void sdcc_gpio_init(void)
 #endif
 
 	/* SDC2 GPIOs */
-#ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
+#if 0 /*def CONFIG_MMC_MSM_SDC2_SUPPORT*/
 	if (gpio_request(62, "sdc2_clk"))
 		pr_err("failed to request gpio sdc2_clk\n");
 	if (gpio_request(63, "sdc2_cmd"))
@@ -975,10 +984,10 @@ static void config_camera_off_gpios(void)
 static struct msm_camera_device_platform_data msm_camera_device_data = {
     .camera_gpio_on  = config_camera_on_gpios,
     .camera_gpio_off = config_camera_off_gpios,
-    .ioext.mdcphy = MSM_MDC_PHYS,
-    .ioext.mdcsz  = MSM_MDC_SIZE,
-    .ioext.appphy = MSM_CLK_CTL_PHYS,
-    .ioext.appsz  = MSM_CLK_CTL_SIZE,
+    .ioext.mdcphy = MSM7XXX_MDC_PHYS,
+    .ioext.mdcsz  = MSM7XXX_MDC_SIZE,
+    .ioext.appphy = MSM7XXX_CLK_CTL_PHYS,
+    .ioext.appsz  = MSM7XXX_CLK_CTL_SIZE,
 };
 
 // MOTOROLA : Camera LED Class driver interfaces
@@ -1255,6 +1264,37 @@ static struct platform_device msm_bluesleep_device = {
 #define bt_power_init(x) do {} while (0)
 #endif /* CONFIG_BT */
 
+
+extern struct proccomm_regulator_platform_data msm7627_proccomm_regulator_data;
+
+static struct platform_device msm_proccomm_regulator_dev = {
+	.name   = PROCCOMM_REGULATOR_DEV_NAME,
+	.id     = -1,
+	.dev    = {
+		.platform_data = &msm7627_proccomm_regulator_data
+	}
+};
+
+#ifdef CONFIG_ION_MSM
+static struct ion_platform_data ion_pdata = {
+	.nr = 1,
+	.heaps = {
+		{
+			.id	= ION_SYSTEM_HEAP_ID,
+			.type	= ION_HEAP_TYPE_SYSTEM,
+			.name	= ION_VMALLOC_HEAP_NAME,
+		},
+	}
+};
+
+static struct platform_device ion_dev = {
+	.name = "ion-msm",
+	.id = 1,
+	.dev = { .platform_data = &ion_pdata },
+};
+#endif
+
+
 /*
     List of platform devices to use by init_machine
  */
@@ -1292,25 +1332,29 @@ static struct platform_device *devices[] __initdata = {
 	&ramconsole_device,
 #endif
 	&mot_vibrator,          /* Vibrator */
+#ifdef CONFIG_ION_MSM
+	&ion_dev,
+#endif
 };
 
-static struct msm_acpu_clock_platform_data mot_clock_data = {
-	.acpu_switch_time_us = 50,
-	.max_speed_delta_khz = 256000,
-	.vdd_switch_time_us = 62,
-	//.power_collapse_khz = 19200000,
-	//.wait_for_irq_khz = 128000000,
-	.max_axi_khz = 128000,
-};
+extern struct acpuclk_soc_data acpuclk_arm11_soc_data __initdata;
 
 /* Called by init_machine */
 void msm_serial_debug_init(unsigned int base, int irq,
 		struct device *clk_device, int signal_irq);
 
-void morrison_setup(void)
+static void __init msm_init_regulators(void)
+{
+	int rc = platform_device_register(&msm_proccomm_regulator_dev);
+	if (rc)
+		pr_err("%s: could not register regulator device: %d\n",
+				__func__, rc);
+}
+
+void __init morrison_setup(void)
 {
     unsigned size;
-    
+
     printk(KERN_INFO "%s, hw_rev: %x ...\n", __func__, mot_hw_rev);
 
     if (mot_hw_rev < 0x20) /* legacy HW */
@@ -1387,7 +1431,7 @@ void morrison_setup(void)
 	}
 }
 
-void motus_setup(void)
+void __init motus_setup(void)
 {
     printk(KERN_INFO "%s, hw_rev: %x ...\n", __func__, mot_hw_rev);
 
@@ -1439,7 +1483,7 @@ void motus_setup(void)
 	}
 }
 
-void zeppelin_setup(void)
+void __init zeppelin_setup(void)
 {
     printk(KERN_INFO "%s, hw_rev: %x ...\n", __func__, mot_hw_rev);
 
@@ -1582,25 +1626,21 @@ static void __init mot_init(void)
 
     /* All 7x01 2.0 based boards are expected to have RAM chips capable
      * of 160 MHz. */
-	if (cpu_is_msm7x01() &&
+	/*if (cpu_is_msm7x01() &&
 		 SOCINFO_VERSION_MAJOR(socinfo_get_version()) == 2)
-			mot_clock_data.max_axi_khz = 160000;
+			mot_clock_data.max_axi_khz = 160000;*/
+
+	msm_init_regulators();
 
 #if defined(CONFIG_MSM_SERIAL_DEBUGGER)
     msm_serial_debug_init(MSM_UART3_PHYS, INT_UART3,
                   &msm_device_uart3.dev, 1);
 #endif
 
-/*#ifdef CONFIG_USB_GADGET
-	msm_device_gadget_peripheral.dev.platform_data = &msm_gadget_pdata;
-#endif*/
 #ifdef CONFIG_USB_MSM_OTG_72K
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
 #endif
 
-#ifdef CONFIG_USB_EHCI_MSM
-	msm7x01a_init_host();
-#endif
 	vendor1 = smem_alloc(SMEM_ID_VENDOR1, sizeof(smem_mot_vendor1_type));
 	secure_hw = vendor1 ? vendor1->security_on : 1;
 
@@ -1608,9 +1648,9 @@ static void __init mot_init(void)
 	msm_hsusb_pdata.soc_version = socinfo_get_version();
 	msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_pdata;
 #elif CONFIG_USB_GADGET
-	msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_peripheral_pdata;
+	//msm_device_gadget_peripheral.dev.platform_data = &msm_gadget_pdata;
 #endif
-	msm_acpu_clock_init(&mot_clock_data);
+	acpuclk_init(&acpuclk_arm11_soc_data);
 	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
 
 	/* Get vreg & reset for the display */
@@ -1635,7 +1675,7 @@ static void __init mot_init(void)
     else if (machine_is_motus())
     {
         motus_setup();
-    } 
+    }
     else if (machine_is_zeppelin())
     {
         zeppelin_setup();
@@ -1766,11 +1806,10 @@ static void __init mot_map_io(void)
 {
 	msm_shared_ram_phys = 0x01F00000;
 	msm_map_common_io();
+	msm_clock_init(&msm7x01a_clock_init_data);
 
 	if (socinfo_init() < 0)
 		BUG();
-
-	msm_clock_init(msm_clocks_7x01a, msm_num_clocks_7x01a);
 }
 
 static void __init mot_init_irq(void)

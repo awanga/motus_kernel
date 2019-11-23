@@ -50,7 +50,7 @@ phys_addr_t xen_extra_mem_start, xen_extra_mem_size;
  */
 #define EXTRA_MEM_RATIO		(10)
 
-static __init void xen_add_extra_mem(unsigned long pages)
+static void __init xen_add_extra_mem(unsigned long pages)
 {
 	unsigned long pfn;
 
@@ -166,7 +166,7 @@ static unsigned long __init xen_set_identity(const struct e820entry *list,
 		if (last > end)
 			continue;
 
-		if (entry->type == E820_RAM) {
+		if ((entry->type == E820_RAM) || (entry->type == E820_UNUSABLE)) {
 			if (start > start_pci)
 				identity += set_phys_range_identity(
 						PFN_UP(start_pci), PFN_DOWN(start));
@@ -185,6 +185,31 @@ static unsigned long __init xen_set_identity(const struct e820entry *list,
 					PFN_UP(start_pci), PFN_DOWN(last));
 	return identity;
 }
+
+static unsigned long __init xen_get_max_pages(void)
+{
+	unsigned long max_pages = MAX_DOMAIN_PAGES;
+	domid_t domid = DOMID_SELF;
+	int ret;
+
+	/*
+	 * For the initial domain we use the maximum reservation as
+	 * the maximum page.
+	 *
+	 * For guest domains the current maximum reservation reflects
+	 * the current maximum rather than the static maximum. In this
+	 * case the e820 map provided to us will cover the static
+	 * maximum region.
+	 */
+	if (xen_initial_domain()) {
+		ret = HYPERVISOR_memory_op(XENMEM_maximum_reservation, &domid);
+		if (ret > 0)
+			max_pages = ret;
+	}
+
+	return min(max_pages, MAX_DOMAIN_PAGES);
+}
+
 /**
  * machine_specific_memory_setup - Hook for machine specific memory setup.
  **/
@@ -227,7 +252,7 @@ char * __init xen_memory_setup(void)
 
 	memcpy(map_raw, map, sizeof(map));
 	e820.nr_map = 0;
-	xen_extra_mem_start = max((1ULL << 32), mem_end);
+	xen_extra_mem_start = mem_end;
 	for (i = 0; i < memmap.nr_entries; i++) {
 		unsigned long long end;
 
@@ -262,6 +287,12 @@ char * __init xen_memory_setup(void)
 		if (map[i].size > 0)
 			e820_add_region(map[i].addr, map[i].size, map[i].type);
 	}
+	/* Align the balloon area so that max_low_pfn does not get set
+	 * to be at the _end_ of the PCI gap at the far end (fee01000).
+	 * Note that xen_extra_mem_start gets set in the loop above to be
+	 * past the last E820 region. */
+	if (xen_initial_domain() && (xen_extra_mem_start < (1ULL<<32)))
+		xen_extra_mem_start = (1ULL<<32);
 
 	/*
 	 * In domU, the ISA region is normal, usable memory, but we
@@ -286,6 +317,14 @@ char * __init xen_memory_setup(void)
 			"XEN START INFO");
 
 	sanitize_e820_map(e820.map, ARRAY_SIZE(e820.map), &e820.nr_map);
+
+	extra_limit = xen_get_max_pages();
+	if (max_pfn + extra_pages > extra_limit) {
+		if (extra_limit > max_pfn)
+			extra_pages = extra_limit - max_pfn;
+		else
+			extra_pages = 0;
+	}
 
 	extra_pages += xen_return_unused_memory(xen_start_info->nr_pages, &e820);
 
@@ -336,7 +375,7 @@ static void __init fiddle_vdso(void)
 #endif
 }
 
-static __cpuinit int register_callback(unsigned type, const void *func)
+static int __cpuinit register_callback(unsigned type, const void *func)
 {
 	struct callback_register callback = {
 		.type = type,

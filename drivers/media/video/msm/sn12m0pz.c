@@ -9,11 +9,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
  */
 
 #include <linux/delay.h>
@@ -1584,7 +1579,7 @@ init_done:
 	CDBG("init_done");
 	return rc;
 }
-static int __init sn12m0pz_init_client(struct i2c_client *client)
+static int __devinit sn12m0pz_init_client(struct i2c_client *client)
 {
 	/* Initialize the MSM_CAMI2C Chip */
 	init_waitqueue_head(&sn12m0pz_wait_queue);
@@ -1596,7 +1591,7 @@ static const struct i2c_device_id sn12m0pz_i2c_id[] = {
 	{ }
 };
 
-static int sn12m0pz_i2c_probe(struct i2c_client *client,
+static int __devinit sn12m0pz_i2c_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
 	int rc = 0;

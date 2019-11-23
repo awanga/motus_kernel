@@ -69,28 +69,3 @@ js-rtc-y = rtc.o
 
 obj-$(CONFIG_MSM_ROTATOR)	+= msm_rotator.o
 obj-$(CONFIG_MMC_GENERIC_CSDIO)	+= csdio.o
-
-# Files generated that shall be removed upon make clean
-clean-files := consolemap_deftbl.c defkeymap.c
-
-quiet_cmd_conmk = CONMK   $@
-      cmd_conmk = scripts/conmakehash $< > $@
-
-$(obj)/consolemap_deftbl.c: $(src)/$(FONTMAPFILE)
-	$(call cmd,conmk)
-
-$(obj)/defkeymap.o:  $(obj)/defkeymap.c
-
-# Uncomment if you're changing the keymap and have an appropriate
-# loadkeys version for the map. By default, we'll use the shipped
-# versions.
-# GENERATE_KEYMAP := 1
-
-ifdef GENERATE_KEYMAP
-
-$(obj)/defkeymap.c: $(obj)/%.c: $(src)/%.map
-	loadkeys --mktable $< > $@.tmp
-	sed -e 's/^static *//' $@.tmp > $@
-	rm $@.tmp
-
-endif

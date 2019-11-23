@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/qdsp5/adsp.h
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2010, 2012 Code Aurora Forum. All rights reserved.
  * Author: Iliyan Malchev <ibm@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -45,7 +45,7 @@ int adsp_video_verify_cmd(struct msm_adsp_module *module,
 int adsp_videoenc_verify_cmd(struct msm_adsp_module *module,
 			  unsigned int queue_id, void *cmd_data,
 			  size_t cmd_size);
-
+void q5audio_dsp_not_responding(void);
 
 struct adsp_event;
 
@@ -117,6 +117,10 @@ struct adsp_info {
 	struct adsp_rtos_mp_mtoa_init_info_type	*init_info_ptr;
 	wait_queue_head_t	init_info_wait;
 	unsigned 		init_info_state;
+	struct mutex lock;
+
+	/* Interrupt value */
+	int int_adsp;
 };
 
 #define RPC_ADSP_RTOS_ATOM_NULL_PROC 0
@@ -186,7 +190,7 @@ struct adsp_rtos_mp_mtoa_type {
 };
 
 /* ADSP RTOS MP Communications - Modem to APP's Init Info  */
-#if CONFIG_ADSP_RPC_VER > 0x30001
+#if CONFIG_MSM_AMSS_VERSION > 0x30001
 #define IMG_MAX         2
 #define ENTRIES_MAX     36
 #define MODULES_MAX     64
@@ -215,7 +219,7 @@ struct adsp_rtos_mp_mtoa_init_info_type {
 	uint32_t	task_to_module_tbl[IMG_MAX][ENTRIES_MAX];
 
 	uint32_t	module_table_size;
-#if CONFIG_ADSP_RPC_VER > 0x30001
+#if CONFIG_MSM_AMSS_VERSION > 0x30001
 	uint32_t	module_entries[MODULES_MAX];
 #else
 	uint32_t	module_entries[ENTRIES_MAX];
@@ -230,7 +234,7 @@ struct adsp_rtos_mp_mtoa_init_info_type {
 
 struct adsp_rtos_mp_mtoa_s_type {
 	struct adsp_rtos_mp_mtoa_header_type mp_mtoa_header;
-#if CONFIG_ADSP_RPC_VER == 0x30001
+#if CONFIG_MSM_AMSS_VERSION == 0x30001
 	uint32_t desc_field;
 #endif
 	union {

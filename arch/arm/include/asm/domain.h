@@ -70,6 +70,7 @@ void emulate_domain_manager_switch_mm(
 	unsigned long pgd_phys,
 	struct mm_struct *mm,
 	void (*switch_mm)(unsigned long pgd_phys, struct mm_struct *));
+
 #define set_domain(x) emulate_domain_manager_set(x)
 #else
 #define set_domain(x)					\

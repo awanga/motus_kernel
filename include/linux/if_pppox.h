@@ -61,9 +61,9 @@ struct pptp_addr {
  */
 #define PX_PROTO_OE    0 /* Currently just PPPoE */
 #define PX_PROTO_OL2TP 1 /* Now L2TP also */
-#define PX_PROTO_OLAC  2
-#define PX_PROTO_OPNS  3
-#define PX_PROTO_PPTP  4
+#define PX_PROTO_PPTP  2
+#define PX_PROTO_OLAC  3
+#define PX_PROTO_OPNS  4
 #define PX_MAX_PROTO   5
 
 struct sockaddr_pppox {
@@ -164,22 +164,6 @@ struct pppoe_opt {
 					     relayed to (PPPoE relaying) */
 };
 
-struct pppolac_opt {
-	__u32	local;
-	__u32	remote;
-	__u16	sequence;
-	__u8	sequencing;
-	int	(*backlog_rcv)(struct sock *sk_udp, struct sk_buff *skb);
-};
-
-struct pppopns_opt {
-	__u16	local;
-	__u16	remote;
-	__u32	sequence;
-	void	(*data_ready)(struct sock *sk_raw, int length);
-	int	(*backlog_rcv)(struct sock *sk_raw, struct sk_buff *skb);
-};
-
 struct pptp_opt {
 	struct pptp_addr src_addr;
 	struct pptp_addr dst_addr;
@@ -187,6 +171,25 @@ struct pptp_opt {
 	u32 seq_sent, seq_recv;
 	int ppp_flags;
 };
+
+struct pppolac_opt {
+	__u32		local;
+	__u32		remote;
+	__u32		recv_sequence;
+	__u32		xmit_sequence;
+	atomic_t	sequencing;
+	int		(*backlog_rcv)(struct sock *sk_udp, struct sk_buff *skb);
+};
+
+struct pppopns_opt {
+	__u16		local;
+	__u16		remote;
+	__u32		recv_sequence;
+	__u32		xmit_sequence;
+	void		(*data_ready)(struct sock *sk_raw, int length);
+	int		(*backlog_rcv)(struct sock *sk_raw, struct sk_buff *skb);
+};
+
 #include <net/sock.h>
 
 struct pppox_sock {
@@ -196,9 +199,9 @@ struct pppox_sock {
 	struct pppox_sock	*next;	  /* for hash table */
 	union {
 		struct pppoe_opt pppoe;
+		struct pptp_opt  pptp;
 		struct pppolac_opt lac;
 		struct pppopns_opt pns;
-		struct pptp_opt  pptp;
 	} proto;
 	__be16			num;
 };

@@ -12,6 +12,14 @@ config USB_OTG_UTILS
 	  Select this to make sure the build includes objects from
 	  the OTG infrastructure directory.
 
+config USB_OTG_WAKELOCK
+	bool "Hold a wakelock when USB connected"
+	depends on WAKELOCK
+	select USB_OTG_UTILS
+	help
+	  Select this to automatically hold a wakelock when USB is
+	  connected, preventing suspend.
+
 if USB || USB_GADGET
 
 #
@@ -67,7 +75,7 @@ config TWL4030_USB
 	  in host mode, low speed.
 
 config USB_MSM_OTG_72K
-	bool "OTG support for Qualcomm on-chip USB controller"
+	bool "OTG support for Legcay Qualcomm on-chip USB controller"
 	depends on ARCH_MSM
 	select USB_OTG_UTILS
 	default USB_MSM_72K
@@ -93,24 +101,6 @@ config MSM_OTG_ENABLE_A_WAIT_BCON_TIMEOUT
 	   cable is connected. But hardware is put into LPM. Say no if leakage
 	   currents in your system are minimum.
 
-config USB_MSM_ACA
-	bool "Support for Accessory Charger Adapter (ACA)"
-	depends on USB_MSM_OTG_72K
-	default n
-	help
-	  Accesory Charger Adapter is a charger specified in USB Battery
-	  Charging Specification(1.1). It enables OTG devices to charge
-	  while operating as a host or peripheral at the same time.
-
-config USB_MSM_STANDARD_ACA
-	bool "Support for Standard ACA"
-	depends on USB_MSM_ACA
-	default y
-	help
-	  A Standard ACA has a Standard-A receptacle on the Accessory Port,
-	  and can only be attached to a B-device.  RID_A and RID_GND states
-	  are only possible with Standard ACA.  Select this feature if the
-	  board is intended to support only Standard ACA.
 
 config TWL6030_USB
 	tristate "TWL6030 USB Transceiver Driver"
@@ -159,6 +149,25 @@ config USB_MSM_OTG
 	  This driver is not supported on boards like trout which
 	  has an external PHY.
 
+config USB_MSM_ACA
+	bool "Support for Accessory Charger Adapter (ACA)"
+	depends on (USB_MSM_OTG || USB_MSM_OTG_72K) && ARCH_MSM
+	default n
+	help
+	  Accesory Charger Adapter is a charger specified in USB Battery
+	  Charging Specification(1.1). It enables OTG devices to charge
+	  while operating as a host or peripheral at the same time.
+
+config USB_MSM_STANDARD_ACA
+	bool "Support for Standard ACA"
+	depends on USB_MSM_ACA
+	default USB_MSM_OTG_72K
+	help
+	  A Standard ACA has a Standard-A receptacle on the Accessory Port,
+	  and can only be attached to a B-device.  RID_A and RID_GND states
+	  are only possible with Standard ACA.  Select this feature if the
+	  board is intended to support only Standard ACA.
+
 config AB8500_USB
         tristate "AB8500 USB Transceiver Driver"
         depends on AB8500_CORE
@@ -167,5 +176,13 @@ config AB8500_USB
           Enable this to support the USB OTG transceiver in AB8500 chip.
           This transceiver supports high and full speed devices plus,
           in host mode, low speed.
+
+config FSL_USB2_OTG
+	bool "Freescale USB OTG Transceiver Driver"
+	depends on USB_EHCI_FSL && USB_GADGET_FSL_USB2
+	select USB_OTG
+	select USB_OTG_UTILS
+	help
+	  Enable this to support Freescale USB OTG transceiver.
 
 endif # USB || OTG

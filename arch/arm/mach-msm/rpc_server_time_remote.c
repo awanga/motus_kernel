@@ -27,12 +27,8 @@
 /* time_remote_mtoa server definitions. */
 
 #define TIME_REMOTE_MTOA_PROG 0x3000005d
-#define TIME_REMOTE_MTOA_VERS 0x9202a8e4
-#if 0 /*def CONFIG_MACH_MOT*/
-#define TIME_REMOTE_MTOA_VERS_OLD TIME_REMOTE_MTOA_VERS
-#else
 #define TIME_REMOTE_MTOA_VERS_OLD 0
-#endif
+#define TIME_REMOTE_MTOA_VERS 0x9202a8e4
 #define TIME_REMOTE_MTOA_VERS_COMP 0x00010002
 #define RPC_TIME_REMOTE_MTOA_NULL   0
 #define RPC_TIME_TOD_SET_APPS_BASES 2
@@ -165,9 +161,8 @@ static int __init rpc_server_init(void)
 	ret = msm_rpc_create_server(&rpc_server[1]);
 	if (ret < 0)
 		return ret;
-	printk(KERN_ERR "Using very old AMSS modem firmware.\n");
 	return msm_rpc_create_server(&rpc_server[0]);
 }
 
 
-late_initcall(rpc_server_init);
+module_init(rpc_server_init);

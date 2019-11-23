@@ -994,7 +994,7 @@ static int register_root_hub(struct usb_hcd *hcd)
 		spin_unlock_irq (&hcd_root_hub_lock);
 
 		/* Did the HC die before the root hub was registered? */
-		if (HCD_DEAD(hcd) || hcd->state == HC_STATE_HALT)
+		if (HCD_DEAD(hcd))
 			usb_hc_died (hcd);	/* This time clean up */
 	}
 
@@ -1395,11 +1395,10 @@ int usb_hcd_map_urb_for_dma(struct usb_hcd *hcd, struct urb *urb,
 					ret = -EAGAIN;
 				else
 					urb->transfer_flags |= URB_DMA_MAP_SG;
-				if (n != urb->num_sgs) {
-					urb->num_sgs = n;
+				urb->num_mapped_sgs = n;
+				if (n != urb->num_sgs)
 					urb->transfer_flags |=
 							URB_DMA_SG_COMBINED;
-				}
 			} else if (urb->sg) {
 				struct scatterlist *sg = urb->sg;
 				urb->transfer_dma = dma_map_page(
@@ -1589,6 +1588,9 @@ void usb_hcd_giveback_urb(struct usb_hcd *hcd, struct urb *urb, int status)
 	usbmon_urb_complete(&hcd->self, urb, status);
 	usb_unanchor_urb(urb);
 
+	if (hcd->driver->log_urb_complete)
+		hcd->driver->log_urb_complete(urb, "C", status);
+
 	/* pass ownership to the completion handler */
 	urb->status = status;
 	urb->complete (urb);
@@ -1772,6 +1774,8 @@ int usb_hcd_alloc_bandwidth(struct usb_device *udev,
 		struct usb_interface *iface = usb_ifnum_to_if(udev,
 				cur_alt->desc.bInterfaceNumber);
 
+		if (!iface)
+			return -EINVAL;
 		if (iface->resetting_device) {
 			/*
 			 * The USB core just reset the device, so the xHCI host
@@ -2136,9 +2140,6 @@ irqreturn_t usb_hcd_irq (int irq, void *__hcd)
 		set_bit(HCD_FLAG_SAW_IRQ, &hcd->flags);
 		if (hcd->shared_hcd)
 			set_bit(HCD_FLAG_SAW_IRQ, &hcd->shared_hcd->flags);
-
-		if (unlikely(hcd->state == HC_STATE_HALT))
-			usb_hc_died(hcd);
 		rc = IRQ_HANDLED;
 	}
 
@@ -2415,6 +2416,7 @@ int usb_add_hcd(struct usb_hcd *hcd,
 		rhdev->speed = USB_SPEED_SUPER;
 		break;
 	default:
+		retval = -EINVAL;
 		goto err_set_rh_speed;
 	}
 

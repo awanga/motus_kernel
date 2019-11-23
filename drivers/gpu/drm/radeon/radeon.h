@@ -93,6 +93,7 @@ extern int radeon_audio;
 extern int radeon_disp_priority;
 extern int radeon_hw_i2c;
 extern int radeon_pcie_gen2;
+extern int radeon_msi;
 
 /*
  * Copy from radeon_drv.h so we don't have to include both and have conflicting
@@ -165,6 +166,7 @@ struct radeon_clock {
 	uint32_t default_sclk;
 	uint32_t default_dispclk;
 	uint32_t dp_extclk;
+	uint32_t max_pixel_clock;
 };
 
 /*
@@ -178,6 +180,7 @@ void radeon_pm_resume(struct radeon_device *rdev);
 void radeon_combios_get_power_modes(struct radeon_device *rdev);
 void radeon_atombios_get_power_modes(struct radeon_device *rdev);
 void radeon_atom_set_voltage(struct radeon_device *rdev, u16 voltage_level, u8 voltage_type);
+int radeon_atom_get_max_vddc(struct radeon_device *rdev, u16 *voltage);
 void rs690_pm_info(struct radeon_device *rdev);
 extern int rv6xx_get_temp(struct radeon_device *rdev);
 extern int rv770_get_temp(struct radeon_device *rdev);
@@ -320,6 +323,7 @@ union radeon_gart_table {
 
 #define RADEON_GPU_PAGE_SIZE 4096
 #define RADEON_GPU_PAGE_MASK (RADEON_GPU_PAGE_SIZE - 1)
+#define RADEON_GPU_PAGE_SHIFT 12
 
 struct radeon_gart {
 	dma_addr_t			table_addr;
@@ -912,17 +916,17 @@ struct radeon_asic {
 	int (*copy_blit)(struct radeon_device *rdev,
 			 uint64_t src_offset,
 			 uint64_t dst_offset,
-			 unsigned num_pages,
+			 unsigned num_gpu_pages,
 			 struct radeon_fence *fence);
 	int (*copy_dma)(struct radeon_device *rdev,
 			uint64_t src_offset,
 			uint64_t dst_offset,
-			unsigned num_pages,
+			unsigned num_gpu_pages,
 			struct radeon_fence *fence);
 	int (*copy)(struct radeon_device *rdev,
 		    uint64_t src_offset,
 		    uint64_t dst_offset,
-		    unsigned num_pages,
+		    unsigned num_gpu_pages,
 		    struct radeon_fence *fence);
 	uint32_t (*get_engine_clock)(struct radeon_device *rdev);
 	void (*set_engine_clock)(struct radeon_device *rdev, uint32_t eng_clock);

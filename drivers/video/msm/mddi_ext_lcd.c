@@ -9,11 +9,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
  */
 
 #include "msm_fb.h"
@@ -58,13 +53,9 @@ static struct msm_fb_panel_data mddi_ext_lcd_panel_data = {
 	.panel_info.wait_cycle = 0,
 	.panel_info.bpp = 18,
 	.panel_info.fb_num = 2,
-#if defined(CONFIG_KERNEL_MOTOROLA)
-	.panel_info.clk_rate = 98304000,
-#else /* defined(CONFIG_KERNEL_MOTOROLA) */
 	.panel_info.clk_rate = 122880000,
 	.panel_info.clk_min  = 120000000,
 	.panel_info.clk_max  = 125000000,
-#endif /* defined(CONFIG_KERNEL_MOTOROLA) */
 	.on = mddi_ext_lcd_on,
 	.off = mddi_ext_lcd_off,
 };

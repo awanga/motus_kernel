@@ -22,12 +22,9 @@
 #include <linux/leds.h>
 #include <linux/slab.h>
 #include "leds.h"
-#ifdef CONFIG_MACH_MOT
-#define MODULE_NAME "led_class"
 
-static unsigned do_trace = 0;
-module_param(do_trace, uint, 0644);
-#endif
+#define LED_BUFF_SIZE 50
+
 static struct class *leds_class;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -76,23 +73,15 @@ static void led_update_brightness(struct led_classdev *led_cdev)
 		led_cdev->brightness = led_cdev->brightness_get(led_cdev);
 }
 
-static ssize_t led_brightness_show(struct device *dev, 
+static ssize_t led_brightness_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
-#ifdef CONFIG_MACH_MOT
-	ssize_t ret = 0;
-#endif
 
 	/* no lock needed for this */
 	led_update_brightness(led_cdev);
-#ifdef CONFIG_MACH_MOT
-	sprintf(buf, "%u\n", led_cdev->brightness);
-	ret = strlen(buf) + 1;
-	return ret;
-#else
-	return sprintf(buf, "%u\n", led_cdev->brightness);
-#endif
+
+	return snprintf(buf, LED_BUFF_SIZE, "%u\n", led_cdev->brightness);
 }
 
 static ssize_t led_brightness_store(struct device *dev,
@@ -112,13 +101,6 @@ static ssize_t led_brightness_store(struct device *dev,
 
 		if (state == LED_OFF)
 			led_trigger_remove(led_cdev);
-#ifdef CONFIG_MACH_MOT
-        if (do_trace) {
-            printk (KERN_INFO "%s: %s store %lu %s\n",
-                __FUNCTION__, led_cdev->name, state,
-                led_cdev->flags & LED_SUSPENDED ? "suspended" : "");
-        }
-#endif
 		led_set_brightness(led_cdev, state);
 	}
 
@@ -149,7 +131,7 @@ static ssize_t led_max_brightness_show(struct device *dev,
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%u\n", led_cdev->max_brightness);
+	return snprintf(buf, LED_BUFF_SIZE, "%u\n", led_cdev->max_brightness);
 }
 
 static struct device_attribute led_class_attrs[] = {
@@ -212,7 +194,8 @@ static void led_set_software_blink(struct led_classdev *led_cdev,
 	if (!led_cdev->blink_brightness)
 		led_cdev->blink_brightness = led_cdev->max_brightness;
 
-	if (delay_on == led_cdev->blink_delay_on &&
+	if (led_get_trigger_data(led_cdev) &&
+	    delay_on == led_cdev->blink_delay_on &&
 	    delay_off == led_cdev->blink_delay_off)
 		return;
 
@@ -349,6 +332,8 @@ void led_blink_set(struct led_classdev *led_cdev,
 		   unsigned long *delay_on,
 		   unsigned long *delay_off)
 {
+	del_timer_sync(&led_cdev->blink_timer);
+
 	if (led_cdev->blink_set &&
 	    !led_cdev->blink_set(led_cdev, delay_on, delay_off))
 		return;

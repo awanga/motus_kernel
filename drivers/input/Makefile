@@ -26,15 +26,6 @@ obj-$(CONFIG_INPUT_MISC)	+= misc/
 obj-$(CONFIG_INPUT_APMPOWER)	+= apm-power.o
 obj-$(CONFIG_INPUT_KEYRESET)	+= keyreset.o
 
-ifeq (y, $(findstring y, $(CONFIG_MACH_CALGARY) $(CONFIG_MACH_MOT)))
+ifeq ($(CONFIG_MACH_MOT),y)
 obj-$(CONFIG_INPUT_SFH7743)     += sfh7743.o
-endif
-
-
-obj-$(CONFIG_INPUT_KEYRESET)	+= keyreset.o
-
-obj-$(CONFIG_XEN_KBDDEV_FRONTEND)	+= xen-kbdfront.o
-ifeq ($(CONFIG_MACH_CALGARY),y)
-
-EXTRA_CFLAGS += -I$(srctree)/arch/arm/mach-msm
 endif

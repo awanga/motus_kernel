@@ -170,7 +170,7 @@ static struct msm_pm_time_stats {
 		CONFIG_MSM_IDLE_STATS_FIRST_BUCKET,
 };
 
-static void msm_pm_add_stat(enum msm_pm_time_stats_id id, int64_t t)
+void msm_pm_add_stat(enum msm_pm_time_stats_id id, int64_t t)
 {
 	int i;
 	int64_t bt;

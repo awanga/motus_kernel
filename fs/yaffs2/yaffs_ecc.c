@@ -67,6 +67,17 @@ static const unsigned char column_parity_table[] = {
 	0x69, 0x3c, 0x30, 0x65, 0x0c, 0x59, 0x55, 0x00,
 };
 
+/* Count the bits in an unsigned char or a U32 */
+int yaffs_count_bits(unsigned char x)
+{
+	int r = 0;
+	while (x) {
+		if (x & 1)
+			r++;
+		x >>= 1;
+	}
+	return r;
+}
 
 /* Calculate the ECC for a 256-byte block of data */
 void yaffs_ecc_cacl(const unsigned char *data, unsigned char *ecc)

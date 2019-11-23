@@ -9,11 +9,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
  */
 /*
  * SMD NMEA Driver -- Provides GPS NMEA device to SMD port interface.
@@ -125,10 +120,6 @@ static ssize_t nmea_read(struct file *fp, char __user *buf,
 	mutex_lock(&nmea_rx_buf_lock);
 	bytes_read = nmea_devp->bytes_read;
 	nmea_devp->bytes_read = 0;
-#ifdef CONFIG_MACH_MOT
-	if (bytes_read > count)
-		bytes_read = count;
-#endif
 	r = copy_to_user(buf, nmea_devp->rx_buf, bytes_read);
 	mutex_unlock(&nmea_rx_buf_lock);
 

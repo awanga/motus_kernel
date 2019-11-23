@@ -9,11 +9,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
  */
 
 #include <linux/miscdevice.h>
@@ -1317,7 +1312,6 @@ show_force_sync(struct device *dev, struct device_attribute *attr,
 	struct platform_device *pdev;
 	struct rpcsvr_platform_device *rpc_pdev;
 	struct rmt_storage_srv *srv;
-	int rc = 0;
 
 	pdev = container_of(dev, struct platform_device, dev);
 	rpc_pdev = container_of(pdev, struct rpcsvr_platform_device, base);
@@ -1328,8 +1322,7 @@ show_force_sync(struct device *dev, struct device_attribute *attr,
 		return -EINVAL;
 	}
 
-	rc = rmt_storage_force_sync(srv->rpc_client);
-	return rc;
+	return rmt_storage_force_sync(srv->rpc_client);
 }
 
 /* Returns -EINVAL for invalid sync token and an error value for any failure
@@ -1699,9 +1692,6 @@ static int __init rmt_storage_init(void)
 		goto unreg_mdm_rpc;
 	}
 
-	rmc->workq = create_singlethread_workqueue("rmt_storage");
-	if (!rmc->workq)
-		return -ENOMEM;
 #ifdef CONFIG_MSM_SDIO_SMEM
 	mdm_local_buf = kzalloc(MDM_LOCAL_BUF_SZ, GFP_KERNEL);
 	if (!mdm_local_buf) {
@@ -1722,6 +1712,10 @@ static int __init rmt_storage_init(void)
 	pr_debug("%s: Shadow memory at %p (phys=%lx), %d bytes\n", __func__,
 		 mdm_local_buf, __pa(mdm_local_buf), MDM_LOCAL_BUF_SZ);
 #endif
+
+	rmc->workq = create_singlethread_workqueue("rmt_storage");
+	if (!rmc->workq)
+		return -ENOMEM;
 
 #ifdef CONFIG_MSM_RMT_STORAGE_CLIENT_STATS
 	stats_dentry = debugfs_create_file("rmt_storage_stats", 0444, 0,

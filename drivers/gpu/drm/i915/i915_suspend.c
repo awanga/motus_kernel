@@ -34,6 +34,10 @@ static bool i915_pipe_enabled(struct drm_device *dev, enum pipe pipe)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32	dpll_reg;
 
+	/* On IVB, 3rd pipe shares PLL with another one */
+	if (pipe > 1)
+		return false;
+
 	if (HAS_PCH_SPLIT(dev))
 		dpll_reg = (pipe == PIPE_A) ? _PCH_DPLL_A : _PCH_DPLL_B;
 	else
@@ -370,6 +374,7 @@ static void i915_save_modeset_reg(struct drm_device *dev)
 
 	/* Fences */
 	switch (INTEL_INFO(dev)->gen) {
+	case 7:
 	case 6:
 		for (i = 0; i < 16; i++)
 			dev_priv->saveFENCE[i] = I915_READ64(FENCE_REG_SANDYBRIDGE_0 + (i * 8));
@@ -404,6 +409,7 @@ static void i915_restore_modeset_reg(struct drm_device *dev)
 
 	/* Fences */
 	switch (INTEL_INFO(dev)->gen) {
+	case 7:
 	case 6:
 		for (i = 0; i < 16; i++)
 			I915_WRITE64(FENCE_REG_SANDYBRIDGE_0 + (i * 8), dev_priv->saveFENCE[i]);
@@ -597,7 +603,7 @@ static void i915_restore_modeset_reg(struct drm_device *dev)
 	return;
 }
 
-void i915_save_display(struct drm_device *dev)
+static void i915_save_display(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
@@ -689,7 +695,7 @@ void i915_save_display(struct drm_device *dev)
 	i915_save_vga(dev);
 }
 
-void i915_restore_display(struct drm_device *dev)
+static void i915_restore_display(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
@@ -780,6 +786,7 @@ void i915_restore_display(struct drm_device *dev)
 		I915_WRITE(CPU_VGACNTRL, dev_priv->saveVGACNTRL);
 	else
 		I915_WRITE(VGACNTRL, dev_priv->saveVGACNTRL);
+
 	I915_WRITE(VGA0, dev_priv->saveVGA0);
 	I915_WRITE(VGA1, dev_priv->saveVGA1);
 	I915_WRITE(VGA_PD, dev_priv->saveVGA_PD);
@@ -796,6 +803,8 @@ int i915_save_state(struct drm_device *dev)
 
 	pci_read_config_byte(dev->pdev, LBB, &dev_priv->saveLBB);
 
+	mutex_lock(&dev->struct_mutex);
+
 	/* Hardware status page */
 	dev_priv->saveHWS = I915_READ(HWS_PGA);
 
@@ -811,6 +820,7 @@ int i915_save_state(struct drm_device *dev)
 		dev_priv->saveFDI_RXB_IMR = I915_READ(_FDI_RXB_IMR);
 		dev_priv->saveMCHBAR_RENDER_STANDBY =
 			I915_READ(RSTDBYCTL);
+		dev_priv->savePCH_PORT_HOTPLUG = I915_READ(PCH_PORT_HOTPLUG);
 	} else {
 		dev_priv->saveIER = I915_READ(IER);
 		dev_priv->saveIMR = I915_READ(IMR);
@@ -835,6 +845,8 @@ int i915_save_state(struct drm_device *dev)
 	for (i = 0; i < 3; i++)
 		dev_priv->saveSWF2[i] = I915_READ(SWF30 + (i << 2));
 
+	mutex_unlock(&dev->struct_mutex);
+
 	return 0;
 }
 
@@ -844,6 +856,8 @@ int i915_restore_state(struct drm_device *dev)
 	int i;
 
 	pci_write_config_byte(dev->pdev, LBB, dev_priv->saveLBB);
+
+	mutex_lock(&dev->struct_mutex);
 
 	/* Hardware status page */
 	I915_WRITE(HWS_PGA, dev_priv->saveHWS);
@@ -858,13 +872,14 @@ int i915_restore_state(struct drm_device *dev)
 		I915_WRITE(GTIMR, dev_priv->saveGTIMR);
 		I915_WRITE(_FDI_RXA_IMR, dev_priv->saveFDI_RXA_IMR);
 		I915_WRITE(_FDI_RXB_IMR, dev_priv->saveFDI_RXB_IMR);
+		I915_WRITE(PCH_PORT_HOTPLUG, dev_priv->savePCH_PORT_HOTPLUG);
 	} else {
 		I915_WRITE(IER, dev_priv->saveIER);
 		I915_WRITE(IMR, dev_priv->saveIMR);
 	}
+	mutex_unlock(&dev->struct_mutex);
 
-	/* Clock gating state */
-	intel_enable_clock_gating(dev);
+	intel_init_clock_gating(dev);
 
 	if (IS_IRONLAKE_M(dev)) {
 		ironlake_enable_drps(dev);
@@ -873,6 +888,8 @@ int i915_restore_state(struct drm_device *dev)
 
 	if (IS_GEN6(dev))
 		gen6_enable_rps(dev_priv);
+
+	mutex_lock(&dev->struct_mutex);
 
 	/* Cache mode state */
 	I915_WRITE (CACHE_MODE_0, dev_priv->saveCACHE_MODE_0 | 0xffff0000);
@@ -886,6 +903,8 @@ int i915_restore_state(struct drm_device *dev)
 	}
 	for (i = 0; i < 3; i++)
 		I915_WRITE(SWF30 + (i << 2), dev_priv->saveSWF2[i]);
+
+	mutex_unlock(&dev->struct_mutex);
 
 	intel_i2c_reset(dev);
 

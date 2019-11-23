@@ -55,29 +55,29 @@
 #define CCID_READ_DTR		_IOR('C', 3, int)
 
 struct usb_ccid_notification {
-unsigned char	buf[4];
+	unsigned char buf[4];
 } __packed;
 
 struct ccid_bulk_in_header {
-unsigned char bMessageType;
-unsigned long wLength;
-unsigned char bSlot;
-unsigned char bSeq;
-unsigned char bStatus;
-unsigned char bError;
-unsigned char bSpecific;
-unsigned char abData[ABDATA_SIZE];
-unsigned char bSizeToSend;
+	unsigned char bMessageType;
+	unsigned long wLength;
+	unsigned char bSlot;
+	unsigned char bSeq;
+	unsigned char bStatus;
+	unsigned char bError;
+	unsigned char bSpecific;
+	unsigned char abData[ABDATA_SIZE];
+	unsigned char bSizeToSend;
 } __packed;
 
 struct ccid_bulk_out_header {
-unsigned char bMessageType;
-unsigned long wLength;
-unsigned char bSlot;
-unsigned char bSeq;
-unsigned char bSpecific_0;
-unsigned char bSpecific_1;
-unsigned char bSpecific_2;
-unsigned char APDU[ABDATA_SIZE];
+	unsigned char bMessageType;
+	unsigned long wLength;
+	unsigned char bSlot;
+	unsigned char bSeq;
+	unsigned char bSpecific_0;
+	unsigned char bSpecific_1;
+	unsigned char bSpecific_2;
+	unsigned char APDU[ABDATA_SIZE];
 } __packed;
 #endif

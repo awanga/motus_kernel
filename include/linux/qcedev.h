@@ -1,15 +1,12 @@
-/* Qualcomm Crypto Engine driver QCEDEV API
- *
- */
 #ifndef __QCEDEV__H
 #define __QCEDEV__H
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
-
+#define QCEDEV_MAX_SHA_BLOCK_SIZE	64
 #define QCEDEV_MAX_BEARER	31
-#define QCEDEV_MAX_KEY_SIZE	32   /* 256 bits of keys. */
+#define QCEDEV_MAX_KEY_SIZE	64
 #define QCEDEV_MAX_IV_SIZE	32
 
 #define QCEDEV_MAX_BUFFERS      16
@@ -31,11 +28,11 @@
 *				user. Key already set by an external processor.
 */
 enum qcedev_oper_enum {
-  QCEDEV_OPER_DEC		= 0,
-  QCEDEV_OPER_ENC		= 1,
-  QCEDEV_OPER_DEC_NO_KEY	= 2,
-  QCEDEV_OPER_ENC_NO_KEY	= 3,
-  QCEDEV_OPER_LAST
+	QCEDEV_OPER_DEC		= 0,
+	QCEDEV_OPER_ENC		= 1,
+	QCEDEV_OPER_DEC_NO_KEY	= 2,
+	QCEDEV_OPER_ENC_NO_KEY	= 3,
+	QCEDEV_OPER_LAST
 };
 
 /**
@@ -97,7 +94,7 @@ enum qcedev_sha_alg_enum {
 * @len:				Size of the buffer
 */
 struct	buf_info {
-	union{
+	union {
 		uint32_t	offset;
 		uint8_t		*vaddr;
 	};
@@ -114,16 +111,6 @@ struct	qcedev_vbuf_info {
 	struct buf_info	dst[QCEDEV_MAX_BUFFERS];
 };
 
-struct	qcedev_sha_ctxt{
-	uint32_t		auth_data[2];
-	uint8_t			digest[QCEDEV_MAX_SHA_DIGEST];
-	uint32_t		diglen;
-	uint8_t			trailing_buf[64];
-	uint32_t		trailing_buf_len;
-	uint8_t			first_blk;
-	uint8_t			last_blk;
-};
-
 /**
 * struct qcedev_pmem_info - Stores PMEM buffer information
 * @fd_src:			Handle to /dev/adsp_pmem used to allocate
@@ -135,7 +122,7 @@ struct	qcedev_sha_ctxt{
 * @pmem_src_offset:		The offset from input/src buffer
 *				(allocated by PMEM)
 */
-struct	qcedev_pmem_info{
+struct	qcedev_pmem_info {
 	int		fd_src;
 	struct buf_info	src[QCEDEV_MAX_BUFFERS];
 	int		fd_dst;
@@ -191,7 +178,7 @@ struct	qcedev_pmem_info{
 */
 struct	qcedev_cipher_op_req {
 	uint8_t				use_pmem;
-	union{
+	union {
 		struct qcedev_pmem_info	pmem;
 		struct qcedev_vbuf_info	vbuf;
 	};
@@ -215,8 +202,9 @@ struct	qcedev_cipher_op_req {
 * @data_len (IN):		Length of data to be hashed
 * @digest (IN/OUT):		Returns the hashed data information
 * @diglen (OUT):		Size of the hashed/digest data
+* @authkey (IN):		Pointer to authentication key for HMAC
+* @authklen (IN):		Size of the authentication key
 * @alg (IN):			Secure Hash algorithm
-* @ctxt (Reserved):		RESERVED: User should not modify this data.
 */
 struct	qcedev_sha_op_req {
 	struct buf_info			data[QCEDEV_MAX_BUFFERS];
@@ -224,8 +212,9 @@ struct	qcedev_sha_op_req {
 	uint32_t			data_len;
 	uint8_t				digest[QCEDEV_MAX_SHA_DIGEST];
 	uint32_t			diglen;
+	uint8_t				*authkey;
+	uint32_t			authklen;
 	enum qcedev_sha_alg_enum	alg;
-	struct qcedev_sha_ctxt		ctxt;
 };
 
 
@@ -247,4 +236,6 @@ struct	qcedev_sha_op_req {
 	_IO(QCEDEV_IOC_MAGIC, 7)
 #define QCEDEV_IOCTL_UNLOCK_CE	\
 	_IO(QCEDEV_IOC_MAGIC, 8)
+#define QCEDEV_IOCTL_GET_CMAC_REQ	\
+	_IOWR(QCEDEV_IOC_MAGIC, 9, struct qcedev_cipher_op_req)
 #endif /* _QCEDEV__H */

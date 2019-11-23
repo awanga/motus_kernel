@@ -9,11 +9,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
  */
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -2761,6 +2756,7 @@ static bool timpani_register_is_cacheable(u8 reg)
 	case TIMPANI_A_CDC_ANC2_CTL2:
 	case TIMPANI_A_CDC_ANC2_FF_FB_SHIFT:
 	case TIMPANI_A_AUXPGA_LR_GAIN:
+	case TIMPANI_A_CDC_ANC_INPUT_MUX:
 		return false;
 	default:
 		return true;
@@ -2787,19 +2783,12 @@ static int adie_codec_write(u8 reg, u8 mask, u8 val)
 	}
 	new_val = (val & mask) | (timpani_shadow[reg] & ~mask);
 	if (!(timpani_register_is_cacheable(reg) &&
-	     (new_val == timpani_shadow[reg]))) {
+		(new_val == timpani_shadow[reg]))) {
+
 		rc = marimba_write_bit_mask(adie_codec.pdrv_ptr, reg,  &new_val,
 			1, 0xFF);
-
-		if ((rc == -ETIMEDOUT) || (rc == -ENOTCONN)) {
-			pr_info("%s: Timpani write error, retrying\n",
-				__func__);
-			rc = marimba_write_bit_mask(adie_codec.pdrv_ptr, reg,
-				&new_val, 1, 0xFF);
-		}
-
 		if (IS_ERR_VALUE(rc)) {
-			pr_err("%s: Timpani write error\n", __func__);
+			pr_err("%s: fail to write reg %x\n", __func__, reg);
 			rc = -EIO;
 			goto error;
 		}
@@ -2807,6 +2796,7 @@ static int adie_codec_write(u8 reg, u8 mask, u8 val)
 		pr_debug("%s: write reg %x val %x new value %x\n", __func__,
 			reg, val, new_val);
 	}
+
 error:
 	return rc;
 }
@@ -2862,16 +2852,7 @@ static int adie_codec_refcnt_write(u8 reg, u8 mask, u8 val, enum refcnt cnt,
 
 static int adie_codec_read(u8 reg, u8 *val)
 {
-	int rc;
-	rc = marimba_read(adie_codec.pdrv_ptr, reg, val, 1);
-	if ((rc == -ETIMEDOUT) || (rc == -ENOTCONN)) {
-		pr_info("%s: Timpani read error, retrying\n", __func__);
-		rc = marimba_read(adie_codec.pdrv_ptr, reg, val, 1);
-	}
-	if (rc)
-		pr_err("%s: fail to read reg %x, (error %d)\n", __func__,
-				reg, rc);
-	return rc;
+	return marimba_read(adie_codec.pdrv_ptr, reg, val, 1);
 }
 
 static int timpani_adie_codec_setpath(struct adie_codec_path *path_ptr,
@@ -3000,7 +2981,7 @@ static int timpani_adie_codec_enable_anc(struct adie_codec_path *rx_path_ptr,
 		goto error;
 	}
 	if (enable) {
-		if (!calibration_writes | !calibration_writes->writes) {
+		if (!calibration_writes || !calibration_writes->writes) {
 			pr_err("%s: No ANC calibration data\n", __func__);
 			rc = -EPERM;
 			goto error;
@@ -3291,6 +3272,154 @@ int timpani_adie_codec_set_device_analog_volume(
 	return 0;
 }
 
+enum adie_vol_type {
+	ADIE_CODEC_RX_DIG_VOL,
+	ADIE_CODEC_TX_DIG_VOL,
+	ADIE_CODEC_VOL_TYPE_MAX
+};
+
+#define CDC_RX1LG		0x84
+#define CDC_RX1RG		0x85
+#define CDC_TX1LG		0x86
+#define CDC_TX1RG		0x87
+#define	DIG_VOL_MASK		0xFF
+
+#define CDC_GCTL1		0x8A
+#define RX1_PGA_UPDATE_L	0x04
+#define RX1_PGA_UPDATE_R	0x08
+#define TX1_PGA_UPDATE_L	0x40
+#define TX1_PGA_UPDATE_R	0x80
+#define CDC_GCTL1_RX_MASK	0x0F
+#define CDC_GCTL1_TX_MASK	0xF0
+
+enum {
+	TIMPANI_MIN_DIG_VOL	= -84,	/* in DB*/
+	TIMPANI_MAX_DIG_VOL	=  16,	/* in DB*/
+	TIMPANI_DIG_VOL_STEP	=  3	/* in DB*/
+};
+
+static int timpani_adie_codec_set_dig_vol(enum adie_vol_type vol_type,
+	u32 num_chan, u32 vol_per)
+{
+	u8 reg_left, reg_right;
+	u8 gain_reg_val, gain_reg_mask;
+	s8 new_reg_val, cur_reg_val;
+	s8 step_size;
+
+	adie_codec_read(CDC_GCTL1, &gain_reg_val);
+
+	if (vol_type == ADIE_CODEC_RX_DIG_VOL) {
+
+		pr_debug("%s : RX DIG VOL. num_chan = %u\n", __func__,
+				num_chan);
+		reg_left =  CDC_RX1LG;
+		reg_right = CDC_RX1RG;
+
+		if (num_chan == 1)
+			gain_reg_val |=  RX1_PGA_UPDATE_L;
+		else
+			gain_reg_val |= (RX1_PGA_UPDATE_L | RX1_PGA_UPDATE_R);
+
+		gain_reg_mask = CDC_GCTL1_RX_MASK;
+	} else {
+
+		pr_debug("%s : TX DIG VOL. num_chan = %u\n", __func__,
+				num_chan);
+		reg_left = CDC_TX1LG;
+		reg_right = CDC_TX1RG;
+
+		if (num_chan == 1)
+			gain_reg_val |=  TX1_PGA_UPDATE_L;
+		else
+			gain_reg_val |= (TX1_PGA_UPDATE_L | TX1_PGA_UPDATE_R);
+
+		gain_reg_mask = CDC_GCTL1_TX_MASK;
+	}
+
+	adie_codec_read(reg_left, &cur_reg_val);
+
+	pr_debug("%s: vol_per = %d cur_reg_val = %d 0x%x\n", __func__, vol_per,
+			cur_reg_val, cur_reg_val);
+
+	new_reg_val =  TIMPANI_MIN_DIG_VOL +
+		(((TIMPANI_MAX_DIG_VOL - TIMPANI_MIN_DIG_VOL) * vol_per) / 100);
+
+	pr_debug("new_reg_val = %d 0x%x\n", new_reg_val, new_reg_val);
+
+	if (new_reg_val > cur_reg_val) {
+		step_size = TIMPANI_DIG_VOL_STEP;
+	} else if (new_reg_val < cur_reg_val) {
+		step_size = -TIMPANI_DIG_VOL_STEP;
+	} else {
+		pr_debug("new_reg_val and cur_reg_val are same 0x%x\n",
+				new_reg_val);
+		return 0;
+	}
+
+	while (cur_reg_val != new_reg_val) {
+
+		if (((new_reg_val > cur_reg_val) &&
+			((new_reg_val - cur_reg_val) < TIMPANI_DIG_VOL_STEP)) ||
+			((cur_reg_val > new_reg_val) &&
+			((cur_reg_val - new_reg_val)
+			 < TIMPANI_DIG_VOL_STEP))) {
+
+			cur_reg_val = new_reg_val;
+
+			pr_debug("diff less than step. write new_reg_val = %d"
+				" 0x%x\n", new_reg_val, new_reg_val);
+
+		 } else {
+			cur_reg_val = cur_reg_val + step_size;
+
+			pr_debug("cur_reg_val = %d 0x%x\n",
+					cur_reg_val, cur_reg_val);
+		 }
+
+		adie_codec_write(reg_left, DIG_VOL_MASK, cur_reg_val);
+
+		if (num_chan == 2)
+			adie_codec_write(reg_right, DIG_VOL_MASK, cur_reg_val);
+
+		adie_codec_write(CDC_GCTL1, gain_reg_mask, gain_reg_val);
+	}
+	return 0;
+}
+
+static int timpani_adie_codec_set_device_digital_volume(
+		struct adie_codec_path *path_ptr,
+		u32 num_channels, u32 vol_percentage /* in percentage */)
+{
+	enum adie_vol_type vol_type;
+
+	if (!path_ptr  || (path_ptr->curr_stage !=
+				ADIE_CODEC_DIGITAL_ANALOG_READY)) {
+		pr_info("%s: timpani codec not ready for volume control\n",
+		       __func__);
+		return  -EPERM;
+	}
+
+	if (num_channels > 2) {
+		pr_err("%s: timpani odec only supports max two channels\n",
+		       __func__);
+		return -EINVAL;
+	}
+
+	if (path_ptr->profile->path_type == ADIE_CODEC_RX) {
+		vol_type = ADIE_CODEC_RX_DIG_VOL;
+	} else if (path_ptr->profile->path_type == ADIE_CODEC_TX) {
+		vol_type = ADIE_CODEC_TX_DIG_VOL;
+	} else {
+		pr_err("%s: invalid device data neither RX nor TX\n",
+				__func__);
+		return -EINVAL;
+	}
+
+	timpani_adie_codec_set_dig_vol(vol_type, num_channels, vol_percentage);
+
+	return 0;
+}
+
 static const struct adie_codec_operations timpani_adie_ops = {
 	.codec_id = TIMPANI_ID,
 	.codec_open = timpani_adie_codec_open,
@@ -3303,6 +3432,8 @@ static const struct adie_codec_operations timpani_adie_ops = {
 	.codec_enable_anc = timpani_adie_codec_enable_anc,
 	.codec_set_device_analog_volume =
 		timpani_adie_codec_set_device_analog_volume,
+	.codec_set_device_digital_volume =
+		timpani_adie_codec_set_device_digital_volume,
 };
 
 static void timpani_codec_populate_shadow_registers(void)

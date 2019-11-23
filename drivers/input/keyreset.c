@@ -25,7 +25,6 @@
 
 struct keyreset_state {
 	struct input_handler input_handler;
-	int crash_key;
 	unsigned long keybit[BITS_TO_LONGS(KEY_CNT)];
 	unsigned long upbit[BITS_TO_LONGS(KEY_CNT)];
 	unsigned long key[BITS_TO_LONGS(KEY_CNT)];
@@ -34,23 +33,17 @@ struct keyreset_state {
 	int key_down;
 	int key_up;
 	int restart_disabled;
+	int (*reset_fn)(void);
 };
 
 int restart_requested;
-int crash_requested;
-
 static void deferred_restart(struct work_struct *dummy)
 {
 	restart_requested = 2;
 	sys_sync();
 	restart_requested = 3;
-	if (crash_requested) {
-		BUG();
-	} else {
-		kernel_restart(NULL);
-	}
+	kernel_restart(NULL);
 }
-
 static DECLARE_WORK(restart_work, deferred_restart);
 
 static void keyreset_event(struct input_handle *handle, unsigned int type,
@@ -64,9 +57,6 @@ static void keyreset_event(struct input_handle *handle, unsigned int type,
 
 	if (code >= KEY_MAX)
 		return;
-
-	if (code == state->crash_key)
-		crash_requested = value;
 
 	if (!test_bit(code, state->keybit))
 		return;
@@ -96,16 +86,15 @@ static void keyreset_event(struct input_handle *handle, unsigned int type,
 	if (value && !state->restart_disabled &&
 	    state->key_down == state->key_down_target) {
 		state->restart_disabled = 1;
-		if (crash_requested) {
-			printk(KERN_EMERG "current process is %d:%s, prio is %d.\n",
-			       current->pid, current->comm, current->prio);
-			dump_stack();
-		}
 		if (restart_requested)
 			panic("keyboard reset failed, %d", restart_requested);
-		pr_info("keyboard reset\n");
-		schedule_work(&restart_work);
-		restart_requested = 1;
+		if (state->reset_fn) {
+			restart_requested = state->reset_fn();
+		} else {
+			pr_info("keyboard reset\n");
+			schedule_work(&restart_work);
+			restart_requested = 1;
+		}
 	}
 done:
 	spin_unlock_irqrestore(&state->lock, flags);
@@ -185,7 +174,6 @@ static int keyreset_probe(struct platform_device *pdev)
 	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (!state)
 		return -ENOMEM;
-	state->crash_key = pdata->crash_key;
 
 	spin_lock_init(&state->lock);
 	keyp = pdata->keys_down;
@@ -204,6 +192,10 @@ static int keyreset_probe(struct platform_device *pdev)
 			__set_bit(key, state->upbit);
 		}
 	}
+
+	if (pdata->reset_fn)
+		state->reset_fn = pdata->reset_fn;
+
 	state->input_handler.event = keyreset_event;
 	state->input_handler.connect = keyreset_connect;
 	state->input_handler.disconnect = keyreset_disconnect;

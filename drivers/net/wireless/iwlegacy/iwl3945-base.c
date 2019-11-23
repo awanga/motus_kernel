@@ -841,7 +841,7 @@ static void iwl3945_rx_card_state_notif(struct iwl_priv *priv,
 		wiphy_rfkill_set_hw_state(priv->hw->wiphy,
 				test_bit(STATUS_RF_KILL_HW, &priv->status));
 	else
-		wake_up_interruptible(&priv->wait_command_queue);
+		wake_up(&priv->wait_command_queue);
 }
 
 /**
@@ -2518,7 +2518,7 @@ static void iwl3945_alive_start(struct iwl_priv *priv)
 	iwl3945_reg_txpower_periodic(priv);
 
 	IWL_DEBUG_INFO(priv, "ALIVE processing complete.\n");
-	wake_up_interruptible(&priv->wait_command_queue);
+	wake_up(&priv->wait_command_queue);
 
 	return;
 
@@ -2549,7 +2549,7 @@ static void __iwl3945_down(struct iwl_priv *priv)
 	iwl_legacy_clear_driver_stations(priv);
 
 	/* Unblock any waiting calls */
-	wake_up_interruptible_all(&priv->wait_command_queue);
+	wake_up_all(&priv->wait_command_queue);
 
 	/* Wipe out the EXIT_PENDING status bit if we are not actually
 	 * exiting the module */
@@ -2748,11 +2748,12 @@ static void iwl3945_bg_init_alive_start(struct work_struct *data)
 	struct iwl_priv *priv =
 	    container_of(data, struct iwl_priv, init_alive_start.work);
 
-	if (test_bit(STATUS_EXIT_PENDING, &priv->status))
-		return;
-
 	mutex_lock(&priv->mutex);
+	if (test_bit(STATUS_EXIT_PENDING, &priv->status))
+		goto out;
+
 	iwl3945_init_alive_start(priv);
+out:
 	mutex_unlock(&priv->mutex);
 }
 
@@ -2761,11 +2762,12 @@ static void iwl3945_bg_alive_start(struct work_struct *data)
 	struct iwl_priv *priv =
 	    container_of(data, struct iwl_priv, alive_start.work);
 
-	if (test_bit(STATUS_EXIT_PENDING, &priv->status))
-		return;
-
 	mutex_lock(&priv->mutex);
+	if (test_bit(STATUS_EXIT_PENDING, &priv->status))
+		goto out;
+
 	iwl3945_alive_start(priv);
+out:
 	mutex_unlock(&priv->mutex);
 }
 
@@ -2908,14 +2910,13 @@ int iwl3945_request_scan(struct iwl_priv *priv, struct ieee80211_vif *vif)
 		IWL_WARN(priv, "Invalid scan band\n");
 		return -EIO;
 	}
-
 	/*
-	 * If active scaning is requested but a certain channel
-	 * is marked passive, we can do active scanning if we
-	 * detect transmissions.
+	 * If active scaning is requested but a certain channel is marked
+	 * passive, we can do active scanning if we detect transmissions. For
+	 * passive only scanning disable switching to active on any channel.
 	 */
 	scan->good_CRC_th = is_active ? IWL_GOOD_CRC_TH_DEFAULT :
-					IWL_GOOD_CRC_TH_DISABLED;
+					IWL_GOOD_CRC_TH_NEVER;
 
 	if (!priv->is_internal_short_scan) {
 		scan->tx_cmd.len = cpu_to_le16(
@@ -2995,10 +2996,12 @@ static void iwl3945_bg_restart(struct work_struct *data)
 	} else {
 		iwl3945_down(priv);
 
-		if (test_bit(STATUS_EXIT_PENDING, &priv->status))
-			return;
-
 		mutex_lock(&priv->mutex);
+		if (test_bit(STATUS_EXIT_PENDING, &priv->status)) {
+			mutex_unlock(&priv->mutex);
+			return;
+		}
+
 		__iwl3945_up(priv);
 		mutex_unlock(&priv->mutex);
 	}
@@ -3009,11 +3012,12 @@ static void iwl3945_bg_rx_replenish(struct work_struct *data)
 	struct iwl_priv *priv =
 	    container_of(data, struct iwl_priv, rx_replenish);
 
-	if (test_bit(STATUS_EXIT_PENDING, &priv->status))
-		return;
-
 	mutex_lock(&priv->mutex);
+	if (test_bit(STATUS_EXIT_PENDING, &priv->status))
+		goto out;
+
 	iwl3945_rx_replenish(priv);
+out:
 	mutex_unlock(&priv->mutex);
 }
 
@@ -3120,7 +3124,7 @@ static int iwl3945_mac_start(struct ieee80211_hw *hw)
 
 	/* Wait for START_ALIVE from ucode. Otherwise callbacks from
 	 * mac80211 will not be run successfully. */
-	ret = wait_event_interruptible_timeout(priv->wait_command_queue,
+	ret = wait_event_timeout(priv->wait_command_queue,
 			test_bit(STATUS_READY, &priv->status),
 			UCODE_READY_TIMEOUT);
 	if (!ret) {
@@ -3810,7 +3814,6 @@ static int iwl3945_init_drv(struct iwl_priv *priv)
 	INIT_LIST_HEAD(&priv->free_frames);
 
 	mutex_init(&priv->mutex);
-	mutex_init(&priv->sync_cmd_mutex);
 
 	priv->ieee_channels = NULL;
 	priv->ieee_rates = NULL;

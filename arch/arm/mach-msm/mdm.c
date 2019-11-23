@@ -9,11 +9,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
  */
 
 #include <linux/module.h>
@@ -31,21 +26,18 @@
 #include <linux/delay.h>
 #include <linux/reboot.h>
 #include <linux/debugfs.h>
-#include <linux/smp_lock.h>
 #include <linux/completion.h>
 #include <linux/workqueue.h>
 #include <linux/clk.h>
-#include <linux/mfd/pmic8058.h>
 #include <asm/mach-types.h>
 #include <asm/uaccess.h>
-#include <asm/clkdev.h>
+#include <linux/mfd/pm8xxx/misc.h>
 #include <mach/mdm.h>
 #include <mach/restart.h>
 #include <mach/subsystem_notif.h>
 #include <mach/subsystem_restart.h>
-#include <mach/msm_serial_hs_lite.h>
 #include <linux/msm_charm.h>
-#include <mach/msm_watchdog.h>
+#include "msm_watchdog.h"
 #include "devices.h"
 #include "clock.h"
 
@@ -81,15 +73,14 @@ static void charm_disable_irqs(void)
 
 }
 
-
-static int charm_subsys_shutdown(const char * const crashed_subsys)
+static int charm_subsys_shutdown(const struct subsys_data *crashed_subsys)
 {
 	charm_ready = 0;
 	power_down_charm();
 	return 0;
 }
 
-static int charm_subsys_powerup(const char * const crashed_subsys)
+static int charm_subsys_powerup(const struct subsys_data *crashed_subsys)
 {
 	power_on_charm();
 	boot_type = CHARM_NORMAL_BOOT;
@@ -101,7 +92,7 @@ static int charm_subsys_powerup(const char * const crashed_subsys)
 }
 
 static int charm_subsys_ramdumps(int want_dumps,
-					const char * const crashed_subsys)
+				const struct subsys_data *crashed_subsys)
 {
 	charm_ram_dump_status = 0;
 	if (want_dumps) {
@@ -129,7 +120,7 @@ static int charm_panic_prep(struct notifier_block *this,
 	CHARM_DBG("%s: setting AP2MDM_ERRFATAL high for a non graceful reset\n",
 			 __func__);
 	if (get_restart_level() == RESET_SOC)
-		pm8058_stay_on();
+		pm8xxx_stay_on();
 
 	charm_disable_irqs();
 	gpio_set_value(AP2MDM_ERRFATAL, 1);
@@ -247,7 +238,7 @@ static void charm_fatal_fn(struct work_struct *work)
 {
 	pr_info("Reseting the charm due to an errfatal\n");
 	if (get_restart_level() == RESET_SOC)
-		pm8058_stay_on();
+		pm8xxx_stay_on();
 	subsystem_restart("external_modem");
 }
 
@@ -307,7 +298,6 @@ static int charm_debugfs_init(void)
 static int gsbi9_uart_notifier_cb(struct notifier_block *this,
 					unsigned long code, void *_cmd)
 {
-
 	switch (code) {
 	case SUBSYS_AFTER_SHUTDOWN:
 		platform_device_unregister(msm_device_uart_gsbi9);
@@ -490,6 +480,4 @@ module_exit(charm_modem_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("msm8660 charm modem driver");
 MODULE_VERSION("1.0");
-MODULE_ALIAS("charm_modem")
-
-
+MODULE_ALIAS("charm_modem");

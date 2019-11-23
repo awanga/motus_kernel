@@ -4,6 +4,7 @@
 
 
 obj-$(CONFIG_REGULATOR) += core.o dummy.o
+obj-$(CONFIG_OF) += of_regulator.o
 obj-$(CONFIG_REGULATOR_FIXED_VOLTAGE) += fixed.o
 obj-$(CONFIG_REGULATOR_VIRTUAL_CONSUMER) += virtual.o
 obj-$(CONFIG_REGULATOR_USERSPACE_CONSUMER) += userspace-consumer.o
@@ -44,5 +45,14 @@ obj-$(CONFIG_REGULATOR_88PM8607) += 88pm8607.o
 obj-$(CONFIG_REGULATOR_PM8921) += pm8921-regulator.o
 obj-$(CONFIG_REGULATOR_ISL6271A) += isl6271a-regulator.o
 obj-$(CONFIG_REGULATOR_AB8500)	+= ab8500.o
+obj-$(CONFIG_REGULATOR_DB8500_PRCMU) += db8500-prcmu.o
+obj-$(CONFIG_REGULATOR_TPS65910) += tps65910-regulator.o
+obj-$(CONFIG_REGULATOR_PMIC8058) += pmic8058-regulator.o
+obj-$(CONFIG_REGULATOR_PMIC8901) += pmic8901-regulator.o
+obj-$(CONFIG_REGULATOR_GPIO) += gpio-regulator.o
+obj-$(CONFIG_REGULATOR_PM8058_XO) += pm8058-xo.o
+obj-$(CONFIG_REGULATOR_PM8XXX) += pm8xxx-regulator.o
+obj-$(CONFIG_REGULATOR_STUB) += stub-regulator.o
+obj-$(CONFIG_REGULATOR_QPNP) += qpnp-regulator.o
 
 ccflags-$(CONFIG_REGULATOR_DEBUG) += -DDEBUG

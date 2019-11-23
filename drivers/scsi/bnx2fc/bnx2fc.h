@@ -130,7 +130,7 @@
 #define BNX2FC_TM_TIMEOUT		60	/* secs */
 #define BNX2FC_IO_TIMEOUT		20000UL	/* msecs */
 
-#define BNX2FC_WAIT_CNT			120
+#define BNX2FC_WAIT_CNT			1200
 #define BNX2FC_FW_TIMEOUT		(3 * HZ)
 #define PORT_MAX			2
 
@@ -151,7 +151,6 @@ struct bnx2fc_percpu_s {
 	struct list_head work_list;
 	spinlock_t fp_work_lock;
 };
-
 
 struct bnx2fc_hba {
 	struct list_head link;
@@ -179,6 +178,7 @@ struct bnx2fc_hba {
 		#define BNX2FC_CTLR_INIT_DONE		1
 		#define BNX2FC_CREATE_DONE		2
 	struct fcoe_ctlr ctlr;
+	struct list_head vports;
 	u8 vlan_enabled;
 	int vlan_id;
 	u32 next_conn_id;
@@ -231,6 +231,11 @@ struct bnx2fc_hba {
 };
 
 #define bnx2fc_from_ctlr(fip) container_of(fip, struct bnx2fc_hba, ctlr)
+
+struct bnx2fc_lport {
+	struct list_head list;
+	struct fc_lport *lport;
+};
 
 struct bnx2fc_cmd_mgr {
 	struct bnx2fc_hba *hba;
@@ -423,6 +428,7 @@ struct bnx2fc_work {
 struct bnx2fc_unsol_els {
 	struct fc_lport *lport;
 	struct fc_frame *fp;
+	struct bnx2fc_hba *hba;
 	struct work_struct unsol_els_work;
 };
 
